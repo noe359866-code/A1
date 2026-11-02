@@ -21,7 +21,7 @@ Addon de Stremio que agrega **seis APIs públicas** de índices de torrents y de
 | **Nombre** | **Omni Index** |
 | **Eslogan** | *Seis índices, una búsqueda* |
 | **ID de Stremio** | `org.omniindex.addon` |
-| **Versión** | `1.1.0` |
+| **Versión** | `1.0.0` |
 | **Proyecto en Beamup** | `omniindex` |
 | **Logo** | lupa de trazo único violeta `#7c5cff` con seis puntos turquesa `#00c2a8`, símbolo sin texto y fondo transparente |
 
@@ -32,7 +32,7 @@ origen de la petición (respetando `X-Forwarded-Proto` / `X-Forwarded-Host`) o c
 `OMNI_PUBLIC_URL` si el proxy no reenvía el Host real. La UI usa el mismo nombre,
 eslogan y paleta.
 
-> **Cambio de ID en la v1.1.0** (antes `org.arena.omniindex`): Stremio identifica
+> **Cambio de ID** (antes `org.arena.omniindex`): Stremio identifica
 > los addons por ID, así que una instalación anterior debe desinstalarse y volver
 > a instalarse con la URL nueva. El proyecto de Beamup pasó a llamarse `omniindex`.
 

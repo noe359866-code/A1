@@ -25,7 +25,7 @@ oficial** (`stremio-addon-linter`).
 | `docker/Dockerfile` | Docker local sigue funcionando, pero **se movió fuera de la raíz**: un `Dockerfile` en la raíz haría que Dokku eligiera el *builder* de Dockerfile en vez de Herokuish, que es el único plenamente soportado por Beamup. |
 | `.gitignore` → `beamup.json` | El CLI genera ese archivo con el nombre del proyecto y el último commit; no se versiona. |
 | `src/public/logo.png`, `background.png`, `favicon.ico` | Assets de marca servidos por el propio addon en `/logo.png`, `/background.png` y `/favicon.ico`. Están dentro de `src/`, así que `.slugignore` **no** los excluye. |
-| `src/manifest.js` | `id=org.omniindex.addon`, `v1.1.0`, nombre **Omni Index** y URLs absolutas de logo/fondo calculadas con el origen de la petición. |
+| `src/manifest.js` | `id=org.omniindex.addon`, `v1.0.0`, nombre **Omni Index** y URLs absolutas de logo/fondo calculadas con el origen de la petición. |
 | `tests/beamup.test.js`, `tests/brand.test.js` | Reproducen el chequeo de Beamup (linter oficial sobre el manifiesto por HTTP, arranque real respetando `PORT`) y verifican la identidad y los assets. |
 | `.github/workflows/deploy-beamup.yml` | Alternativa de despliegue con `Stremio/beamup-deploy-action@v1.0.1`, **sólo manual** (`workflow_dispatch`). |
 
@@ -110,8 +110,10 @@ Tras cambiar secretos hay que re-desplegar (Dokku reinicia el proceso al hacer
 `config:set`). Variables disponibles: `PORT`, `HOST`, `OMNI_PORT`,
 `OMNI_KNABEN_BASE`, `OMNI_TORRENTS_CSV_BASE`, `OMNI_TORLOCK_BASE`,
 `OMNI_PREDB_NET_BASE`, `OMNI_PREDATABA_SE_BASE`, `OMNI_XREL_BASE`,
-`OMNI_CINEMETA_BASE`, `OMNI_PREDATABA_KEY`, `OMNI_PREDATABA_TYPE`,
-`OMNI_XREL_ALTERNATE` y **`OMNI_PUBLIC_URL`**. Ver `README.md`.
+`OMNI_CINEMETA_BASE`, `OMNI_PREDATABA_KEY`, `OMNI_CACHE_TTL`,
+`OMNI_MAX_STREAMS`, `OMNI_ENABLE_CATALOG` y **`OMNI_PUBLIC_URL`**. Para activar
+el espejo de xREL usa `OMNI_XREL_BASE=https://api-alternate.xrel.top` o
+`OMNI_CONFIG='{"xrelAlternate":true}'`. Ver `README.md`.
 
 ### Logo y fondo detrás del proxy
 
@@ -139,8 +141,66 @@ hace un `push --force` al remoto de Beamup. Configura en el repositorio:
 Luego: *Actions → Desplegar en Beamup → Run workflow*. La acción sincroniza las
 claves de GitHub, calcula el hash del usuario y empuja `HEAD:master`.
 
-> El workflow debe existir en la rama por defecto para que GitHub permita
-> despacharlo con `workflow_dispatch`.
+> El workflow debe existir en la **rama por defecto** para que GitHub permita
+> despacharlo con `workflow_dispatch`. Si sólo está en una rama de trabajo,
+> `gh workflow list` no lo muestra: hay que fusionarla en `main` primero.
+
+### 5.1 La clave SSH y el secret, paso a paso
+
+**Una clave privada no se puede deducir de una pública**: ambas se generan
+juntas. Si ya tienes una clave pública en GitHub y conservas su mitad privada,
+usa **esa** mitad privada. Si no, genera un par nuevo para este despliegue:
+
+```bash
+ssh-keygen -t ed25519 -C "beamup-deploy@A1" -N "" -f ~/.ssh/beamup_deploy
+cat ~/.ssh/beamup_deploy.pub   # pública  -> GitHub
+cat ~/.ssh/beamup_deploy       # privada  -> secret SSH_PRIVATE_KEY
+```
+
+1. **Añade la pública a tu cuenta de GitHub**: *Settings → SSH and GPG keys →
+   New SSH key*, pega el `ssh-ed25519 AAAA… beamup-deploy@A1` y guarda. La
+   acción ejecuta `sync-github-keys` en el host de Beamup, que copia las claves
+   públicas de esa cuenta al usuario `dokku`; sin este paso el `git push` SSH
+   será rechazado.
+2. **Crea el secret** *Settings → Secrets and variables → Actions → New
+   repository secret*, nombre `SSH_PRIVATE_KEY`, y pega la clave privada
+   **completa**, con sus líneas `-----BEGIN OPENSSH PRIVATE KEY-----` y
+   `-----END OPENSSH PRIVATE KEY-----`, sin passphrase y sin comillas. La acción
+   la escribe en `~/.ssh/id_rsa` con permiso 600.
+3. **(Opcional) Variables** en la pestaña *Variables*: `BEAMUP_HOST`
+   (`a.baby-beamup.club`), `USERNAME_GITHUB` (tu usuario; por defecto el dueño
+   del repo) y `PROJECT_NAME` (`omniindex`). Las tres tienen valores por defecto
+   en el workflow, así que puedes omitirlas.
+4. **Ejecuta** *Actions → Desplegar en Beamup → Run workflow*.
+
+> **Nunca** commitees la clave privada, la pongas en el `README`, en
+> `docker-compose.yml` ni en una URL. El secret de GitHub es de sólo escritura:
+> una vez guardado ya no se puede volver a leer. `.gitignore` incluye patrones
+> para evitar sustos (`beamup_deploy*`, `*.key`, `*.pem`).
+
+**Alternativa sin Actions**: desde tu máquina, con tu clave SSH ya cargada en
+GitHub, basta con `npm i -g beamup-cli`, `beamup config <host> <usuario>`,
+`beamup init omniindex` y `beamup`. No requiere secretos ni fusionar ramas.
+
+### 5.2 Proveedores y secretos opcionales
+
+El addon siempre consulta las seis APIs reales; se listan en `/configure`,
+`/api/status` y en la tabla siguiente. Ninguna exige un secret para funcionar:
+
+| Proveedor | Aporta | URL base | Variable de entorno (secret opcional) |
+| --- | --- | --- | --- |
+| Knaben | torrents con `hash` / magnet | `https://api.knaben.org` | `OMNI_KNABEN_BASE` |
+| torrents-csv | torrents con `infohash` | `https://torrents-csv.com` | `OMNI_TORRENTS_CSV_BASE` |
+| Torlock | torrents (Torznab) | `https://www.torlock.com` | `OMNI_TORLOCK_BASE` |
+| PreDB.net | nombres de release | `https://api.predb.net` | `OMNI_PREDB_NET_BASE` |
+| predataba.se | nombres de release | `https://predataba.se` | `OMNI_PREDATABA_SE_BASE` |
+| xREL | nombres de release + IMDb | `https://api.xrel.to` | `OMNI_XREL_BASE` |
+| Cinemeta | título/año del `tt…` | `https://v3-cinemeta.strem.io` | `OMNI_CINEMETA_BASE` |
+
+Secretos que sí puedes querer: `OMNI_PREDATABA_KEY` (activa los filtros de
+texto de predataba.se), `OMNI_XREL_BASE=https://api-alternate.xrel.top` (si la
+IP del datacenter está bloqueada) y `OMNI_PUBLIC_URL` (URL pública del
+logo/fondo). Se fijan con `beamup secrets NOMBRE valor` o en *Settings → Secrets*.
 
 ## 6. El linter de Beamup
 
@@ -171,7 +231,7 @@ si un cambio rompería el despliegue.
 | `npm ci` falla en el build | Confirmar que `package-lock.json` está versionado y que el buildpack tiene salida a `registry.npmjs.org`. |
 | La página `/configure` genera una URL interna | Usa la URL pública de Beamup en el navegador; la UI construye el enlace con `location.host`. |
 | El logo no aparece en Stremio | Comprueba `manifest.logo`: debe ser una URL pública absoluta. Si apunta a una IP interna, define `OMNI_PUBLIC_URL` y re-despliega. |
-| Addon duplicado / configuración perdida tras la v1.1.0 | El ID pasó de `org.arena.omniindex` a `org.omniindex.addon`; Stremio lo considera otro addon. Desinstala el anterior y vuelve a instalarlo. |
+| Addon duplicado / configuración perdida tras el cambio de ID | El ID pasó de `org.arena.omniindex` a `org.omniindex.addon`; Stremio lo considera otro addon. Desinstala el anterior y vuelve a instalarlo. |
 
 ## 8. Referencias
 

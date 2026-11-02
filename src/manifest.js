@@ -1,5 +1,5 @@
 export const ADDON_ID = 'org.omniindex.addon';
-export const ADDON_VERSION = '1.1.0';
+export const ADDON_VERSION = '1.0.0';
 export const ADDON_NAME = 'Omni Index';
 export const ADDON_TAGLINE = 'Seis índices, una búsqueda';
 export const ADDON_DESCRIPTION = 'Seis índices, una búsqueda: Knaben, torrents-csv, Torlock, PreDB.net, predataba.se y xREL. Cruza torrents con nombres de releases scene/P2P.';
