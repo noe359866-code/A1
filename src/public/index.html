@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Omni Index · Addon de Stremio</title>
+<style>
+  :root {
+    --bg: #0b1020; --panel: #141c33; --panel-2: #1b2542; --border: #2a3559;
+    --text: #e9edf8; --muted: #9aa8c7; --accent: #7c5cff; --accent-2: #00c2a8;
+    --danger: #ff6b6b; --radius: 14px;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 32px 18px 80px; background: radial-gradient(1200px 600px at 20% -10%, #222c55 0%, var(--bg) 60%);
+    color: var(--text); font: 15px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  main { max-width: 980px; margin: 0 auto; }
+  header { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; margin-bottom: 8px; }
+  h1 { font-size: 30px; margin: 0; letter-spacing: -.5px; }
+  .badge { background: var(--panel-2); border: 1px solid var(--border); color: var(--muted);
+    padding: 4px 10px; border-radius: 999px; font-size: 12px; }
+  .badge.demo { color: #ffd479; border-color: #6b5520; }
+  p.lead { color: var(--muted); max-width: 760px; margin: 10px 0 26px; }
+  section { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 22px; margin-bottom: 20px; }
+  h2 { font-size: 18px; margin: 0 0 4px; }
+  h2 small { color: var(--muted); font-weight: 400; font-size: 13px; margin-left: 8px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 14px 22px; margin-top: 18px; }
+  .field { display: flex; flex-direction: column; gap: 6px; }
+  label { font-size: 13px; color: var(--text); }
+  .hint { color: var(--muted); font-size: 12px; }
+  input[type=number], input[type=text], input[type=password], select {
+    background: var(--panel-2); border: 1px solid var(--border); color: var(--text);
+    border-radius: 9px; padding: 9px 11px; font: inherit; width: 100%;
+  }
+  input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .check { display: flex; align-items: flex-start; gap: 10px; padding: 10px 12px;
+    background: var(--panel-2); border: 1px solid var(--border); border-radius: 10px; cursor: pointer; }
+  .check input { margin-top: 3px; accent-color: var(--accent); width: 16px; height: 16px; flex: none; }
+  .check span { font-size: 13px; }
+  .check small { display: block; color: var(--muted); font-size: 11.5px; }
+  .checks { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 10px; margin-top: 16px; }
+  .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-top: 18px; }
+  button, .button {
+    background: var(--accent); color: white; border: 0; border-radius: 10px; padding: 11px 17px;
+    font: inherit; font-weight: 600; cursor: pointer; text-decoration: none; display: inline-block;
+  }
+  button.secondary { background: var(--panel-2); border: 1px solid var(--border); color: var(--text); }
+  button:hover, .button:hover { filter: brightness(1.12); }
+  .install { margin-top: 18px; display: none; }
+  .install.show { display: block; }
+  code.url { display: block; word-break: break-all; background: #0a0f1e; border: 1px solid var(--border);
+    border-radius: 9px; padding: 10px 12px; color: #b9c6ff; font-size: 12px; margin: 8px 0; }
+  pre#test-output { background: #0a0f1e; border: 1px solid var(--border); border-radius: 9px;
+    padding: 12px; max-height: 290px; overflow: auto; font-size: 12px; color: #c7d2f5; white-space: pre-wrap; }
+  a { color: #a99bff; }
+  .apis { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 10px; margin-top: 14px; }
+  .api { border: 1px solid var(--border); border-radius: 10px; padding: 12px; background: var(--panel-2); }
+  .api strong { font-size: 13px; } .api p { margin: 4px 0 0; color: var(--muted); font-size: 12px; }
+  .tag { display: inline-block; font-size: 10.5px; text-transform: uppercase; letter-spacing: .5px;
+    color: var(--accent-2); border: 1px solid #1d6b62; padding: 1px 6px; border-radius: 5px; margin-bottom: 6px; }
+  footer { color: var(--muted); font-size: 12px; text-align: center; margin-top: 30px; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Omni Index</h1>
+    <span class="badge" id="version"></span>
+    <span class="badge demo" id="demo-badge" hidden>Modo demo · sin red</span>
+  </header>
+  <p class="lead">Addon de Stremio que combina tres índices de torrents (con infohash) con tres bases
+  de datos de releases scene/P2P. Los nombres exactos de esas bases se usan para ampliar la búsqueda
+  y encontrar más fuentes. No aloja contenido: sólo consulta metadatos públicos.</p>
+
+  <section>
+    <h2>Fuentes consultadas <small>investigadas y verificadas contra sus documentos oficiales</small></h2>
+    <div class="apis" id="apis"></div>
+  </section>
+
+  <form id="config-form">
+    <section>
+      <h2>Proveedores <small>desactiva los que no quieras usar</small></h2>
+      <div class="checks" id="providers"></div>
+    </section>
+
+    <section>
+      <h2>Expansión por releases <small>usa PreDB.net / predataba.se / xREL para buscar nombres exactos</small></h2>
+      <div class="checks" id="expansion-checks"></div>
+      <div class="grid">
+        <div class="field">
+          <label for="maxExpansionQueries">Nombres de release extra</label>
+          <input type="number" id="maxExpansionQueries" min="0" max="6">
+          <span class="hint">Multiplica las peticiones: mejor dejarlo en 0–2.</span>
+        </div>
+        <div class="field">
+          <label>Índices usados en la expansión</label>
+          <div id="expansion-providers"></div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <h2>Resultados</h2>
+      <div class="grid">
+        <div class="field"><label for="maxStreams">Máximo de streams</label><input type="number" id="maxStreams" min="1" max="150"></div>
+        <div class="field"><label for="minSeeders">Seeders mínimos</label><input type="number" id="minSeeders" min="0" max="1000"></div>
+        <div class="field"><label for="perProviderLimit">Resultados por proveedor</label><input type="number" id="perProviderLimit" min="5" max="200"></div>
+        <div class="field"><label for="sortBy">Orden preferido</label>
+          <select id="sortBy">
+            <option value="balanced">Equilibrado (calidad + seeders)</option>
+            <option value="seeders">Más seeders</option>
+            <option value="quality">Mejor calidad</option>
+          </select>
+        </div>
+        <div class="field"><label for="cacheTtl">Caché (segundos)</label><input type="number" id="cacheTtl" min="60" max="86400"></div>
+        <div class="field"><label for="httpTimeout">Timeout por petición (ms)</label><input type="number" id="httpTimeout" min="1000" max="60000"></div>
+      </div>
+      <div class="checks" style="margin-top:14px">
+        <label class="check"><input type="checkbox" id="excludeCam"><span>Excluir CAM / TS<small>Filtra copias de cine de baja calidad.</small></span></label>
+        <label class="check"><input type="checkbox" id="enableCatalog"><span>Habilitar catálogo de releases<small>Añade una fila en Inicio y resultados en la búsqueda global.</small></span></label>
+      </div>
+    </section>
+
+    <section>
+      <h2>Acceso y variantes <small>opcional</small></h2>
+      <div class="grid">
+        <div class="field">
+          <label for="predatabaKey">API key de predataba.se</label>
+          <input type="password" id="predatabaKey" placeholder="x-api-key (opcional)" autocomplete="off">
+          <span class="hint">Sin clave, los filtros de texto se ignoran: el addon descarta automáticamente lo que no coincide.</span>
+        </div>
+        <div class="field"><label for="predatabaType">Base de predataba.se</label>
+          <select id="predatabaType">
+            <option value="scene">Scene</option><option value="p2p">P2P</option><option value="both">Ambas</option>
+          </select>
+        </div>
+        <div class="field" style="justify-content:flex-end">
+          <label class="check"><input type="checkbox" id="xrelAlternate"><span>Usar espejo alternativo de xREL<small>api-alternate.xrel.top, recomendado si tu IP está bloqueada.</small></span></label>
+        </div>
+      </div>
+      <div class="row">
+        <button type="submit">Generar enlace de instalación</button>
+        <button type="button" class="secondary" id="reset">Restablecer</button>
+        <button type="button" class="secondary" id="test">Probar con tt1375666</button>
+      </div>
+    </section>
+  </form>
+
+  <section class="install" id="install">
+    <h2>Enlaces generados</h2>
+    <code class="url" id="manifest-url"></code>
+    <div class="row">
+      <a class="button" id="install-link" href="#">Instalar en Stremio</a>
+      <button type="button" class="secondary" id="copy">Copiar URL del manifiesto</button>
+    </div>
+    <p class="hint">La configuración viaja codificada en la propia URL (base64url). No se envía al servidor ningún secreto fuera de la URL que tú instales.</p>
+  </section>
+
+  <section id="test-section" hidden>
+    <h2>Prueba rápida</h2>
+    <pre id="test-output">Pulsa «Probar con tt1375666»…</pre>
+  </section>
+
+  <footer>
+    Los límites de cada API se respetan con caché y espaciado de peticiones.
+    Consulta <code>docs/API-RESEARCH.md</code> para los detalles. Usa el addon sólo con contenido que tengas derecho a reproducir.
+  </footer>
+</main>
+
+<script>
+/*__OMNI_BOOTSTRAP__*/
+const B = window.OMNI_BOOTSTRAP;
+const $ = (id) => document.getElementById(id);
+
+const providerNotes = {
+  knaben: 'GET /v2/search · infohash, seeders, magnet',
+  torrentsCsv: 'GET /service/search · to_tsquery + cursor after',
+  torlock: 'Torznab RSS · magnet + attrs seeders/infohash',
+  predbNet: 'GET / · búsqueda por prefijo del release',
+  predatabaSe: 'POST /api/search · filtros scene/P2P',
+  xrel: 'GET /v2/search/releases.json · incluye IMDb',
+};
+const apiLinks = {
+  knaben: 'https://knaben.org/api/v2/',
+  torrentsCsv: 'https://torrents-csv.com/',
+  torlock: 'https://www.torlock.com/apis.html',
+  predbNet: 'https://predb.net/api-documentation/',
+  predatabaSe: 'https://api.predataba.se/',
+  xrel: 'https://www.xrel.to/wiki/1681/API.html',
+};
+
+$('version').textContent = 'v' + B.version;
+if (B.demo) $('demo-badge').hidden = false;
+$('apis').innerHTML = B.ids.map((id) => {
+  const isTorrent = ['knaben', 'torrentsCsv', 'torlock'].includes(id);
+  return `<div class="api"><span class="tag">${isTorrent ? 'infohash' : 'metadatos'}</span>
+    <strong><a href="${apiLinks[id]}" target="_blank" rel="noopener">${B.labels[id]}</a></strong>
+    <p>${providerNotes[id]}</p></div>`;
+}).join('');
+
+$('providers').innerHTML = B.ids.map((id) => `
+  <label class="check"><input type="checkbox" data-provider="${id}">
+  <span>${B.labels[id]}<small>${providerNotes[id]}</small></span></label>`).join('');
+
+$('expansion-checks').innerHTML = `
+  <label class="check" style="grid-column:1/-1"><input type="checkbox" id="expansion">
+  <span>Activar expansión<small>Busca los nombres de release exactos en los índices con infohash.</small></span></label>`;
+$('expansion-providers').innerHTML = ['knaben', 'torrentsCsv', 'torlock'].map((id) => `
+  <label style="display:flex;gap:8px;align-items:center;font-size:13px;margin:5px 0">
+  <input type="checkbox" data-expansion="${id}" style="accent-color:var(--accent)"> ${B.labels[id]}</label>`).join('');
+
+function readConfig() {
+  const cfg = {
+    providers: {}, expansionProviders: [],
+    expansion: $('expansion').checked,
+    maxExpansionQueries: +$('maxExpansionQueries').value,
+    maxStreams: +$('maxStreams').value,
+    minSeeders: +$('minSeeders').value,
+    perProviderLimit: +$('perProviderLimit').value,
+    sortBy: $('sortBy').value,
+    cacheTtl: +$('cacheTtl').value,
+    httpTimeout: +$('httpTimeout').value,
+    excludeCam: $('excludeCam').checked,
+    enableCatalog: $('enableCatalog').checked,
+    predatabaKey: $('predatabaKey').value.trim(),
+    predatabaType: $('predatabaType').value,
+    xrelAlternate: $('xrelAlternate').checked,
+  };
+  document.querySelectorAll('[data-provider]').forEach((el) => { cfg.providers[el.dataset.provider] = el.checked; });
+  document.querySelectorAll('[data-expansion]').forEach((el) => { if (el.checked) cfg.expansionProviders.push(el.dataset.expansion); });
+  return cfg;
+}
+
+function writeConfig(cfg) {
+  document.querySelectorAll('[data-provider]').forEach((el) => { el.checked = cfg.providers[el.dataset.provider] !== false; });
+  document.querySelectorAll('[data-expansion]').forEach((el) => { el.checked = cfg.expansionProviders.includes(el.dataset.expansion); });
+  $('expansion').checked = cfg.expansion;
+  $('maxExpansionQueries').value = cfg.maxExpansionQueries;
+  $('maxStreams').value = cfg.maxStreams;
+  $('minSeeders').value = cfg.minSeeders;
+  $('perProviderLimit').value = cfg.perProviderLimit;
+  $('sortBy').value = cfg.sortBy;
+  $('cacheTtl').value = cfg.cacheTtl;
+  $('httpTimeout').value = cfg.httpTimeout;
+  $('excludeCam').checked = cfg.excludeCam;
+  $('enableCatalog').checked = cfg.enableCatalog;
+  $('predatabaKey').value = cfg.predatabaKey || '';
+  $('predatabaType').value = cfg.predatabaType;
+  $('xrelAlternate').checked = cfg.xrelAlternate;
+}
+
+function b64url(text) {
+  const bytes = new TextEncoder().encode(text);
+  let binary = '';
+  bytes.forEach((byte) => { binary += String.fromCharCode(byte); });
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+}
+
+function manifestUrl() {
+  return new URL(`/c/${b64url(JSON.stringify(readConfig()))}/manifest.json`, location.origin).href;
+}
+
+$('reset').addEventListener('click', () => { writeConfig(B.defaults); $('install').classList.remove('show'); });
+writeConfig(B.defaults);
+
+$('config-form').addEventListener('submit', (event) => {
+  event.preventDefault();
+  const url = manifestUrl();
+  $('manifest-url').textContent = url;
+  $('install-link').href = 'stremio://' + location.host + new URL(url).pathname;
+  $('install').classList.add('show');
+  $('install').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+});
+
+$('copy').addEventListener('click', async () => {
+  try {
+    await navigator.clipboard.writeText($('manifest-url').textContent);
+    $('copy').textContent = '¡Copiado!';
+    setTimeout(() => { $('copy').textContent = 'Copiar URL del manifiesto'; }, 1600);
+  } catch { $('copy').textContent = 'Selecciona y copia la URL'; }
+});
+
+$('test').addEventListener('click', async () => {
+  $('test-section').hidden = false;
+  const output = $('test-output');
+  output.textContent = 'Consultando /stream/movie/tt1375666.json …';
+  const url = `/c/${b64url(JSON.stringify(readConfig()))}/stream/movie/tt1375666.json`;
+  try {
+    const response = await fetch(url);
+    const data = await response.json();
+    const streams = data.streams || [];
+    output.textContent = `HTTP ${response.status} · ${streams.length} streams\n\n` +
+      streams.slice(0, 8).map((s, i) => `${i + 1}. [${s.name}] ${String(s.description || '').split('\n')[0]}\n   ${s.infoHash}`).join('\n');
+  } catch (error) {
+    output.textContent = 'Error: ' + error.message;
+  }
+  $('test-section').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+});
+</script>
+</body>
+</html>
