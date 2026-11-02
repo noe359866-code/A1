@@ -1,6 +1,8 @@
 services:
   omni-index:
-    build: .
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
     image: omni-index:latest
     container_name: omni-index
     ports:

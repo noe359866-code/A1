@@ -8,7 +8,7 @@ Addon de Stremio que agrega **seis APIs públicas** de índices de torrents y de
 | [torrents-csv](https://torrents-csv.com/) | [predataba.se](https://api.predataba.se/) |
 | [Torlock Torznab](https://www.torlock.com/apis.html) | [xREL API](https://www.xrel.to/wiki/1681/API.html) |
 
-> La investigación completa —parámetros, respuestas reales, límites y varias trampas descubiertas— está en **[docs/API-RESEARCH.md](docs/API-RESEARCH.md)**.
+> La investigación completa —parámetros, respuestas reales, límites y varias trampas descubiertas— está en **[docs/API-RESEARCH.md](docs/API-RESEARCH.md)**. La guía de publicación en Stremio Beamup está en **[docs/BEAMUP.md](docs/BEAMUP.md)**.
 
 ---
 
@@ -28,7 +28,7 @@ También puede publicar un **catálogo opcional** de releases (búsqueda global 
 
 ## Instalación rápida
 
-Requiere **Node.js ≥ 18** (probado con Node 22). No tiene dependencias npm.
+Requiere **Node.js ≥ 18** (probado con Node 22). **No tiene dependencias de ejecución**: `npm start` funciona directamente tras clonar. La única dependencia es de desarrollo (`stremio-addon-linter`) para verificar el contrato de Beamup; instálala con `npm ci` si vas a ejecutar los tests.
 
 ```bash
 git clone <este-repo> A1 && cd A1
@@ -48,8 +48,24 @@ La configuración viaja codificada en base64url dentro de la propia URL; cada us
 ```bash
 docker compose up -d --build     # puerto 7000
 # o
-docker build -t omni-index . && docker run -p 7000:7000 omni-index
+docker build -f docker/Dockerfile -t omni-index . \
+  && docker run -p 7000:7000 omni-index
 ```
+
+> El `Dockerfile` vive en `docker/` (no en la raíz) para que Beamup elija el buildpack Herokuish de Node y no el *builder* de Dockerfile. Ver [docs/BEAMUP.md](docs/BEAMUP.md).
+
+### Beamup
+
+El repositorio ya está preparado para publicarse en Beamup (Dokku/Herokuish): `package.json` + `npm start`, `Procfile` con `web: node src/index.js`, respeto de `PORT` y `0.0.0.0`, `.slugignore`, manifiesto que pasa el linter oficial y un workflow manual de despliegue. Resumen:
+
+```bash
+npm install -g beamup-cli       # comando `beamup`
+beamup config a.baby-beamup.club TU_USUARIO_GITHUB
+beamup init omni-index
+beamup                          # despliega y muestra la URL del addon
+```
+
+Guía completa, secretos, GitHub Actions y resolución de problemas: **[docs/BEAMUP.md](docs/BEAMUP.md)**. El despliegue real requiere tu host y tu clave SSH; desde este entorno no se ha ejecutado.
 
 > **Sólo datos reales.** El addon consulta siempre las seis APIs; no genera resultados de prueba ni respuestas inventadas. Si un proveedor falla o no hay red, no aporta resultados y el error queda registrado en `/api/status`. (Los tests usan un servidor HTTP local como *test double*, ajeno al addon en ejecución.)
 
@@ -81,7 +97,7 @@ Variables de entorno del servidor:
 
 | Variable | Uso |
 | --- | --- |
-| `PORT` / `OMNI_PORT`, `HOST` | Escucha (por defecto `7000`, `0.0.0.0`). |
+| `PORT` / `OMNI_PORT`, `HOST` | Escucha (por defecto `7000`, `0.0.0.0`). Beamup/Dokku inyecta `PORT`; el addon lo respeta. |
 | `OMNI_CONFIG` | JSON con valores por defecto del manifiesto raíz. |
 | `OMNI_PREDATABA_KEY`, `OMNI_CACHE_TTL`, `OMNI_MAX_STREAMS`, `OMNI_ENABLE_CATALOG` | Atajos de configuración. |
 | `OMNI_HTTP_TIMEOUT`, `OMNI_USER_AGENT`, `OMNI_QUIET` | Transporte y logs. |
@@ -121,19 +137,24 @@ Todas las respuestas incluyen CORS (`Access-Control-Allow-Origin: *`) y `Cache-C
 ## Tests
 
 ```bash
-npm test        # 41 pruebas, node:test, sin dependencias
+npm ci          # instala stremio-addon-linter (sólo desarrollo)
+npm test        # node:test
 npm run lint    # comprobación de sintaxis
 ```
 
-La suite levanta un servidor HTTP local que simula las seis APIs y Cinemeta, y cubre: parseo Torznab/Newznab, normalización de hashes y magnets, dedupe y ranking (incluidos episodios de series), los seis proveedores con sus parámetros reales, el manifiesto configurable, catálogo/meta, resiliencia ante fallos y CORS.
+La suite levanta un servidor HTTP local que simula las seis APIs y Cinemeta, y cubre: parseo Torznab/Newznab, normalización de hashes y magnets, dedupe y ranking (incluidos episodios de series), los seis proveedores con sus parámetros reales, el manifiesto configurable, catálogo/meta, resiliencia ante fallos y CORS. Además, `tests/beamup.test.js` reproduce el **linter que Beamup ejecuta antes de aceptar un despliegue**: valida `/manifest.json` con `stremio-addon-linter`, comprueba el contrato Herokuish (`Procfile`, `package.json`, ausencia de `Dockerfile` en la raíz) y arranca el proceso real con un `PORT` arbitrario.
 
 ---
 
 ## Estructura
 
 ```
+Procfile              proceso `web` para Dokku/Herokuish (Beamup)
+.slugignore           exclusiones del slug de Beamup
+package-lock.json     bloqueo de dependencias (sólo desarrollo)
+docker/Dockerfile     imagen local, fuera de la raíz por Beamup
 src/
-  index.js            arranque del servidor
+  index.js            arranque del servidor (lee PORT)
   server.js           rutas, CORS, configuración por URL, /configure
   manifest.js         manifiesto (varía con la configuración)
   config.js           valores por defecto, validación y codificación
@@ -146,8 +167,10 @@ src/
                       predataba-se, xrel (+ índice)
   lib/                http, cache, limiter, xml, query, torrent
   public/index.html   UI de configuración e instalación
-tests/                mock server + 5 ficheros de pruebas
+tests/                mock server + pruebas (incluido el contrato Beamup)
 docs/API-RESEARCH.md  informe de investigación
+docs/BEAMUP.md        guía de despliegue en Beamup
+.github/workflows/     CI + despliegue manual en Beamup
 ```
 
 ---

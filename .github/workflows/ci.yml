@@ -16,5 +16,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node-version }}
+          cache: npm
+      - run: npm ci
       - run: npm run lint
+      # Incluye el contrato de Beamup (linter oficial del manifiesto + PORT).
       - run: npm test
