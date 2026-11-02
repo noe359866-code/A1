@@ -20,7 +20,6 @@
   h1 { font-size: 30px; margin: 0; letter-spacing: -.5px; }
   .badge { background: var(--panel-2); border: 1px solid var(--border); color: var(--muted);
     padding: 4px 10px; border-radius: 999px; font-size: 12px; }
-  .badge.demo { color: #ffd479; border-color: #6b5520; }
   p.lead { color: var(--muted); max-width: 760px; margin: 10px 0 26px; }
   section { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius);
     padding: 22px; margin-bottom: 20px; }
@@ -68,7 +67,6 @@
   <header>
     <h1>Omni Index</h1>
     <span class="badge" id="version"></span>
-    <span class="badge demo" id="demo-badge" hidden>Modo demo · sin red</span>
   </header>
   <p class="lead">Addon de Stremio que combina tres índices de torrents (con infohash) con tres bases
   de datos de releases scene/P2P. Los nombres exactos de esas bases se usan para ampliar la búsqueda
@@ -192,7 +190,6 @@ const apiLinks = {
 };
 
 $('version').textContent = 'v' + B.version;
-if (B.demo) $('demo-badge').hidden = false;
 $('apis').innerHTML = B.ids.map((id) => {
   const isTorrent = ['knaben', 'torrentsCsv', 'torlock'].includes(id);
   return `<div class="api"><span class="tag">${isTorrent ? 'infohash' : 'metadatos'}</span>

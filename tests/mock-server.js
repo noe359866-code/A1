@@ -98,8 +98,8 @@ function torlock(url) {
 <channel><title>Torlock</title><description>Torlock Torznab feed</description>
 ${items.map((item) => `<item>
   <title>${item.title.replace(/&/g, '&amp;')}</title>
-  <link>https://www.torlock.com/torrent/1/demo.html</link>
-  <guid>https://www.torlock.com/torrent/1/demo.html</guid>
+  <link>https://www.torlock.com/torrent/1/torrent.html</link>
+  <guid>https://www.torlock.com/torrent/1/torrent.html</guid>
   <pubDate>Mon, 15 Apr 2024 18:11:14 +0000</pubDate>
   <size>${item.size}</size>
   <category>${url.searchParams.get('cat') || '2000'}</category>
@@ -250,5 +250,4 @@ export function pointEnvAt(url) {
     process.env[name] = url;
   }
   process.env.OMNI_HTTP_TIMEOUT = '3000';
-  process.env.OMNI_DEMO = '0';
 }

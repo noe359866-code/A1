@@ -51,13 +51,7 @@ docker compose up -d --build     # puerto 7000
 docker build -t omni-index . && docker run -p 7000:7000 omni-index
 ```
 
-### Modo demo (sin Internet)
-
-```bash
-OMNI_DEMO=1 npm start
-```
-
-Todas las APIs se sustituyen por respuestas sintéticas con la misma forma. Sirve para ver la UI, probar la instalación y desarrollar sin red. Los tests usan además un **servidor mock HTTP real** para ejercitar el transporte completo.
+> **Sólo datos reales.** El addon consulta siempre las seis APIs; no genera resultados de prueba ni respuestas inventadas. Si un proveedor falla o no hay red, no aporta resultados y el error queda registrado en `/api/status`. (Los tests usan un servidor HTTP local como *test double*, ajeno al addon en ejecución.)
 
 ---
 
@@ -89,7 +83,6 @@ Variables de entorno del servidor:
 | --- | --- |
 | `PORT` / `OMNI_PORT`, `HOST` | Escucha (por defecto `7000`, `0.0.0.0`). |
 | `OMNI_CONFIG` | JSON con valores por defecto del manifiesto raíz. |
-| `OMNI_DEMO` | `1` activa el modo offline. |
 | `OMNI_PREDATABA_KEY`, `OMNI_CACHE_TTL`, `OMNI_MAX_STREAMS`, `OMNI_ENABLE_CATALOG` | Atajos de configuración. |
 | `OMNI_HTTP_TIMEOUT`, `OMNI_USER_AGENT`, `OMNI_QUIET` | Transporte y logs. |
 | `OMNI_<PROVEEDOR>_BASE` | Sobrescribe la URL base (`OMNI_KNABEN_BASE`, `OMNI_TORRENTS_CSV_BASE`, `OMNI_TORLOCK_BASE`, `OMNI_PREDB_NET_BASE`, `OMNI_PREDATABA_SE_BASE`, `OMNI_XREL_BASE`, `OMNI_CINEMETA_BASE`). Útil para proxies y tests. |
@@ -105,7 +98,7 @@ Variables de entorno del servidor:
 | `/c/<config>/manifest.json` | Manifiesto con la configuración incrustada. |
 | `/stream/{movie\|series}/{id}.json` | `{ "streams": [ … ] }`. `id` puede ser `tt…`, `tt…:temporada:episodio` o `release:<base64url>`. |
 | `/catalog/{type}/omni-scene[/search=…&skip=…].json` | `{ "metas": [ … ] }` (si `enableCatalog`). |
-| `/meta/{type}/release:<…>.json` | Ficha sintética de un release. |
+| `/meta/{type}/release:<…>.json` | Ficha generada a partir del id `release:`. |
 | `/health`, `/api/status` | Estado, proveedores, caché y últimos errores. |
 | `/c/<config>/…` | Todas las rutas anteriores aceptan el prefijo de configuración. |
 
@@ -151,7 +144,7 @@ src/
   endpoints.js        URLs base (sobrescribibles por entorno)
   providers/          knaben, torrents-csv, torlock, predb-net,
                       predataba-se, xrel (+ índice)
-  lib/                http, cache, limiter, xml, query, torrent, demo
+  lib/                http, cache, limiter, xml, query, torrent
   public/index.html   UI de configuración e instalación
 tests/                mock server + 5 ficheros de pruebas
 docs/API-RESEARCH.md  informe de investigación

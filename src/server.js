@@ -9,7 +9,6 @@ import { createContext, cacheSnapshot } from './context.js';
 import { buildManifest, ADDON_VERSION } from './manifest.js';
 import { handleStream } from './stream.js';
 import { handleCatalog, handleMeta } from './catalog.js';
-import { isDemo } from './lib/demo.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const indexHtml = fs.readFileSync(path.join(here, 'public', 'index.html'), 'utf8');
@@ -19,7 +18,6 @@ const bootstrap = {
   labels: PROVIDER_LABELS,
   ids: PROVIDER_IDS,
   version: ADDON_VERSION,
-  demo: isDemo(),
 };
 
 function send(res, status, body, contentType, cacheSeconds = 0) {
@@ -115,7 +113,7 @@ export function createServer() {
           return;
         }
         case 'health': {
-          sendJson(res, { ok: true, version: ADDON_VERSION, demo: isDemo() });
+          sendJson(res, { ok: true, version: ADDON_VERSION });
           return;
         }
         case 'api': {
@@ -123,7 +121,6 @@ export function createServer() {
           sendJson(res, {
             ok: true,
             version: ADDON_VERSION,
-            demo: isDemo(),
             providers: Object.fromEntries(PROVIDER_IDS.map((id) => [id, {
               label: PROVIDER_LABELS[id],
               enabled: Boolean(config.providers[id]),

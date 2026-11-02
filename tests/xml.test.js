@@ -7,8 +7,8 @@ const FEED = `<?xml version="1.0" encoding="UTF-8"?>
 <channel><title>Torlock</title><description>Torlock Torznab feed</description>
 <item>
   <title><![CDATA[Inception 2010 &amp; friends 1080p BluRay x264-GROUP]]></title>
-  <link>https://www.torlock.com/torrent/1/demo.html</link>
-  <guid>https://www.torlock.com/torrent/1/demo.html</guid>
+  <link>https://www.torlock.com/torrent/1/torrent.html</link>
+  <guid>https://www.torlock.com/torrent/1/torrent.html</guid>
   <pubDate>Mon, 15 Apr 2024 18:11:14 +0000</pubDate>
   <size>3082568603</size>
   <category>2000</category>

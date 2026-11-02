@@ -1,5 +1,3 @@
-import { isDemo, demoResponse } from './demo.js';
-
 const USER_AGENT = process.env.OMNI_USER_AGENT ||
   'OmniIndexStremioAddon/1.0 (+https://github.com/noe359866-code/A1)';
 
@@ -36,9 +34,9 @@ async function readLimited(response, maxBytes) {
 }
 
 /**
- * Petición HTTP con timeout, límite de tamaño, User-Agent propio y modo demo.
- * Todas las llamadas salientes pasan por aquí, de modo que el modo offline y
- * los tests puedan sustituir el transporte de forma uniforme.
+ * Petición HTTP con timeout, límite de tamaño y User-Agent propio.
+ * Todas las llamadas a las APIs pasan por aquí. Los tests redirigen las URLs
+ * base a un servidor HTTP local mediante variables de entorno.
  */
 export async function request(url, options = {}) {
   const {
@@ -49,14 +47,6 @@ export async function request(url, options = {}) {
     maxBytes = 4_000_000,
     accept,
   } = options;
-
-  if (isDemo()) {
-    const result = demoResponse(String(url), { method, headers, body });
-    if (result.status < 200 || result.status >= 300) {
-      throw new HttpError(`HTTP ${result.status} (demo)`, result.status, String(url));
-    }
-    return result;
-  }
 
   const mergedHeaders = {
     'User-Agent': USER_AGENT,

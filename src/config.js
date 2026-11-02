@@ -129,9 +129,6 @@ function envOverrides() {
   if (process.env.OMNI_CACHE_TTL) overrides.cacheTtl = process.env.OMNI_CACHE_TTL;
   if (process.env.OMNI_MAX_STREAMS) overrides.maxStreams = process.env.OMNI_MAX_STREAMS;
   if (process.env.OMNI_ENABLE_CATALOG) overrides.enableCatalog = process.env.OMNI_ENABLE_CATALOG;
-  if (process.env.OMNI_DEMO === '1' || process.env.OMNI_DEMO === 'true') {
-    overrides.expansion = true;
-  }
   return overrides;
 }
 
