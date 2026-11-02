@@ -1,32 +1,213 @@
-<div align="center">
+# Omni Index · addon de Stremio
 
-  <img src="assets/brand/app_logo_wordmark.png" alt="Nuvio" width="300" />
+Addon de Stremio que agrega **seis APIs públicas** de índices de torrents y de releases scene/P2P, y devuelve *streams* con `infoHash` listos para reproducir:
 
-  <p>
-    A free, open-source media app for your phone, your desktop, and the TV you already own.
-    <br />
-    Bring your own sources. Nuvio turns them into a library with artwork, ratings, subtitles, and your place saved on every screen.
-  </p>
+| Con infohash | Sólo metadatos (nombres de release) |
+| --- | --- |
+| [Knaben API v2](https://knaben.org/api/v2/) | [PreDB.net](https://predb.net/api-documentation/) |
+| [torrents-csv](https://torrents-csv.com/) | [predataba.se](https://api.predataba.se/) |
+| [Torlock Torznab](https://www.torlock.com/apis.html) | [xREL API](https://www.xrel.to/wiki/1681/API.html) |
 
-  [Website](https://nuvio.tv) · [GitHub releases](https://github.com/NuvioMedia/NuvioTV/releases/latest) · [Support Nuvio](https://nuvio.tv/support)
+> La investigación completa —parámetros, respuestas reales, límites y varias trampas descubiertas— está en **[docs/API-RESEARCH.md](docs/API-RESEARCH.md)**. La guía de publicación en Stremio Beamup está en **[docs/BEAMUP.md](docs/BEAMUP.md)**.
 
-</div>
+---
 
-## Get Nuvio TV
+## Identidad
 
-- [Android TV on Google Play](https://play.google.com/store/apps/details?id=com.nuvio.app)
-- [Android TV APK](https://github.com/NuvioMedia/NuvioTV/releases/latest)
+<img src="src/public/logo.png" alt="Logo de Omni Index: una lupa con seis puntos" width="112" align="right">
 
-## Build from source
+| | |
+| --- | --- |
+| **Nombre** | **Omni Index** |
+| **Eslogan** | *Seis índices, una búsqueda* |
+| **ID de Stremio** | `org.omniindex.addon` |
+| **Versión** | `1.0.0` |
+| **Proyecto en Beamup** | `omniindex` |
+| **Logo** | lupa de trazo único violeta `#7c5cff` con seis puntos turquesa `#00c2a8`, símbolo sin texto y fondo transparente |
+
+Los assets de marca los sirve el propio addon: `/logo.png` (256 px, transparente),
+`/favicon.ico`, `/favicon.png` y `/background.png` (1280×720). Stremio exige URLs
+**absolutas** en `logo` y `background`, así que el manifiesto las construye con el
+origen de la petición (respetando `X-Forwarded-Proto` / `X-Forwarded-Host`) o con
+`OMNI_PUBLIC_URL` si el proxy no reenvía el Host real. La UI usa el mismo nombre,
+eslogan y paleta.
+
+> **Cambio de ID** (antes `org.arena.omniindex`): Stremio identifica
+> los addons por ID, así que una instalación anterior debe desinstalarse y volver
+> a instalarse con la URL nueva. El proyecto de Beamup pasó a llamarse `omniindex`.
+
+---
+
+## Idea central
+
+Tres de las APIs devuelven torrents (`infohash`), y las otras tres devuelven **nombres de release** pero ningún torrent. En lugar de ignorarlas, el addon las usa como *inteligencia de búsqueda*:
+
+1. Resuelve el `tt…` a título/año con Cinemeta.
+2. Consulta en paralelo Knaben, torrents-csv y Torlock.
+3. Consulta en paralelo PreDB.net, predataba.se y xREL para obtener nombres exactos (`Inception.2010.2160p.UHD.BluRay.H265-GROUP`).
+4. Usa esos nombres como consultas adicionales en los índices con infohash (**expansión**, configurable).
+5. Unifica por `infoHash` (sumando proveedores y trackers), filtra resultados irrelevantes/CAM/no-vídeo, puntúa por calidad + seeders + coincidencia de episodio y devuelve los mejores *streams*.
+
+También puede publicar un **catálogo opcional** de releases (búsqueda global de Stremio + fila de recientes) con fichas `release:` que, al abrirse, buscan torrents por nombre exacto.
+
+---
+
+## Instalación rápida
+
+Requiere **Node.js ≥ 18** (probado con Node 22). **No tiene dependencias de ejecución**: `npm start` funciona directamente tras clonar. La única dependencia es de desarrollo (`stremio-addon-linter`) para verificar el contrato de Beamup; instálala con `npm ci` si vas a ejecutar los tests.
 
 ```bash
-git clone https://github.com/NuvioMedia/NuvioTV.git
-cd NuvioTV
-./gradlew :app:assembleFullDebug
+git clone <este-repo> A1 && cd A1
+npm start                      # http://localhost:7000
 ```
 
-Nuvio TV is built with Kotlin, Jetpack Compose, TV Material 3, and Media3. Development requires Android Studio, a JDK, and the Android SDK.
+Abre **<http://localhost:7000/configure>**, ajusta las opciones y pulsa *Generar enlace de instalación*. La página ofrece:
 
-## License
+- el enlace `stremio://…/c/<config>/manifest.json` para instalar directamente,
+- la URL `https://…/c/<config>/manifest.json` para pegar en *Addons → Add addon*,
+- un botón **Probar con tt1375666** que ejecuta una búsqueda real y muestra los streams.
 
-[GNU General Public License v3.0](./LICENSE)
+La configuración viaja codificada en base64url dentro de la propia URL; cada usuario puede tener su propia instalación sin tocar el servidor. El manifiesto raíz (`/manifest.json`) usa los valores por defecto.
+
+### Docker
+
+```bash
+docker compose up -d --build     # puerto 7000
+# o
+docker build -f docker/Dockerfile -t omni-index . \
+  && docker run -p 7000:7000 omni-index
+```
+
+> El `Dockerfile` vive en `docker/` (no en la raíz) para que Beamup elija el buildpack Herokuish de Node y no el *builder* de Dockerfile. Ver [docs/BEAMUP.md](docs/BEAMUP.md).
+
+### Beamup
+
+El repositorio ya está preparado para publicarse en Beamup (Dokku/Herokuish): `package.json` + `npm start`, `Procfile` con `web: node src/index.js`, respeto de `PORT` y `0.0.0.0`, `.slugignore`, manifiesto que pasa el linter oficial y un workflow manual de despliegue. Resumen:
+
+```bash
+npm install -g beamup-cli       # comando `beamup`
+beamup config a.baby-beamup.club TU_USUARIO_GITHUB
+beamup init omniindex
+beamup                          # despliega y muestra la URL del addon
+```
+
+Guía completa, secretos, GitHub Actions y resolución de problemas: **[docs/BEAMUP.md](docs/BEAMUP.md)**. El despliegue real requiere tu host y tu clave SSH; desde este entorno no se ha ejecutado.
+
+> **Sólo datos reales.** El addon consulta siempre las seis APIs; no genera resultados de prueba ni respuestas inventadas. Si un proveedor falla o no hay red, no aporta resultados y el error queda registrado en `/api/status`. (Los tests usan un servidor HTTP local como *test double*, ajeno al addon en ejecución.)
+
+---
+
+## Configuración
+
+Opciones de la página `/configure` (también vía `OMNI_CONFIG='{"maxStreams":20,…}'`):
+
+| Opción | Defecto | Descripción |
+| --- | --- | --- |
+| `providers` | los 6 activos | Activar/desactivar cada fuente individualmente. |
+| `expansion` | `true` | Buscar nombres de release exactos en los índices con infohash. |
+| `maxExpansionQueries` | `2` | Nº de nombres extra (0–6). Cada uno dispara una consulta por proveedor de expansión. |
+| `expansionProviders` | Knaben, torrents-csv | Proveedores usados en la expansión. |
+| `maxStreams` | `40` | Límite de streams devueltos. |
+| `minSeeders` | `1` | Descarta torrents con menos seeders (sólo si se conoce el dato). |
+| `perProviderLimit` | `60` | Resultados pedidos a cada proveedor. |
+| `sortBy` | `balanced` | `balanced` / `seeders` / `quality`. |
+| `excludeCam` | `true` | Filtra CAM/TS/Telecine. |
+| `cacheTtl` | `900` | Segundos de caché (Torlock fuerza ≥ 60 s por su *fair use*). |
+| `httpTimeout` | `9000` | Timeout por petición saliente (ms). |
+| `enableCatalog` | `false` | Publica el catálogo de releases (añade `catalog` + `meta` al manifiesto). |
+| `predatabaKey` | vacío | `x-api-key` opcional de predataba.se. Sin ella los filtros de texto se ignoran; el addon filtra en cliente. |
+| `predatabaType` | `scene` | `scene` / `p2p` / `both`. |
+| `xrelAlternate` | `false` | Usa `api-alternate.xrel.top` si tu IP está bloqueada. |
+
+Variables de entorno del servidor:
+
+| Variable | Uso |
+| --- | --- |
+| `PORT` / `OMNI_PORT`, `HOST` | Escucha (por defecto `7000`, `0.0.0.0`). Beamup/Dokku inyecta `PORT`; el addon lo respeta. |
+| `OMNI_PUBLIC_URL` | URL pública del addon. Fija las URLs absolutas de `logo` y `background` cuando el proxy (Beamup) no reenvía el Host real. Vacío = deducirlo de la petición. |
+| `OMNI_CONFIG` | JSON con valores por defecto del manifiesto raíz. |
+| `OMNI_PREDATABA_KEY`, `OMNI_CACHE_TTL`, `OMNI_MAX_STREAMS`, `OMNI_ENABLE_CATALOG` | Atajos de configuración. |
+| `OMNI_HTTP_TIMEOUT`, `OMNI_USER_AGENT`, `OMNI_QUIET` | Transporte y logs. |
+| `OMNI_<PROVEEDOR>_BASE` | Sobrescribe la URL base (`OMNI_KNABEN_BASE`, `OMNI_TORRENTS_CSV_BASE`, `OMNI_TORLOCK_BASE`, `OMNI_PREDB_NET_BASE`, `OMNI_PREDATABA_SE_BASE`, `OMNI_XREL_BASE`, `OMNI_CINEMETA_BASE`). Útil para proxies y tests. |
+
+---
+
+## Endpoints HTTP
+
+| Ruta | Respuesta |
+| --- | --- |
+| `/` , `/configure` | Página de configuración e instalación. |
+| `/logo.png`, `/background.png`, `/favicon.ico`, `/favicon.png` | Assets de marca (PNG/ICO, caché 24 h). |
+| `/manifest.json` | Manifiesto con la configuración por defecto. |
+| `/c/<config>/manifest.json` | Manifiesto con la configuración incrustada. |
+| `/stream/{movie\|series}/{id}.json` | `{ "streams": [ … ] }`. `id` puede ser `tt…`, `tt…:temporada:episodio` o `release:<base64url>`. |
+| `/catalog/{type}/omni-scene[/search=…&skip=…].json` | `{ "metas": [ … ] }` (si `enableCatalog`). |
+| `/meta/{type}/release:<…>.json` | Ficha generada a partir del id `release:`. |
+| `/health`, `/api/status` | Estado, proveedores, caché y últimos errores. |
+| `/c/<config>/…` | Todas las rutas anteriores aceptan el prefijo de configuración. |
+
+Todas las respuestas incluyen CORS (`Access-Control-Allow-Origin: *`) y `Cache-Control` adecuado. Un proveedor caído **nunca** devuelve un 500 a Stremio: se registra en `/api/status` y se responde con una lista vacía.
+
+---
+
+## Detalles de implementación que vale la pena conocer
+
+- `torrents-csv` **ignora `size`** (su home lo documenta mal) y usa `to_tsquery`: los espacios son `AND`. Sanitizamos la consulta y paginamos con `after`.
+- `predb.net` busca **desde el inicio** del nombre: `The.Matrix` funciona, `The Matrix` no. Convertimos el título a puntos.
+- `xREL` devuelve `results` + `p2p_results` (su OpenAPI dice `result`) y suele incluir `imdb:tt…`, que usamos para descartar releases de otras producciones.
+- `predataba.se` vive en `predataba.se/api/…`, no en `api.predataba.se` (que es Swagger). Sin API key, los filtros de texto se ignoran; `top:24h` sí funciona y alimenta el catálogo. Su campo `hash` **no** es un infohash.
+- `Torlock` exige no repetir la misma URL en menos de un minuto: caché con TTL mínimo de 60 s.
+- Infohashes: se aceptan hex de 40, base32 de 32 y magnets (`urn:btih:`), y los trackers del magnet se convierten a `sources: ["tracker:udp://…"]`.
+- Caché con TTL, dedupe de peticiones concurrentes, *stale-if-error* y rate limiting por proveedor.
+
+---
+
+## Tests
+
+```bash
+npm ci          # instala stremio-addon-linter (sólo desarrollo)
+npm test        # node:test
+npm run lint    # comprobación de sintaxis
+```
+
+La suite levanta un servidor HTTP local que simula las seis APIs y Cinemeta, y cubre: parseo Torznab/Newznab, normalización de hashes y magnets, dedupe y ranking (incluidos episodios de series), los seis proveedores con sus parámetros reales, el manifiesto configurable, catálogo/meta, resiliencia ante fallos y CORS. Además, `tests/beamup.test.js` reproduce el **linter que Beamup ejecuta antes de aceptar un despliegue**: valida `/manifest.json` con `stremio-addon-linter`, comprueba el contrato Herokuish (`Procfile`, `package.json`, ausencia de `Dockerfile` en la raíz) y arranca el proceso real con un `PORT` arbitrario.
+
+---
+
+## Estructura
+
+```
+Procfile              proceso `web` para Dokku/Herokuish (Beamup)
+.slugignore           exclusiones del slug de Beamup
+package-lock.json     bloqueo de dependencias (sólo desarrollo)
+docker/Dockerfile     imagen local, fuera de la raíz por Beamup
+src/
+  index.js            arranque del servidor (lee PORT)
+  server.js           rutas, CORS, configuración por URL, /configure
+  manifest.js         manifiesto (varía con la configuración)
+  config.js           valores por defecto, validación y codificación
+  context.js          caché y rate limiters compartidos
+  metadata.js         resolución de títulos vía Cinemeta
+  stream.js           orquestación, expansión y ranking
+  catalog.js          catálogo y fichas release:
+  endpoints.js        URLs base (sobrescribibles por entorno)
+  providers/          knaben, torrents-csv, torlock, predb-net,
+                      predataba-se, xrel (+ índice)
+  lib/                http, cache, limiter, xml, query, torrent
+  public/index.html   UI de configuración e instalación
+  public/logo.png     logo 256 px transparente (+ favicon.ico/png, background.png)
+tests/                mock server + pruebas (identidad y contrato Beamup)
+docs/API-RESEARCH.md  informe de investigación
+docs/BEAMUP.md        guía de despliegue en Beamup
+.github/workflows/     CI + despliegue manual en Beamup
+```
+
+---
+
+## Respeto a los servicios y aviso legal
+
+El addon **no aloja, no indexa por su cuenta y no redistribuye contenido**: sólo consulta metadatos públicos y devuelve identificadores de torrents a Stremio. Aplica caché, espaciado de peticiones y límites de tamaño/timeout para no saturar servicios ajenos, y respeta las condiciones de uso de cada uno (especialmente Torlock y PreDB.net). Si vas a desplegarlo públicamente, revisa las condiciones actuales de cada API y considera usar tus propias claves.
+
+Los resultados pueden incluir material protegido por derechos de autor. **Utilízalo únicamente con contenido que tengas derecho a reproducir** y de acuerdo con la legislación de tu país. El manifiesto declara `behaviorHints.p2p = true` para que Stremio informe de que el uso de BitTorrent puede revelar tu IP; tampoco se activan los flags de contenido adulto de Knaben.
+
+Código bajo licencia [MIT](LICENSE).

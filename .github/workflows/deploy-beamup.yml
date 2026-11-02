@@ -1,0 +1,27 @@
+name: Desplegar en Beamup
+
+# Despliegue manual e intencional: Beamup recibe un `git push --force HEAD:master`
+# al remoto `dokku@<host>:<hash-usuario>/<proyecto>`, por lo que nunca debe
+# dispararse automáticamente en cada push.
+on:
+  workflow_dispatch:
+    inputs:
+      project_name:
+        description: 'Proyecto en Beamup (minúsculas, números y guiones); vacío = variable PROJECT_NAME o "omniindex"'
+        required: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # beamup-deploy-action hace un push --force; necesita el historial.
+          fetch-depth: 0
+      - name: Publicar en Beamup
+        uses: Stremio/beamup-deploy-action@v1.0.1
+        with:
+          ssh_private_key: ${{ secrets.SSH_PRIVATE_KEY }}
+          beamup_host: ${{ vars.BEAMUP_HOST || 'a.baby-beamup.club' }}
+          username_github: ${{ vars.USERNAME_GITHUB || github.repository_owner }}
+          project_name: ${{ inputs.project_name || vars.PROJECT_NAME || 'omniindex' }}

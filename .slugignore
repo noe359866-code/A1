@@ -1,0 +1,17 @@
+# Beamup (Dokku/Herokuish) sólo necesita lo imprescindible para ejecutar el addon.
+# Importante: no debe existir un Dockerfile en la raíz del repo, o Dokku elegiría
+# el builder de Dockerfile en lugar del buildpack de Node (Herokuish).
+tests/
+docs/
+docker/
+.github/
+coverage/
+*.log
+.env
+.env.*
+!.env.example
+.dockerignore
+docker-compose.yml
+beamup.json
+README.md
+LICENSE
