@@ -61,7 +61,7 @@ test('GET /configure sirve la página de configuración', async () => {
 
 test('manifiesto por defecto: streams para IMDb y release:, sin catálogos', async () => {
   const { body } = await get('/manifest.json');
-  assert.equal(body.id, 'org.arena.omniindex');
+  assert.equal(body.id, 'org.omniindex.addon');
   assert.equal(body.behaviorHints.configurable, true);
   assert.equal(body.behaviorHints.p2p, true, 'debe avisar de que usa P2P');
   assert.deepEqual(body.catalogs, []);
@@ -160,5 +160,5 @@ test('CORS, OPTIONS, 404 y configuración inválida', async () => {
 
   const badConfig = await get('/c/no-es-base64-valida/manifest.json');
   assert.equal(badConfig.status, 200);
-  assert.equal(badConfig.body.id, 'org.arena.omniindex');
+  assert.equal(badConfig.body.id, 'org.omniindex.addon');
 });

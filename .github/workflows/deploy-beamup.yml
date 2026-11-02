@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       project_name:
-        description: 'Proyecto en Beamup (minúsculas, números y guiones); vacío = variable PROJECT_NAME o "omni-index"'
+        description: 'Proyecto en Beamup (minúsculas, números y guiones); vacío = variable PROJECT_NAME o "omniindex"'
         required: false
 
 jobs:
@@ -24,4 +24,4 @@ jobs:
           ssh_private_key: ${{ secrets.SSH_PRIVATE_KEY }}
           beamup_host: ${{ vars.BEAMUP_HOST || 'a.baby-beamup.club' }}
           username_github: ${{ vars.USERNAME_GITHUB || github.repository_owner }}
-          project_name: ${{ inputs.project_name || vars.PROJECT_NAME || 'omni-index' }}
+          project_name: ${{ inputs.project_name || vars.PROJECT_NAME || 'omniindex' }}

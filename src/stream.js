@@ -50,7 +50,7 @@ function toStream(torrent) {
     infoHash: torrent.infoHash,
     sources: streamSources(torrent),
     behaviorHints: {
-      bingeGroup: `omni-index-${quality.toLowerCase()}`,
+      bingeGroup: `omniindex-${quality.toLowerCase()}`,
     },
   };
 }

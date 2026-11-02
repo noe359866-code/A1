@@ -1,5 +1,7 @@
+import { ADDON_VERSION } from '../manifest.js';
+
 const USER_AGENT = process.env.OMNI_USER_AGENT ||
-  'OmniIndexStremioAddon/1.0 (+https://github.com/noe359866-code/A1)';
+  `OmniIndexStremioAddon/${ADDON_VERSION} (+https://github.com/noe359866-code/A1)`;
 
 export class HttpError extends Error {
   constructor(message, status = 0, url = '', cause) {

@@ -76,10 +76,14 @@ test('GET /manifest.json por HTTP pasa el linter (simula beamup-addon-linter)', 
     assert.match(response.headers.get('content-type'), /application\/json/);
     const manifest = await response.json();
     assertValid(manifest);
-    // Beamup sirve el addon detrás de un proxy: el manifiesto no debe depender
-    // de ninguna API externa ni contener URLs absolutas a localhost.
-    assert.ok(!JSON.stringify(manifest).includes('localhost'));
-    assert.ok(!JSON.stringify(manifest).includes('127.0.0.1'));
+    // El logo y el fondo son URLs absolutas del MISMO origen que sirve el
+    // manifiesto: así funcionan en local, detrás de proxies y en Beamup.
+    assert.equal(new URL(manifest.logo).origin, new URL(base).origin);
+    assert.equal(new URL(manifest.background).origin, new URL(base).origin);
+    assert.ok(manifest.logo.endsWith('/logo.png'));
+    const icon = await fetch(`${base}/logo.png`);
+    assert.equal(icon.status, 200);
+    assert.match(icon.headers.get('content-type'), /image\/png/);
   });
 });
 

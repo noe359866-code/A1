@@ -3,7 +3,12 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Omni Index · Addon de Stremio</title>
+<title>Omni Index · Seis índices, una búsqueda</title>
+<meta name="description" content="Addon de Stremio que busca en seis índices públicos de torrents y releases scene/P2P.">
+<meta name="theme-color" content="#0b1020">
+<link rel="icon" type="image/png" sizes="64x64" href="/favicon.png">
+<link rel="icon" type="image/x-icon" href="/favicon.ico" sizes="any">
+<link rel="apple-touch-icon" href="/logo.png">
 <style>
   :root {
     --bg: #0b1020; --panel: #141c33; --panel-2: #1b2542; --border: #2a3559;
@@ -17,10 +22,17 @@
   }
   main { max-width: 980px; margin: 0 auto; }
   header { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; margin-bottom: 8px; }
-  h1 { font-size: 30px; margin: 0; letter-spacing: -.5px; }
+  .brand { display: flex; align-items: center; gap: 14px; }
+  .brand img { width: 52px; height: 52px; border-radius: 13px; flex: none;
+    background: var(--panel-2); border: 1px solid var(--border); }
+  h1 { font-size: 30px; margin: 0; letter-spacing: -.5px; line-height: 1.1; }
+  .tagline { display: block; font-size: 12.5px; font-weight: 400; letter-spacing: .2px;
+    color: var(--accent-2); margin-top: 3px; }
+  .header-badges { display: flex; flex-wrap: wrap; gap: 8px; margin-left: auto; }
   .badge { background: var(--panel-2); border: 1px solid var(--border); color: var(--muted);
     padding: 4px 10px; border-radius: 999px; font-size: 12px; }
-  p.lead { color: var(--muted); max-width: 760px; margin: 10px 0 26px; }
+  .badge.brand-badge { color: var(--accent-2); border-color: #1d6b62; }
+  p.lead { color: var(--muted); max-width: 760px; margin: 14px 0 26px; }
   section { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius);
     padding: 22px; margin-bottom: 20px; }
   h2 { font-size: 18px; margin: 0 0 4px; }
@@ -65,12 +77,22 @@
 <body>
 <main>
   <header>
-    <h1>Omni Index</h1>
-    <span class="badge" id="version"></span>
+    <div class="brand">
+      <img src="/logo.png" alt="Logo de Omni Index: una lupa con seis puntos">
+      <div>
+        <h1 id="addon-name">Omni Index</h1>
+        <span class="tagline" id="addon-tagline">Seis índices, una búsqueda</span>
+      </div>
+    </div>
+    <div class="header-badges">
+      <span class="badge brand-badge">6 fuentes reales</span>
+      <span class="badge" id="version"></span>
+    </div>
   </header>
-  <p class="lead">Addon de Stremio que combina tres índices de torrents (con infohash) con tres bases
-  de datos de releases scene/P2P. Los nombres exactos de esas bases se usan para ampliar la búsqueda
-  y encontrar más fuentes. No aloja contenido: sólo consulta metadatos públicos.</p>
+  <p class="lead">Un addon de Stremio que cruza tres índices de torrents (con infohash) con tres
+  bases de releases scene/P2P. Los nombres exactos de esas bases amplían la búsqueda para encontrar
+  más fuentes. <strong>Seis índices, una búsqueda.</strong> No aloja contenido: sólo consulta
+  metadatos públicos.</p>
 
   <section>
     <h2>Fuentes consultadas <small>investigadas y verificadas contra sus documentos oficiales</small></h2>
@@ -162,6 +184,8 @@
   </section>
 
   <footer>
+    <img src="/favicon.png" alt="" width="18" height="18" style="vertical-align:-4px;margin-right:6px">
+    <strong>Omni Index</strong> · <span id="footer-tagline">Seis índices, una búsqueda</span><br>
     Los límites de cada API se respetan con caché y espaciado de peticiones.
     Consulta <code>docs/API-RESEARCH.md</code> para los detalles. Usa el addon sólo con contenido que tengas derecho a reproducir.
   </footer>
@@ -190,6 +214,10 @@ const apiLinks = {
 };
 
 $('version').textContent = 'v' + B.version;
+$('addon-name').textContent = B.name;
+$('addon-tagline').textContent = B.tagline;
+$('footer-tagline').textContent = B.tagline;
+document.title = B.name + ' · ' + B.tagline;
 $('apis').innerHTML = B.ids.map((id) => {
   const isTorrent = ['knaben', 'torrentsCsv', 'torlock'].includes(id);
   return `<div class="api"><span class="tag">${isTorrent ? 'infohash' : 'metadatos'}</span>

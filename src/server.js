@@ -6,18 +6,30 @@ import {
   defaultConfig, decodeConfig, DEFAULTS, PROVIDER_LABELS, PROVIDER_IDS,
 } from './config.js';
 import { createContext, cacheSnapshot } from './context.js';
-import { buildManifest, ADDON_VERSION } from './manifest.js';
+import {
+  buildManifest, ADDON_VERSION, ADDON_NAME, ADDON_TAGLINE,
+} from './manifest.js';
 import { handleStream } from './stream.js';
 import { handleCatalog, handleMeta } from './catalog.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const indexHtml = fs.readFileSync(path.join(here, 'public', 'index.html'), 'utf8');
+const publicDir = path.join(here, 'public');
+const indexHtml = fs.readFileSync(path.join(publicDir, 'index.html'), 'utf8');
+
+// Assets de marca servidos por el propio addon: así funcionan en cualquier
+// host (local, proxy o subdominio de Beamup) sin depender de un CDN externo.
+const staticAssets = Object.fromEntries(
+  ['logo.png', 'favicon.png', 'favicon.ico', 'background.png']
+    .map((file) => [file, fs.readFileSync(path.join(publicDir, file))]),
+);
 
 const bootstrap = {
   defaults: DEFAULTS,
   labels: PROVIDER_LABELS,
   ids: PROVIDER_IDS,
   version: ADDON_VERSION,
+  name: ADDON_NAME,
+  tagline: ADDON_TAGLINE,
 };
 
 function send(res, status, body, contentType, cacheSeconds = 0) {
@@ -35,6 +47,36 @@ function send(res, status, body, contentType, cacheSeconds = 0) {
 
 const sendJson = (res, body, options = {}) =>
   send(res, options.status || 200, body, 'application/json; charset=utf-8', options.cache || 0);
+
+function sendBinary(res, status, buffer, contentType, cacheSeconds = 0) {
+  res.writeHead(status, {
+    'Content-Type': contentType,
+    'Access-Control-Allow-Origin': '*',
+    'Cache-Control': cacheSeconds > 0 ? `public, max-age=${cacheSeconds}` : 'no-store',
+    'Content-Length': buffer.length,
+  });
+  res.end(buffer);
+}
+
+/**
+ * Origen público para las URLs del manifiesto. Beamup/Dokku pone el addon
+ * detrás de un proxy: respetamos X-Forwarded-* y, si el proxy no reenvía el
+ * Host real, se puede fijar OMNI_PUBLIC_URL con la URL pública del addon.
+ */
+function publicOrigin(req) {
+  const configured = String(process.env.OMNI_PUBLIC_URL || '').trim().replace(/\/+$/, '');
+  if (configured) return configured;
+
+  const proto = String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim()
+    || (req.socket.encrypted ? 'https' : 'http');
+  const host = String(req.headers['x-forwarded-host'] || req.headers.host || 'localhost:7000')
+    .split(',')[0].trim();
+  try {
+    return new URL(`${proto}://${host}`).origin;
+  } catch {
+    return 'http://localhost:7000';
+  }
+}
 
 function stripJson(segment = '') {
   return segment.endsWith('.json') ? segment.slice(0, -5) : segment;
@@ -112,8 +154,16 @@ export function createServer() {
           send(res, 200, html, 'text/html; charset=utf-8', 0);
           return;
         }
+        case 'logo.png':
+        case 'favicon.png':
+        case 'favicon.ico':
+        case 'background.png': {
+          sendBinary(res, 200, staticAssets[resource],
+            resource.endsWith('.ico') ? 'image/x-icon' : 'image/png', 86400);
+          return;
+        }
         case 'health': {
-          sendJson(res, { ok: true, version: ADDON_VERSION });
+          sendJson(res, { ok: true, version: ADDON_VERSION, name: ADDON_NAME });
           return;
         }
         case 'api': {
@@ -131,7 +181,7 @@ export function createServer() {
           return;
         }
         case 'manifest.json': {
-          sendJson(res, buildManifest(config), { cache: 3600 });
+          sendJson(res, buildManifest(config, publicOrigin(req)), { cache: 3600 });
           return;
         }
         case 'stream': {

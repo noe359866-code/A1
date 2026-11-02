@@ -12,6 +12,32 @@ Addon de Stremio que agrega **seis APIs públicas** de índices de torrents y de
 
 ---
 
+## Identidad
+
+<img src="src/public/logo.png" alt="Logo de Omni Index: una lupa con seis puntos" width="112" align="right">
+
+| | |
+| --- | --- |
+| **Nombre** | **Omni Index** |
+| **Eslogan** | *Seis índices, una búsqueda* |
+| **ID de Stremio** | `org.omniindex.addon` |
+| **Versión** | `1.1.0` |
+| **Proyecto en Beamup** | `omniindex` |
+| **Logo** | lupa de trazo único violeta `#7c5cff` con seis puntos turquesa `#00c2a8`, símbolo sin texto y fondo transparente |
+
+Los assets de marca los sirve el propio addon: `/logo.png` (256 px, transparente),
+`/favicon.ico`, `/favicon.png` y `/background.png` (1280×720). Stremio exige URLs
+**absolutas** en `logo` y `background`, así que el manifiesto las construye con el
+origen de la petición (respetando `X-Forwarded-Proto` / `X-Forwarded-Host`) o con
+`OMNI_PUBLIC_URL` si el proxy no reenvía el Host real. La UI usa el mismo nombre,
+eslogan y paleta.
+
+> **Cambio de ID en la v1.1.0** (antes `org.arena.omniindex`): Stremio identifica
+> los addons por ID, así que una instalación anterior debe desinstalarse y volver
+> a instalarse con la URL nueva. El proyecto de Beamup pasó a llamarse `omniindex`.
+
+---
+
 ## Idea central
 
 Tres de las APIs devuelven torrents (`infohash`), y las otras tres devuelven **nombres de release** pero ningún torrent. En lugar de ignorarlas, el addon las usa como *inteligencia de búsqueda*:
@@ -61,7 +87,7 @@ El repositorio ya está preparado para publicarse en Beamup (Dokku/Herokuish): `
 ```bash
 npm install -g beamup-cli       # comando `beamup`
 beamup config a.baby-beamup.club TU_USUARIO_GITHUB
-beamup init omni-index
+beamup init omniindex
 beamup                          # despliega y muestra la URL del addon
 ```
 
@@ -98,6 +124,7 @@ Variables de entorno del servidor:
 | Variable | Uso |
 | --- | --- |
 | `PORT` / `OMNI_PORT`, `HOST` | Escucha (por defecto `7000`, `0.0.0.0`). Beamup/Dokku inyecta `PORT`; el addon lo respeta. |
+| `OMNI_PUBLIC_URL` | URL pública del addon. Fija las URLs absolutas de `logo` y `background` cuando el proxy (Beamup) no reenvía el Host real. Vacío = deducirlo de la petición. |
 | `OMNI_CONFIG` | JSON con valores por defecto del manifiesto raíz. |
 | `OMNI_PREDATABA_KEY`, `OMNI_CACHE_TTL`, `OMNI_MAX_STREAMS`, `OMNI_ENABLE_CATALOG` | Atajos de configuración. |
 | `OMNI_HTTP_TIMEOUT`, `OMNI_USER_AGENT`, `OMNI_QUIET` | Transporte y logs. |
@@ -110,6 +137,7 @@ Variables de entorno del servidor:
 | Ruta | Respuesta |
 | --- | --- |
 | `/` , `/configure` | Página de configuración e instalación. |
+| `/logo.png`, `/background.png`, `/favicon.ico`, `/favicon.png` | Assets de marca (PNG/ICO, caché 24 h). |
 | `/manifest.json` | Manifiesto con la configuración por defecto. |
 | `/c/<config>/manifest.json` | Manifiesto con la configuración incrustada. |
 | `/stream/{movie\|series}/{id}.json` | `{ "streams": [ … ] }`. `id` puede ser `tt…`, `tt…:temporada:episodio` o `release:<base64url>`. |
@@ -167,7 +195,8 @@ src/
                       predataba-se, xrel (+ índice)
   lib/                http, cache, limiter, xml, query, torrent
   public/index.html   UI de configuración e instalación
-tests/                mock server + pruebas (incluido el contrato Beamup)
+  public/logo.png     logo 256 px transparente (+ favicon.ico/png, background.png)
+tests/                mock server + pruebas (identidad y contrato Beamup)
 docs/API-RESEARCH.md  informe de investigación
 docs/BEAMUP.md        guía de despliegue en Beamup
 .github/workflows/     CI + despliegue manual en Beamup

@@ -24,7 +24,9 @@ oficial** (`stremio-addon-linter`).
 | `.slugignore` | Reduce el slug: excluye `tests/`, `docs/`, `.github/`, `docker/`, etc. |
 | `docker/Dockerfile` | Docker local sigue funcionando, pero **se movió fuera de la raíz**: un `Dockerfile` en la raíz haría que Dokku eligiera el *builder* de Dockerfile en vez de Herokuish, que es el único plenamente soportado por Beamup. |
 | `.gitignore` → `beamup.json` | El CLI genera ese archivo con el nombre del proyecto y el último commit; no se versiona. |
-| `tests/beamup.test.js` | Reproduce el chequeo de Beamup: linter oficial sobre el manifiesto por HTTP y arranque real respetando `PORT`. |
+| `src/public/logo.png`, `background.png`, `favicon.ico` | Assets de marca servidos por el propio addon en `/logo.png`, `/background.png` y `/favicon.ico`. Están dentro de `src/`, así que `.slugignore` **no** los excluye. |
+| `src/manifest.js` | `id=org.omniindex.addon`, `v1.1.0`, nombre **Omni Index** y URLs absolutas de logo/fondo calculadas con el origen de la petición. |
+| `tests/beamup.test.js`, `tests/brand.test.js` | Reproducen el chequeo de Beamup (linter oficial sobre el manifiesto por HTTP, arranque real respetando `PORT`) y verifican la identidad y los assets. |
 | `.github/workflows/deploy-beamup.yml` | Alternativa de despliegue con `Stremio/beamup-deploy-action@v1.0.1`, **sólo manual** (`workflow_dispatch`). |
 
 El addon es *stateless*: la caché y los limitadores viven en memoria, así que no
@@ -50,7 +52,7 @@ npm ci                           # opcional en local; verifica el contrato
 npm test                         # incluye el chequeo del linter de Beamup
 
 beamup config a.baby-beamup.club TU_USUARIO_GITHUB
-beamup init omni-index           # crea beamup.json y el remoto git `beamup`
+beamup init omniindex           # crea beamup.json y el remoto git `beamup`
 beamup                           # configura + despliega (o `beamup deploy`)
 ```
 
@@ -74,14 +76,14 @@ hash   = sha256(usuario_github_en_minúsculas + "\n").hexdigest()[0:12]
 dominio = hash + "-" + proyecto_en_minúsculas + ".baby-beamup.club"
 ```
 
-Ejemplo con proyecto `omni-index`:
+Ejemplo con proyecto `omniindex`:
 
 ```
-https://<hash>-omni-index.baby-beamup.club/manifest.json
+https://<hash>-omniindex.baby-beamup.club/manifest.json
 ```
 
 Copia esa URL en Stremio (`Agregar complemento → URL`), o abre
-`https://<hash>-omni-index.baby-beamup.club/configure` para generar el enlace
+`https://<hash>-omniindex.baby-beamup.club/configure` para generar el enlace
 `stremio://.../c/<config>/manifest.json` con tu configuración.
 
 ## 4. Variables de entorno y logs
@@ -94,19 +96,33 @@ inyectar como secretos de Dokku:
 beamup secrets OMNI_PREDATABA_KEY 'tu-api-key'
 beamup secrets OMNI_XREL_BASE 'https://api-alternate.xrel.top'
 
+# Recomendado si el proxy no reenvía el Host público: fija las URLs del logo/fondo
+beamup secrets OMNI_PUBLIC_URL 'https://<hash>-omniindex.baby-beamup.club'
+
 # Equivalente directo, sin CLI:
-ssh dokku@a.baby-beamup.club config:set <hash>/omni-index NODE_ENV=production
+ssh dokku@a.baby-beamup.club config:set <hash>/omniindex NODE_ENV=production
 
 beamup logs
-# o: ssh dokku@a.baby-beamup.club logs <hash>/omni-index
+# o: ssh dokku@a.baby-beamup.club logs <hash>/omniindex
 ```
 
 Tras cambiar secretos hay que re-desplegar (Dokku reinicia el proceso al hacer
 `config:set`). Variables disponibles: `PORT`, `HOST`, `OMNI_PORT`,
 `OMNI_KNABEN_BASE`, `OMNI_TORRENTS_CSV_BASE`, `OMNI_TORLOCK_BASE`,
 `OMNI_PREDB_NET_BASE`, `OMNI_PREDATABA_SE_BASE`, `OMNI_XREL_BASE`,
-`OMNI_CINEMETA_BASE`, `OMNI_PREDATABA_KEY`, `OMNI_PREDATABA_TYPE` y
-`OMNI_XREL_ALTERNATE`. Ver `README.md`.
+`OMNI_CINEMETA_BASE`, `OMNI_PREDATABA_KEY`, `OMNI_PREDATABA_TYPE`,
+`OMNI_XREL_ALTERNATE` y **`OMNI_PUBLIC_URL`**. Ver `README.md`.
+
+### Logo y fondo detrás del proxy
+
+Stremio exige URLs **absolutas** en `manifest.logo` y `manifest.background`. El
+addon las genera a partir del origen de cada petición (`Host` o
+`X-Forwarded-Host` + `X-Forwarded-Proto`), por lo que un usuario que instale
+desde `https://<hash>-omniindex.baby-beamup.club/manifest.json` recibe
+`https://<hash>-omniindex.baby-beamup.club/logo.png`. Durante el *check* del
+linter, Beamup consulta el contenedor por su IP interna; ese manifiesto no se
+entrega a ningún usuario, así que no afecta. Si tu proxy reescribe el Host,
+fija `OMNI_PUBLIC_URL` con el dominio público.
 
 ## 5. Despliegue con GitHub Actions
 
@@ -118,7 +134,7 @@ hace un `push --force` al remoto de Beamup. Configura en el repositorio:
 | Secret | `SSH_PRIVATE_KEY` | Clave privada SSH (sin passphrase) cuya pública está en GitHub |
 | Variable | `BEAMUP_HOST` | `a.baby-beamup.club` (ya hay valor por defecto) |
 | Variable | `USERNAME_GITHUB` | Usuario de GitHub (por defecto, el dueño del repo) |
-| Variable | `PROJECT_NAME` | `omni-index` (opcional: el input `project_name` del despacho tiene prioridad) |
+| Variable | `PROJECT_NAME` | `omniindex` (opcional: el input `project_name` del despacho tiene prioridad) |
 
 Luego: *Actions → Desplegar en Beamup → Run workflow*. La acción sincroniza las
 claves de GitHub, calcula el hash del usuario y empuja `HEAD:master`.
@@ -154,6 +170,8 @@ si un cambio rompería el despliegue.
 | Caché vacía tras reinicio | Es en memoria por diseño; se recalienta sola. |
 | `npm ci` falla en el build | Confirmar que `package-lock.json` está versionado y que el buildpack tiene salida a `registry.npmjs.org`. |
 | La página `/configure` genera una URL interna | Usa la URL pública de Beamup en el navegador; la UI construye el enlace con `location.host`. |
+| El logo no aparece en Stremio | Comprueba `manifest.logo`: debe ser una URL pública absoluta. Si apunta a una IP interna, define `OMNI_PUBLIC_URL` y re-despliega. |
+| Addon duplicado / configuración perdida tras la v1.1.0 | El ID pasó de `org.arena.omniindex` a `org.omniindex.addon`; Stremio lo considera otro addon. Desinstala el anterior y vuelve a instalarlo. |
 
 ## 8. Referencias
 
