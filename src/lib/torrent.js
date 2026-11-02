@@ -1,4 +1,5 @@
 import { normalizeText, titleTokens, matchesTitle } from './query.js';
+import { bytesToHex } from './encoding.js';
 
 /** Trackers públicos usados cuando un proveedor sólo entrega el infohash. */
 export const DEFAULT_TRACKERS = Object.freeze([
@@ -30,7 +31,7 @@ export function base32ToHex(value) {
   for (let i = 0; i + 8 <= binary.length && bytes.length < 20; i += 8) {
     bytes.push(Number.parseInt(binary.slice(i, i + 8), 2));
   }
-  return bytes.length === 20 ? Buffer.from(bytes).toString('hex') : null;
+  return bytes.length === 20 ? bytesToHex(bytes) : null;
 }
 
 export function normalizeInfoHash(value) {

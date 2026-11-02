@@ -45,7 +45,7 @@ function mapRelease(item, isP2p) {
 }
 
 export async function search(query, ctx) {
-  const url = new URL(`${endpoint('xrel', ctx.config)}/v2/search/releases.json`);
+  const url = new URL(`${endpoint('xrel', ctx.config, ctx.env)}/v2/search/releases.json`);
   url.searchParams.set('q', (query.mode === 'exact' ? query.text : query.title)
     .replace(/[._+]/g, ' ').replace(/\s+/g, ' ').trim());
   url.searchParams.set('scene', '1');
@@ -54,7 +54,7 @@ export async function search(query, ctx) {
 
   const data = await ctx.cached(`xrel:${url}`, ctx.config.cacheTtl * 1000, async () => {
     await ctx.limiters.xrel.acquire('xrel:search');
-    return getJson(url.toString(), { timeout: ctx.config.httpTimeout });
+    return getJson(url.toString(), { env: ctx.env, timeout: ctx.config.httpTimeout });
   });
 
   const releases = [
@@ -72,11 +72,11 @@ export async function search(query, ctx) {
 
 /** Últimos releases P2P para el catálogo (endpoint sin límite de búsqueda). */
 export async function recent(ctx, limit = 20) {
-  const url = new URL(`${endpoint('xrel', ctx.config)}/v2/p2p/releases.json`);
+  const url = new URL(`${endpoint('xrel', ctx.config, ctx.env)}/v2/p2p/releases.json`);
   url.searchParams.set('per_page', String(Math.min(100, Math.max(5, limit))));
   const data = await ctx.cached(`xrel:recent:${url}`, 5 * 60 * 1000, async () => {
     await ctx.limiters.xrel.acquire('xrel:recent');
-    return getJson(url.toString(), { timeout: ctx.config.httpTimeout });
+    return getJson(url.toString(), { env: ctx.env, timeout: ctx.config.httpTimeout });
   });
   const list = Array.isArray(data?.list) ? data.list : Array.isArray(data?.results) ? data.results : [];
   return list.map((item) => mapRelease(item, true)).filter((release) => release.name);

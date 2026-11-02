@@ -14,7 +14,7 @@ export const kind = 'torrent';
  * oculta contenido adulto, resultados inseguros y torrents sin seeders.
  */
 export async function search(query, ctx) {
-  const url = new URL(`${endpoint('knaben', ctx.config)}/v2/search`);
+  const url = new URL(`${endpoint('knaben', ctx.config, ctx.env)}/v2/search`);
   url.searchParams.set('q', query.text.replace(/[._+]/g, ' ').replace(/\s+/g, ' ').trim());
   url.searchParams.set('sf', 'title');
   url.searchParams.set('o', 'seeders');
@@ -23,7 +23,7 @@ export async function search(query, ctx) {
 
   const data = await ctx.cached(`knaben:${url}`, ctx.config.cacheTtl * 1000, async () => {
     await ctx.limiters.knaben.acquire('knaben');
-    return getJson(url.toString(), { timeout: ctx.config.httpTimeout });
+    return getJson(url.toString(), { env: ctx.env, timeout: ctx.config.httpTimeout });
   });
 
   const hits = Array.isArray(data?.hits) ? data.hits : [];

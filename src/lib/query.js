@@ -8,6 +8,8 @@
  *  - predataba.se: array de filtros (con clave API admite texto libre).
  */
 
+import { decodeBase64Url, encodeBase64Url } from './encoding.js';
+
 export function normalizeText(value = '') {
   return String(value)
     .normalize('NFKD')
@@ -42,7 +44,7 @@ export function parseVideoId(type, id) {
   if (raw.startsWith('release:')) {
     const encoded = raw.slice('release:'.length);
     try {
-      result.releaseName = Buffer.from(encoded, 'base64url').toString('utf8').trim().slice(0, 200) || null;
+      result.releaseName = decodeBase64Url(encoded).trim().slice(0, 200) || null;
     } catch {
       result.releaseName = null;
     }
@@ -64,7 +66,7 @@ export function parseVideoId(type, id) {
 }
 
 export function encodeReleaseId(name) {
-  return `release:${Buffer.from(String(name).slice(0, 200), 'utf8').toString('base64url')}`;
+  return `release:${encodeBase64Url(String(name).slice(0, 200))}`;
 }
 
 /** Extrae el título legible de un nombre de release (antes del año/calidad). */

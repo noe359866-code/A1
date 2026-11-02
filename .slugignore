@@ -15,3 +15,10 @@ docker-compose.yml
 beamup.json
 README.md
 LICENSE
+
+# Ficheros exclusivos de Cloudflare Workers (el addon Node no los usa)
+wrangler.toml
+.dev.vars*
+src/worker.js
+src/assets-worker.js
+docs/CLOUDFLARE.md

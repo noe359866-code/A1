@@ -18,7 +18,7 @@ export const kind = 'torrent';
 export async function search(query, ctx) {
   const isSeries = query.type === 'series' && query.season !== null;
   const t = isSeries ? 'tvsearch' : query.type === 'movie' ? 'movie-search' : 'search';
-  const url = new URL(`${endpoint('torlock', ctx.config)}/torznab/api`);
+  const url = new URL(`${endpoint('torlock', ctx.config, ctx.env)}/torznab/api`);
   url.searchParams.set('t', t);
   url.searchParams.set('q', (query.mode === 'exact' ? query.text : query.title)
     .replace(/[._+]/g, ' ').replace(/\s+/g, ' ').trim());
@@ -32,7 +32,7 @@ export async function search(query, ctx) {
   const ttl = Math.max(60, ctx.config.cacheTtl) * 1000;
   const xml = await ctx.cached(`torlock:${url}`, ttl, async () => {
     await ctx.limiters.torlock.acquire('torlock');
-    return getText(url.toString(), { timeout: ctx.config.httpTimeout, accept: 'application/rss+xml, application/xml, text/xml' });
+    return getText(url.toString(), { env: ctx.env, timeout: ctx.config.httpTimeout, accept: 'application/rss+xml, application/xml, text/xml' });
   });
 
   return parseTorznab(xml).map((item) => {

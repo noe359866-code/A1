@@ -8,7 +8,13 @@ Addon de Stremio que agrega **seis APIs públicas** de índices de torrents y de
 | [torrents-csv](https://torrents-csv.com/) | [predataba.se](https://api.predataba.se/) |
 | [Torlock Torznab](https://www.torlock.com/apis.html) | [xREL API](https://www.xrel.to/wiki/1681/API.html) |
 
-> La investigación completa —parámetros, respuestas reales, límites y varias trampas descubiertas— está en **[docs/API-RESEARCH.md](docs/API-RESEARCH.md)**. La guía de publicación en Stremio Beamup está en **[docs/BEAMUP.md](docs/BEAMUP.md)**.
+> La investigación completa —parámetros, respuestas reales, límites y varias trampas descubiertas— está en **[docs/API-RESEARCH.md](docs/API-RESEARCH.md)**. Guías de publicación: **[docs/CLOUDFLARE.md](docs/CLOUDFLARE.md)** (Cloudflare Workers) y **[docs/BEAMUP.md](docs/BEAMUP.md)** (Stremio Beamup).
+
+**Dos runtimes, un mismo addon.** `src/router.js` contiene todas las rutas con
+APIs web estándar (`Request`/`Response`/`fetch`); `src/server.js` lo adapta a
+`node:http` (local, Docker y Beamup) y `src/worker.js` lo expone como handler
+`fetch` de **Cloudflare Workers**. No hay dependencias de ejecución ni
+`nodejs_compat`: el bundle del Worker son ~65 KiB.
 
 ---
 
@@ -23,13 +29,16 @@ Addon de Stremio que agrega **seis APIs públicas** de índices de torrents y de
 | **ID de Stremio** | `org.omniindex.addon` |
 | **Versión** | `1.0.0` |
 | **Proyecto en Beamup** | `omniindex` |
+| **Worker en Cloudflare** | `omni-index` (`wrangler.toml`) |
 | **Logo** | lupa de trazo único violeta `#7c5cff` con seis puntos turquesa `#00c2a8`, símbolo sin texto y fondo transparente |
 
 Los assets de marca los sirve el propio addon: `/logo.png` (256 px, transparente),
 `/favicon.ico`, `/favicon.png` y `/background.png` (1280×720). Stremio exige URLs
 **absolutas** en `logo` y `background`, así que el manifiesto las construye con el
-origen de la petición (respetando `X-Forwarded-Proto` / `X-Forwarded-Host`) o con
-`OMNI_PUBLIC_URL` si el proxy no reenvía el Host real. La UI usa el mismo nombre,
+origen de la petición (en Beamup respetando `X-Forwarded-Proto` /
+`X-Forwarded-Host`; en Cloudflare directamente con `request.url`) o con
+`OMNI_PUBLIC_URL` si el proxy no reenvía el Host real. En el Worker los estáticos
+vienen del binding `ASSETS` de Workers Assets. La UI usa el mismo nombre,
 eslogan y paleta.
 
 > **Cambio de ID** (antes `org.arena.omniindex`): Stremio identifica
@@ -79,6 +88,19 @@ docker build -f docker/Dockerfile -t omni-index . \
 ```
 
 > El `Dockerfile` vive en `docker/` (no en la raíz) para que Beamup elija el buildpack Herokuish de Node y no el *builder* de Dockerfile. Ver [docs/BEAMUP.md](docs/BEAMUP.md).
+
+### Cloudflare Workers
+
+El addon también corre como Worker con el **mismo manifiesto, rutas y configuración por URL**, sin `nodejs_compat` ni dependencias. `wrangler.toml` declara el entry point `src/worker.js` y publica los estáticos de marca con el binding `ASSETS`:
+
+```bash
+npx wrangler@4 login
+npm run worker:dev             # http://localhost:8787/configure (workerd local)
+npm run worker:check           # valida el bundle sin publicar
+npm run worker:deploy          # https://omni-index.<subdominio>.workers.dev
+```
+
+Instala en Stremio con `https://omni-index.<subdominio>.workers.dev/manifest.json`. Las variables `OMNI_*` se declaran en `[vars]`, como `wrangler secret` o en `.dev.vars`; el workflow manual `deploy-cloudflare.yml` usa `CLOUDFLARE_API_TOKEN` y `CLOUDFLARE_ACCOUNT_ID`. Guía completa (dominios propios, límites, caché en el *isolate*, solución de problemas): **[docs/CLOUDFLARE.md](docs/CLOUDFLARE.md)**. El CLI `wrangler@4` requiere **Node ≥ 22**; el servidor Node/Beamup sigue funcionando con Node ≥ 18. El despliegue real requiere tu cuenta de Cloudflare; desde este entorno no se ha ejecutado `wrangler deploy`.
 
 ### Beamup
 
@@ -130,6 +152,11 @@ Variables de entorno del servidor:
 | `OMNI_HTTP_TIMEOUT`, `OMNI_USER_AGENT`, `OMNI_QUIET` | Transporte y logs. |
 | `OMNI_<PROVEEDOR>_BASE` | Sobrescribe la URL base (`OMNI_KNABEN_BASE`, `OMNI_TORRENTS_CSV_BASE`, `OMNI_TORLOCK_BASE`, `OMNI_PREDB_NET_BASE`, `OMNI_PREDATABA_SE_BASE`, `OMNI_XREL_BASE`, `OMNI_CINEMETA_BASE`). Útil para proxies y tests. |
 
+En **Cloudflare Workers** los mismos nombres `OMNI_*` se definen en `[vars]`
+de `wrangler.toml`, como secretos (`wrangler secret put OMNI_PREDATABA_KEY`) o
+en `.dev.vars` para desarrollo; llegan al handler en el objeto `env`.
+`PORT` y `HOST` no existen allí. Ver [docs/CLOUDFLARE.md](docs/CLOUDFLARE.md).
+
 ---
 
 ## Endpoints HTTP
@@ -146,7 +173,7 @@ Variables de entorno del servidor:
 | `/health`, `/api/status` | Estado, proveedores, caché y últimos errores. |
 | `/c/<config>/…` | Todas las rutas anteriores aceptan el prefijo de configuración. |
 
-Todas las respuestas incluyen CORS (`Access-Control-Allow-Origin: *`) y `Cache-Control` adecuado. Un proveedor caído **nunca** devuelve un 500 a Stremio: se registra en `/api/status` y se responde con una lista vacía.
+Todas las respuestas incluyen CORS (`Access-Control-Allow-Origin: *`) y `Cache-Control` adecuado. Un proveedor caído **nunca** devuelve un 500 a Stremio: se registra en `/api/status` y se responde con una lista vacía. `/health` y `/api/status` incluyen el campo `runtime` (`node` o `cloudflare`) para saber qué despliegue estás consultando.
 
 ---
 
@@ -158,48 +185,61 @@ Todas las respuestas incluyen CORS (`Access-Control-Allow-Origin: *`) y `Cache-C
 - `predataba.se` vive en `predataba.se/api/…`, no en `api.predataba.se` (que es Swagger). Sin API key, los filtros de texto se ignoran; `top:24h` sí funciona y alimenta el catálogo. Su campo `hash` **no** es un infohash.
 - `Torlock` exige no repetir la misma URL en menos de un minuto: caché con TTL mínimo de 60 s.
 - Infohashes: se aceptan hex de 40, base32 de 32 y magnets (`urn:btih:`), y los trackers del magnet se convierten a `sources: ["tracker:udp://…"]`.
-- Caché con TTL, dedupe de peticiones concurrentes, *stale-if-error* y rate limiting por proveedor.
+- Caché con TTL, dedupe de peticiones concurrentes, *stale-if-error* y rate limiting por proveedor. En Workers vive en el *isolate* (se pierde al reciclarse, igual que al reiniciar el proceso Node).
+- **Núcleo portable**: `router.js` sólo usa `Request`/`Response`/`fetch`, `TextEncoder`/`TextDecoder` y `atob`/`btoa`; no hay `Buffer` ni imports `node:*` en el grafo del Worker (`tests/worker.test.js` lo vigila). El entorno se inyecta como objeto `env`; el único acceso a variables de proceso es un *fallback* para Node. Los estáticos llegan por `fs` en Node y por el binding `ASSETS` en Cloudflare.
 
 ---
 
 ## Tests
 
 ```bash
-npm ci          # instala stremio-addon-linter (sólo desarrollo)
-npm test        # node:test
-npm run lint    # comprobación de sintaxis
+npm ci               # instala stremio-addon-linter (sólo desarrollo)
+npm test             # node:test (66 pruebas)
+npm run lint         # comprobación de sintaxis
+npm run worker:check # bundle de Cloudflare Workers sin publicar (Node >= 22)
 ```
 
-La suite levanta un servidor HTTP local que simula las seis APIs y Cinemeta, y cubre: parseo Torznab/Newznab, normalización de hashes y magnets, dedupe y ranking (incluidos episodios de series), los seis proveedores con sus parámetros reales, el manifiesto configurable, catálogo/meta, resiliencia ante fallos y CORS. Además, `tests/beamup.test.js` reproduce el **linter que Beamup ejecuta antes de aceptar un despliegue**: valida `/manifest.json` con `stremio-addon-linter`, comprueba el contrato Herokuish (`Procfile`, `package.json`, ausencia de `Dockerfile` en la raíz) y arranca el proceso real con un `PORT` arbitrario.
+La suite levanta un servidor HTTP local que simula las seis APIs y Cinemeta, y cubre: parseo Torznab/Newznab, normalización de hashes y magnets, dedupe y ranking (incluidos episodios de series), los seis proveedores con sus parámetros reales, el manifiesto configurable, catálogo/meta, resiliencia ante fallos y CORS.
+
+- `tests/beamup.test.js` reproduce el **linter que Beamup ejecuta antes de aceptar un despliegue**: valida `/manifest.json` con `stremio-addon-linter`, comprueba el contrato Herokuish (`Procfile`, `package.json`, ausencia de `Dockerfile` en la raíz) y arranca el proceso real con un `PORT` arbitrario.
+- `tests/worker.test.js` llama directamente al handler `fetch(request, env)` del Worker con un doble del binding `ASSETS` y las APIs apuntando al mock: comprueba que **todo llega por `env`** (sin variables de proceso), el origen del manifiesto, la inyección del bootstrap, los estáticos, los streams reales contra el mock y el contrato «sin módulos de Node» del grafo de imports. El bundle también se ha verificado con `wrangler dev` (workerd real) y `wrangler deploy --dry-run`.
 
 ---
 
 ## Estructura
 
 ```
+wrangler.toml         configuración de Cloudflare Workers (assets + vars)
+.dev.vars.example     plantilla de variables locales para `wrangler dev`
 Procfile              proceso `web` para Dokku/Herokuish (Beamup)
 .slugignore           exclusiones del slug de Beamup
 package-lock.json     bloqueo de dependencias (sólo desarrollo)
 docker/Dockerfile     imagen local, fuera de la raíz por Beamup
 src/
+  worker.js           entry point de Cloudflare Workers (`fetch`)
+  assets-worker.js    estáticos desde el binding ASSETS
+  assets-node.js      estáticos desde disco (Node)
+  router.js           rutas, CORS y configuración por URL (APIs web)
+  server.js           adaptador node:http sobre router.js
   index.js            arranque del servidor (lee PORT)
-  server.js           rutas, CORS, configuración por URL, /configure
   manifest.js         manifiesto (varía con la configuración)
   config.js           valores por defecto, validación y codificación
   context.js          caché y rate limiters compartidos
   metadata.js         resolución de títulos vía Cinemeta
   stream.js           orquestación, expansión y ranking
   catalog.js          catálogo y fichas release:
-  endpoints.js        URLs base (sobrescribibles por entorno)
+  endpoints.js        URLs base (sobrescribibles por entorno/bindings)
   providers/          knaben, torrents-csv, torlock, predb-net,
                       predataba-se, xrel (+ índice)
-  lib/                http, cache, limiter, xml, query, torrent
+  lib/                http, cache, limiter, xml, query, torrent,
+                      encoding, runtime-env, assets
   public/index.html   UI de configuración e instalación
   public/logo.png     logo 256 px transparente (+ favicon.ico/png, background.png)
-tests/                mock server + pruebas (identidad y contrato Beamup)
+tests/                mock server + pruebas (Beamup, Workers, proveedores…)
 docs/API-RESEARCH.md  informe de investigación
 docs/BEAMUP.md        guía de despliegue en Beamup
-.github/workflows/     CI + despliegue manual en Beamup
+docs/CLOUDFLARE.md    guía de despliegue en Cloudflare Workers
+.github/workflows/     CI + despliegues manuales (Beamup y Cloudflare)
 ```
 
 ---

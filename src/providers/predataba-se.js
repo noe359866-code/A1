@@ -29,7 +29,7 @@ function headersFor(ctx, type) {
 }
 
 async function runSearch(filters, type, ctx) {
-  const url = `${endpoint('predatabaSe', ctx.config)}/api/search?page=0`;
+  const url = `${endpoint('predatabaSe', ctx.config, ctx.env)}/api/search?page=0`;
   const getUrl = new URL(url);
   getUrl.searchParams.set('query', JSON.stringify(filters));
   const key = `predatabaSe:${type}:${filters.join('|')}`;
@@ -38,12 +38,14 @@ async function runSearch(filters, type, ctx) {
     await ctx.limiters.predatabaSe.acquire(`predatabaSe:${type}`);
     try {
       return await postJson(url, filters, {
+        env: ctx.env,
         headers: headersFor(ctx, type),
         timeout: ctx.config.httpTimeout,
       });
     } catch (error) {
       ctx.log(`predataba.se: POST falló (${error.message}), probando GET`);
       return getJson(getUrl.toString(), {
+        env: ctx.env,
         headers: headersFor(ctx, type),
         timeout: ctx.config.httpTimeout,
       });

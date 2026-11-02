@@ -19,5 +19,11 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run lint
-      # Incluye el contrato de Beamup (linter oficial del manifiesto + PORT).
+      # Incluye el contrato de Beamup (linter oficial del manifiesto + PORT)
+      # y tests/worker.test.js (contrato de Cloudflare Workers).
       - run: npm test
+      # Comprueba que el bundle del Worker se construye sin nodejs_compat.
+      # wrangler@4 exige Node >= 22, así que sólo se ejecuta en ese escalón.
+      - name: Bundle de Cloudflare Workers
+        if: matrix.node-version == 22
+        run: npm run worker:check

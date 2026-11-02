@@ -17,7 +17,7 @@ export async function search(query, ctx) {
   const prefix = toPredbPrefix(query.mode === 'exact' ? query.text : query.title);
   if (!prefix) return [];
 
-  const url = new URL(`${endpoint('predbNet', ctx.config)}/`);
+  const url = new URL(`${endpoint('predbNet', ctx.config, ctx.env)}/`);
   url.searchParams.set('type', 'search');
   url.searchParams.set('q', prefix);
   url.searchParams.set('limit', '25');
@@ -26,7 +26,7 @@ export async function search(query, ctx) {
 
   const data = await ctx.cached(`predbNet:${url}`, ctx.config.cacheTtl * 1000, async () => {
     await ctx.limiters.predbNet.acquire('predbNet');
-    return getJson(url.toString(), { timeout: ctx.config.httpTimeout });
+    return getJson(url.toString(), { env: ctx.env, timeout: ctx.config.httpTimeout });
   });
 
   if (data?.status !== 'success' || !Array.isArray(data.data)) return [];
@@ -47,14 +47,14 @@ export async function search(query, ctx) {
 
 /** Feed de releases recientes para el catálogo (sin parámetro q). */
 export async function recent(ctx, limit = 20) {
-  const url = new URL(`${endpoint('predbNet', ctx.config)}/`);
+  const url = new URL(`${endpoint('predbNet', ctx.config, ctx.env)}/`);
   url.searchParams.set('type', 'search');
   url.searchParams.set('limit', String(Math.min(100, limit)));
   url.searchParams.set('order_by', 'pretime');
   url.searchParams.set('sort', 'DESC');
   const data = await ctx.cached(`predbNet:recent:${url}`, 5 * 60 * 1000, async () => {
     await ctx.limiters.predbNet.acquire('predbNet');
-    return getJson(url.toString(), { timeout: ctx.config.httpTimeout });
+    return getJson(url.toString(), { env: ctx.env, timeout: ctx.config.httpTimeout });
   });
   if (!Array.isArray(data?.data)) return [];
   return data.data.filter((item) => item?.release).map((item) => ({
