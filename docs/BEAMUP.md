@@ -12,6 +12,12 @@ oficial** (`stremio-addon-linter`).
 > demás (código, buildpack, workflow y contrato del linter) ya está listo en el
 > repositorio.
 
+> **Dos destinos, un addon.** `src/index.js` → `src/server.js` es hoy un
+> adaptador de `node:http` sobre `src/router.js`; ese mismo router se expone en
+> Cloudflare Workers con `src/worker.js` (ver
+> **[docs/CLOUDFLARE.md](CLOUDFLARE.md)**). Esta guía cubre sólo Beamup: el
+> `Procfile`, el `PORT`, el linter y el buildpack no cambian.
+
 ---
 
 ## 1. Qué se preparó en el repositorio

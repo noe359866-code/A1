@@ -25,7 +25,7 @@ export async function search(query, ctx) {
   if (terms.length < 3) return [];
 
   const pages = Math.min(3, Math.max(1, Math.ceil(ctx.config.perProviderLimit / PAGE_SIZE)));
-  const base = `${endpoint('torrentsCsv', ctx.config)}/service/search`;
+  const base = `${endpoint('torrentsCsv', ctx.config, ctx.env)}/service/search`;
   const results = [];
   let after = 0;
 
@@ -36,7 +36,7 @@ export async function search(query, ctx) {
 
     const data = await ctx.cached(`torrentsCsv:${url}`, ctx.config.cacheTtl * 1000, async () => {
       await ctx.limiters.torrentsCsv.acquire('torrentsCsv');
-      return getJson(url.toString(), { timeout: ctx.config.httpTimeout });
+      return getJson(url.toString(), { env: ctx.env, timeout: ctx.config.httpTimeout });
     });
 
     const torrents = Array.isArray(data?.torrents) ? data.torrents : [];

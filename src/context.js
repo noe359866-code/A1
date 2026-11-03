@@ -1,5 +1,6 @@
 import { createCache, memo } from './lib/cache.js';
 import { RateLimiter } from './lib/limiter.js';
+import { asEnv, envValue } from './lib/runtime-env.js';
 
 const sharedCache = createCache({ max: 1500 });
 
@@ -22,15 +23,24 @@ const limiters = {
 
 const failures = [];
 
+/**
+ * Contexto de una petición. `overrides.env` es el entorno del runtime: si no
+ * se pasa (tests que llaman a los proveedores directamente) se usa el de Node.
+ * En Cloudflare la caché y los limiters viven en el *isolate*, igual que la
+ * caché en memoria del servidor Node: se comparten entre peticiones del mismo
+ * proceso pero no son durables entre reinicios.
+ */
 export function createContext(config, overrides = {}) {
+  const env = overrides.env ?? asEnv();
   return {
     config,
+    env,
     cache: sharedCache,
     limiters,
     failures,
     cached: (key, ttlMs, producer) => memo(sharedCache, key, ttlMs, producer),
     log: (...args) => {
-      if (process.env.OMNI_QUIET !== '1') console.error('[omni]', ...args);
+      if (envValue(env, 'OMNI_QUIET') !== '1') console.error('[omni]', ...args);
     },
     noteFailure(provider, error) {
       failures.push({ provider, message: String(error?.message || error), at: Date.now() });

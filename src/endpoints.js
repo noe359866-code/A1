@@ -1,8 +1,11 @@
 /**
  * Bases URL de cada proveedor. Se pueden sobreescribir por variable de entorno
  * (OMNI_<PROVIDER>_BASE) para apuntar a un servidor propio, a un proxy o al
- * mock server de los tests. Imprescindible para no hardcodear hosts.
+ * mock server de los tests. En Cloudflare los mismos nombres se definen como
+ * `vars` / `secrets` y llegan en el objeto `env` de la petición.
  */
+import { asEnv, envValue } from './lib/runtime-env.js';
+
 export const DEFAULT_ENDPOINTS = Object.freeze({
   knaben: 'https://api.knaben.org',
   torrentsCsv: 'https://torrents-csv.com',
@@ -25,11 +28,10 @@ const ENV_NAMES = {
   cinemeta: 'OMNI_CINEMETA_BASE',
 };
 
-export function endpoint(name, config = {}) {
-  if (name === 'xrel' && config.xrelAlternate && !process.env[ENV_NAMES.xrel]) {
-    return XREL_ALTERNATE;
-  }
-  const override = process.env[ENV_NAMES[name]];
+/** @param {object} env variables (Node) o bindings (Cloudflare Workers) */
+export function endpoint(name, config = {}, env) {
+  const override = envValue(asEnv(env), ENV_NAMES[name]);
+  if (name === 'xrel' && config.xrelAlternate && !override) return XREL_ALTERNATE;
   const value = override || DEFAULT_ENDPOINTS[name];
   if (!value) throw new Error(`Endpoint desconocido: ${name}`);
   return value.replace(/\/+$/, '');

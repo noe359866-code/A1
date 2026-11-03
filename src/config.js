@@ -1,3 +1,6 @@
+import { encodeBase64Url, decodeBase64Url } from './lib/encoding.js';
+import { asEnv, envValue } from './lib/runtime-env.js';
+
 export const TORRENT_PROVIDERS = Object.freeze(['knaben', 'torrentsCsv', 'torlock']);
 export const RELEASE_PROVIDERS = Object.freeze(['predbNet', 'predatabaSe', 'xrel']);
 export const PROVIDER_IDS = Object.freeze([...TORRENT_PROVIDERS, ...RELEASE_PROVIDERS]);
@@ -97,7 +100,7 @@ export function sanitizeConfig(raw = {}) {
 }
 
 export function encodeConfig(config) {
-  return Buffer.from(JSON.stringify(sanitizeConfig(config)), 'utf8').toString('base64url');
+  return encodeBase64Url(JSON.stringify(sanitizeConfig(config)));
 }
 
 /** Devuelve null cuando el segmento no es una configuración válida. */
@@ -105,7 +108,7 @@ export function decodeConfig(segment) {
   if (!segment) return null;
   let parsed = null;
   try {
-    parsed = JSON.parse(Buffer.from(String(segment), 'base64url').toString('utf8'));
+    parsed = JSON.parse(decodeBase64Url(String(segment)));
   } catch {
     // También aceptamos JSON plano (útil para depurar desde la barra de URL).
     try {
@@ -118,20 +121,27 @@ export function decodeConfig(segment) {
   return sanitizeConfig(parsed);
 }
 
-function envOverrides() {
+/**
+ * Atajos por entorno. `env` son las variables de proceso en Node o los
+ * bindings/vars en Cloudflare: el mismo nombre funciona en los dos runtimes.
+ */
+function envOverrides(env) {
+  const source = asEnv(env);
   const overrides = {};
   try {
-    if (process.env.OMNI_CONFIG) Object.assign(overrides, JSON.parse(process.env.OMNI_CONFIG));
+    const raw = envValue(source, 'OMNI_CONFIG');
+    if (raw) Object.assign(overrides, JSON.parse(raw));
   } catch {
     // Configuración por entorno inválida: se ignoran las claves malformadas.
   }
-  if (process.env.OMNI_PREDATABA_KEY) overrides.predatabaKey = process.env.OMNI_PREDATABA_KEY;
-  if (process.env.OMNI_CACHE_TTL) overrides.cacheTtl = process.env.OMNI_CACHE_TTL;
-  if (process.env.OMNI_MAX_STREAMS) overrides.maxStreams = process.env.OMNI_MAX_STREAMS;
-  if (process.env.OMNI_ENABLE_CATALOG) overrides.enableCatalog = process.env.OMNI_ENABLE_CATALOG;
+  if (envValue(source, 'OMNI_PREDATABA_KEY')) overrides.predatabaKey = envValue(source, 'OMNI_PREDATABA_KEY');
+  if (envValue(source, 'OMNI_CACHE_TTL')) overrides.cacheTtl = envValue(source, 'OMNI_CACHE_TTL');
+  if (envValue(source, 'OMNI_MAX_STREAMS')) overrides.maxStreams = envValue(source, 'OMNI_MAX_STREAMS');
+  if (envValue(source, 'OMNI_ENABLE_CATALOG')) overrides.enableCatalog = envValue(source, 'OMNI_ENABLE_CATALOG');
   return overrides;
 }
 
-export function defaultConfig() {
-  return sanitizeConfig({ ...DEFAULTS, ...envOverrides() });
+/** Configuración del manifiesto raíz. Sin argumento se usa el entorno de Node. */
+export function defaultConfig(env) {
+  return sanitizeConfig({ ...DEFAULTS, ...envOverrides(env) });
 }

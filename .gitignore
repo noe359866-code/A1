@@ -17,3 +17,9 @@ id_rsa*
 .DS_Store
 dist/
 build/
+
+# Cloudflare Workers: estado local de wrangler, bundle de dry-run y secretos
+.wrangler/
+.dev.vars
+.dev.vars.*
+!.dev.vars.example

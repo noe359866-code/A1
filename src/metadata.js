@@ -24,10 +24,10 @@ export async function resolveMeta(parsed, ctx) {
   }
   if (!parsed.imdbId) return null;
 
-  const url = `${endpoint('cinemeta', ctx.config)}/meta/${parsed.type}/${parsed.imdbId}.json`;
+  const url = `${endpoint('cinemeta', ctx.config, ctx.env)}/meta/${parsed.type}/${parsed.imdbId}.json`;
   const json = await ctx.cached(`cinemeta:${url}`, 24 * 60 * 60 * 1000, async () => {
     await ctx.limiters.cinemeta.acquire('cinemeta');
-    return getJson(url, { timeout: Math.min(ctx.config.httpTimeout, 8000) });
+    return getJson(url, { env: ctx.env, timeout: Math.min(ctx.config.httpTimeout, 8000) });
   });
 
   const meta = json?.meta;

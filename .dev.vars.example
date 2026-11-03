@@ -1,0 +1,21 @@
+# Copia este fichero a `.dev.vars` para `npm run worker:dev`.
+# `.dev.vars` NO se versiona (está en .gitignore); aquí sólo hay ejemplos.
+# Son las mismas variables OMNI_* que .env.example, pero para wrangler dev.
+# Las variables públicas también pueden ir en [vars] de wrangler.toml;
+# los secretos de producción se crean con `npx wrangler@4 secret put NOMBRE`.
+
+# Clave opcional para los filtros de texto de predataba.se
+# OMNI_PREDATABA_KEY=
+
+# Espejo de xREL si tu IP está bloqueada
+# OMNI_XREL_BASE=https://api-alternate.xrel.top
+
+# Configuración por defecto del manifiesto raíz (JSON en una línea)
+# OMNI_CONFIG={"maxStreams":30,"cacheTtl":900}
+
+# Transporte y logs
+# OMNI_HTTP_TIMEOUT=9000
+# OMNI_QUIET=1
+
+# URL pública: en Cloudflare normalmente NO hace falta (se deduce de request.url)
+# OMNI_PUBLIC_URL=https://addon.tudominio.com

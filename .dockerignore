@@ -8,3 +8,8 @@ coverage
 .dockerignore
 Dockerfile
 docker-compose.yml
+wrangler.toml
+.dev.vars*
+.wrangler
+src/worker.js
+src/assets-worker.js
