@@ -233,6 +233,35 @@ routes = [
 
 ---
 
+## 7 bis. Despliegue manual (si el build automático no sirve)
+
+El Worker se llama **`a1`** (`a1.noe359866.workers.dev`) y así está declarado en
+`wrangler.toml`. Un `name` distinto publica en otro Worker y el dominio se queda
+con la versión anterior: es la causa más frecuente de «arreglé el addon pero
+sigo viendo lo mismo». El workflow aborta si detecta esa discrepancia.
+
+Con una API token de Cloudflare (*Edit Cloudflare Workers*), desde la raíz del
+repo:
+
+```bash
+export CLOUDFLARE_API_TOKEN=...        # token con Workers Scripts:Edit
+export CLOUDFLARE_ACCOUNT_ID=...
+npm ci
+npx wrangler@4.42.0 deploy             # publica en el Worker "a1"
+
+curl -s https://a1.noe359866.workers.dev/health       # debe devolver la versión nueva
+curl -s https://a1.noe359866.workers.dev/manifest.json | grep -o '"anime"'
+```
+
+Si `health` sigue con la versión vieja, el deploy fue a otro Worker: revisa el
+`name` de `wrangler.toml` y la salida del comando (`Uploaded a1`).
+
+> **Tras desplegar, reinstala el addon en Stremio.** Stremio guarda una copia
+> del manifiesto al instalarlo: si antes no anunciaba `anime`, seguirá sin
+> pedir streams de anime hasta que lo quites y lo vuelvas a añadir.
+
+---
+
 ## 8. Verificación y solución de problemas
 
 ```bash
