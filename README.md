@@ -186,7 +186,7 @@ Todas las respuestas incluyen CORS (`Access-Control-Allow-Origin: *`) y `Cache-C
 - `Torlock` exige no repetir la misma URL en menos de un minuto: caché con TTL mínimo de 60 s.
 - Infohashes: se aceptan hex de 40, base32 de 32 y magnets (`urn:btih:`), y los trackers del magnet se convierten a `sources: ["tracker:udp://…"]`.
 - Caché con TTL, dedupe de peticiones concurrentes, *stale-if-error* y rate limiting por proveedor. En Workers vive en el *isolate* (se pierde al reciclarse, igual que al reiniciar el proceso Node).
-- **Anime**: el manifiesto anuncia el tipo `anime` y los prefijos `kitsu`, `mal`, `anilist`, `anidb` y `anime`. Los metadatos se resuelven con `anime-kitsu.strem.fun` (título, alias y tabla de episodios), de modo que un episodio absoluto como `kitsu:12:1071` se traduce a `SxxExx` antes de buscar y, si el título romaji no está indexado, se reintenta con los alias ingleses.
+- **Anime**: el manifiesto anuncia el tipo `anime` y los prefijos `kitsu`, `mal`, `anilist`, `anidb` y `anime`. Los metadatos se resuelven con `anime-kitsu.strem.fun` (título, alias y tabla de episodios), de modo que un episodio absoluto como `kitsu:12:1071` se traduce a `SxxExx` **en numeración IMDb** (Kitsu y IMDb no coinciden: un anime puede ser `S01E01` en Kitsu y `S02E01` en IMDb, y los releases usan IMDb) antes de buscar y, si el título romaji no está indexado, se reintenta con los alias ingleses.
 - **Núcleo portable**: `router.js` sólo usa `Request`/`Response`/`fetch`, `TextEncoder`/`TextDecoder` y `atob`/`btoa`; no hay `Buffer` ni imports `node:*` en el grafo del Worker (`tests/worker.test.js` lo vigila). El entorno se inyecta como objeto `env`; el único acceso a variables de proceso es un *fallback* para Node. Los estáticos llegan por `fs` en Node y por el binding `ASSETS` en Cloudflare.
 
 ---
@@ -195,7 +195,7 @@ Todas las respuestas incluyen CORS (`Access-Control-Allow-Origin: *`) y `Cache-C
 
 ```bash
 npm ci               # instala stremio-addon-linter (sólo desarrollo)
-npm test             # node:test (78 pruebas)
+npm test             # node:test (80 pruebas)
 npm run lint         # comprobación de sintaxis
 npm run worker:check # bundle de Cloudflare Workers sin publicar (Node >= 22)
 ```

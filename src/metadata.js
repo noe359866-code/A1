@@ -10,47 +10,74 @@ function firstYear(value) {
   return extractYear(value);
 }
 
-/** Episodio normalizado a partir de un objeto `videos` de Stremio. */
+function asInt(value) {
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+/**
+ * Episodio normalizado a partir de un objeto `videos` de Stremio.
+ *
+ * `season`/`episode` son la numeración del addon de anime (Kitsu) y
+ * `imdbSeason`/`imdbEpisode` la de IMDb. No coinciden: en "100-man no Inochi
+ * 2nd Season" Kitsu dice S01E01 pero IMDb dice S02E01, y los releases de los
+ * índices usan la numeración IMDb. Por eso se busca en ambos espacios.
+ */
 function normalizeEpisode(video, index) {
-  const season = Number.parseInt(video?.season, 10);
-  const episode = Number.parseInt(video?.episode, 10);
+  const season = asInt(video?.season);
+  const episode = asInt(video?.episode);
+  const imdbSeason = asInt(video?.imdbSeason);
+  const imdbEpisode = asInt(video?.imdbEpisode);
   return {
-    season: Number.isFinite(season) ? season : null,
-    episode: Number.isFinite(episode) ? episode : (index + 1),
-    absolute: Number.parseInt(video?.absoluteEpisode, 10),
+    season,
+    episode: episode ?? (index + 1),
+    absolute: asInt(video?.absoluteEpisode),
+    title: String(video?.title || '').trim().slice(0, 120),
+    imdbSeason: imdbSeason ?? season,
+    imdbEpisode: imdbEpisode ?? episode ?? (index + 1),
   };
 }
 
 /**
- * Resuelve un episodio absoluto (`kitsu:46474:3`) a temporada/episodio usando
- * la lista `videos` del addon de anime: es la misma fuente que usa Stremio, de
- * modo que el número de episodio coincide con el que ve el usuario.
+ * Resuelve un episodio de anime a temporada/episodio **de IMDb**, que es la
+ * numeración que usan los nombres de release que indexan Knaben, torrents-csv
+ * y Torlock.
+ *
+ * Acepta el número absoluto (`kitsu:12:1071`), el de Kitsu (`kitsu:46474:1:3`)
+ * y el de IMDb. Devuelve también el título del episodio, útil para afinar la
+ * búsqueda cuando el índice usa el nombre del capítulo.
+ *
+ * @returns {{season: number|null, episode: number|null, title?: string}}
  */
 export function resolveEpisode(videos, season, episode) {
   if (!Array.isArray(videos) || !videos.length || episode === null) return { season, episode };
   const entries = videos.map(normalizeEpisode);
+  const hit = (entry) => ({
+    season: entry.imdbSeason ?? entry.season ?? season ?? 1,
+    episode: entry.imdbEpisode ?? entry.episode,
+    ...(entry.title ? { title: entry.title } : {}),
+  });
 
+  // 1) Ya viene en numeración IMDb (o coincide con ella).
   if (season !== null) {
-    const exact = entries.find((entry) => entry.season === season && entry.episode === episode);
-    if (exact) return { season: exact.season, episode: exact.episode };
+    const exact = entries.find((entry) =>
+      entry.imdbSeason === season && entry.imdbEpisode === episode);
+    if (exact) return hit(exact);
+
+    // 2) Viene en numeración Kitsu: se traduce a la de IMDb.
+    const kitsu = entries.find((entry) => entry.season === season && entry.episode === episode);
+    if (kitsu) return hit(kitsu);
   }
 
-  // Sin temporada: el número puede ser absoluto o relativo a la única temporada.
+  // 3) Sin temporada: el número puede ser absoluto.
   const byAbsolute = entries.find((entry) => entry.absolute === episode);
-  if (byAbsolute) {
-    return { season: byAbsolute.season ?? season ?? 1, episode: byAbsolute.episode };
-  }
+  if (byAbsolute) return hit(byAbsolute);
 
-  const seasons = [...new Set(entries.map((entry) => entry.season).filter((value) => value !== null))];
-  if (seasons.length === 1) {
-    return { season: seasons[0], episode };
-  }
+  // 4) Id de Kitsu sin temporada: `kitsu:46474:7` es E07 de la única temporada.
+  const kitsuOnly = entries.find((entry) => entry.episode === episode);
+  if (kitsuOnly) return hit(kitsuOnly);
 
-  const sameEpisode = entries.filter((entry) => entry.episode === episode);
-  if (sameEpisode.length === 1) {
-    return { season: sameEpisode[0].season ?? season ?? 1, episode: sameEpisode[0].episode };
-  }
-
+  // 5) Última red: se asume que el número ya es de IMDb.
   return { season: season ?? 1, episode };
 }
 
