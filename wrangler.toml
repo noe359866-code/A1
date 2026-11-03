@@ -36,6 +36,7 @@ run_worker_first = true
 # OMNI_PREDB_NET_BASE = "https://api.predb.net"
 # OMNI_PREDATABA_SE_BASE = "https://predataba.se"
 # OMNI_CINEMETA_BASE = "https://v3-cinemeta.strem.io"
+# OMNI_ANIME_KITSU_BASE = "https://anime-kitsu.strem.fun"
 
 # Secretos: NO van en este fichero. Se crean con
 #   npx wrangler@4 secret put OMNI_PREDATABA_KEY

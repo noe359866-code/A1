@@ -1,6 +1,8 @@
-import { parseVideoId, buildQueries, matchesTitle, normalizeText } from './lib/query.js';
+import {
+  parseVideoId, buildQueries, matchesTitle, normalizeText, alternateTitles, isAnime,
+} from './lib/query.js';
 import { mergeTorrents, rankTorrents, streamSources, humanSize, qualityOf } from './lib/torrent.js';
-import { resolveMeta } from './metadata.js';
+import { resolveMeta, resolveEpisode } from './metadata.js';
 import { enabledTorrentProviders, enabledReleaseProviders, byId } from './providers/index.js';
 import { PROVIDER_LABELS } from './config.js';
 
@@ -78,7 +80,19 @@ export async function handleStream(type, id, ctx) {
   }
   if (!meta?.name) return empty;
 
-  const queries = buildQueries(parsed, meta);
+  // Las fichas de anime llegan como type `anime` (o `series`): los metadatos
+  // resueltos dicen si es una película, y eso decide cómo buscar.
+  let effective = { ...parsed, type: meta.type || parsed.type };
+  if (parsed.type === 'series' && meta.type === 'movie') effective.type = 'movie';
+
+  // Anime: `kitsu:46474:3` puede venir sin temporada o con numeración absoluta
+  // (One Piece 1071). La traducimos a SxxExx con la tabla de episodios.
+  if (parsed.animeId && effective.type === 'series' && parsed.episode !== null) {
+    const resolved = resolveEpisode(meta.videos, parsed.season, parsed.episode);
+    effective = { ...effective, season: resolved.season, episode: resolved.episode };
+  }
+
+  const queries = buildQueries(effective, meta);
   if (!queries.length) return empty;
   const primary = queries[0];
 
@@ -136,6 +150,37 @@ export async function handleStream(type, id, ctx) {
   // nomenclatura: relajamos a coincidencia por título si no hubo exactos.
   if (!ranked.length && primary.mode === 'exact') {
     ranked = rankTorrents(merged, { query: { ...primary, mode: 'title' }, config: ctx.config });
+  }
+
+  // Anime: los índices suelen usar el título inglés/romaji en lugar del que
+  // muestra el catálogo. Si la búsqueda principal no dio nada, reintentamos con
+  // los alias ("Shingeki no Kyojin" -> "Attack on Titan") y con la temporada.
+  if (!ranked.length && isAnime(effective)) {
+    // Cada reintento se puntúa con SU propia consulta: el ranking exige que el
+    // nombre del torrent contenga el título buscado, así que usar el título
+    // original descartaría los resultados encontrados con un alias.
+    const candidates = [];
+    for (const alias of alternateTitles(meta)) {
+      for (const query of buildQueries(effective, { ...meta, name: alias })) {
+        if (query.episode !== null) candidates.push(query);
+      }
+    }
+    const seasonQuery = buildQueries(effective, meta)
+      .find((query) => query.episode === null && query.season !== null);
+    if (seasonQuery) candidates.push(seasonQuery);
+
+    const seen = new Set();
+    for (const query of candidates) {
+      if (seen.has(query.text)) continue;
+      seen.add(query.text);
+      const groups = await Promise.all(torrentProviders.map((provider) =>
+        safe(ctx, provider.id, () => provider.search(query, ctx))));
+      const rankedTry = rankTorrents(mergeTorrents(groups.flat()), { query, config: ctx.config });
+      if (rankedTry.length) {
+        ranked = rankedTry;
+        break;
+      }
+    }
   }
 
   return {

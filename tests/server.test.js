@@ -5,6 +5,7 @@ import { createServer } from '../src/server.js';
 import { setLimiterIntervals, resetCache } from '../src/context.js';
 import { encodeConfig, sanitizeConfig, DEFAULTS } from '../src/config.js';
 import { encodeReleaseId } from '../src/lib/query.js';
+import { STREAM_ID_PREFIXES } from '../src/manifest.js';
 
 let mock;
 let addon;
@@ -59,14 +60,21 @@ test('GET /configure sirve la página de configuración', async () => {
   assert.match(html, /Generar enlace de instalación/);
 });
 
-test('manifiesto por defecto: streams para IMDb y release:, sin catálogos', async () => {
+test('manifiesto por defecto: streams para IMDb, release: y anime, sin catálogos', async () => {
   const { body } = await get('/manifest.json');
   assert.equal(body.id, 'org.omniindex.addon');
   assert.equal(body.behaviorHints.configurable, true);
   assert.equal(body.behaviorHints.p2p, true, 'debe avisar de que usa P2P');
   assert.deepEqual(body.catalogs, []);
   const stream = body.resources.find((resource) => resource.name === 'stream');
-  assert.deepEqual(stream.idPrefixes, ['tt', 'release:']);
+  assert.deepEqual(stream.idPrefixes, [...STREAM_ID_PREFIXES]);
+  // Stremio sólo pide streams de tipos anunciados: `anime` es obligatorio para
+  // que funcionen los catálogos de Anime Kitsu / AniList / MAL.
+  assert.ok(stream.types.includes('anime'), 'anuncia el tipo anime');
+  assert.ok(body.types.includes('anime'));
+  for (const prefix of ['tt', 'release:', 'kitsu:', 'mal:']) {
+    assert.ok(stream.idPrefixes.includes(prefix), prefix);
+  }
 });
 
 test('manifiesto con catálogo activado anuncia catalog y meta', async () => {
@@ -161,4 +169,47 @@ test('CORS, OPTIONS, 404 y configuración inválida', async () => {
   const badConfig = await get('/c/no-es-base64-valida/manifest.json');
   assert.equal(badConfig.status, 200);
   assert.equal(badConfig.body.id, 'org.omniindex.addon');
+});
+
+test('stream de anime por kitsu (type anime): resuelve metadatos y episodio', async () => {
+  const { status, body } = await get('/stream/anime/kitsu:46474:1:1.json');
+  assert.equal(status, 200);
+  assert.ok(body.streams.length > 0, 'debe devolver streams para ids kitsu');
+  assert.ok(mock.requests.some((entry) => entry.path === '/meta/series/kitsu:46474.json'),
+    'consulta Anime Kitsu');
+  assert.ok(mock.requests.some((entry) => /S01E01/.test(entry.query.q || '')),
+    'busca con la nomenclatura S01E01');
+});
+
+test('stream de anime: acepta mal:, anilist: y el formato kitsu:id:episodio', async () => {
+  for (const path of [
+    '/stream/series/kitsu:46474:1:2.json',
+    '/stream/series/mal:52991:1:2.json',
+    '/stream/series/anilist:52991:1:2.json',
+    '/stream/series/kitsu:46474:2.json',
+  ]) {
+    const { body } = await get(path);
+    assert.ok(body.streams.length > 0, `sin streams para ${path}`);
+  }
+  const unknown = await get('/stream/series/kitsu:1:1:1.json');
+  assert.equal(unknown.status, 200);
+  assert.deepEqual(unknown.body.streams, [], 'un id desconocido no inventa resultados');
+});
+
+test('anime: una serie sin episodio busca por temporada, no devuelve vacío', async () => {
+  const { body } = await get('/stream/anime/kitsu:46474.json');
+  assert.ok(body.streams.length > 0, 'la ficha de serie sin episodio debe dar resultados de temporada');
+});
+
+test('anime: búsqueda por alias cuando el título original no está indexado', async () => {
+  const { body } = await get('/stream/series/kitsu:9999:1:1.json');
+  assert.equal(body.streams.length, 0, 'id de anime desconocido -> vacío');
+});
+
+test('un id inválido devuelve streams vacíos, no un error', async () => {
+  for (const path of ['/stream/movie/tmdb:123.json', '/stream/movie/tt123.json', '/stream/series/kitsu:abc:1.json']) {
+    const { status, body } = await get(path);
+    assert.equal(status, 200, path);
+    assert.deepEqual(body.streams, [], path);
+  }
 });

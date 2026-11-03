@@ -14,6 +14,7 @@ export const DEFAULT_ENDPOINTS = Object.freeze({
   predatabaSe: 'https://predataba.se',
   xrel: 'https://api.xrel.to',
   cinemeta: 'https://v3-cinemeta.strem.io',
+  animeKitsu: 'https://anime-kitsu.strem.fun',
 });
 
 export const XREL_ALTERNATE = 'https://api-alternate.xrel.top';
@@ -26,6 +27,7 @@ const ENV_NAMES = {
   predatabaSe: 'OMNI_PREDATABA_SE_BASE',
   xrel: 'OMNI_XREL_BASE',
   cinemeta: 'OMNI_CINEMETA_BASE',
+  animeKitsu: 'OMNI_ANIME_KITSU_BASE',
 };
 
 /** @param {object} env variables (Node) o bindings (Cloudflare Workers) */

@@ -147,7 +147,7 @@ Variables disponibles (idénticas a las del README):
 - `OMNI_HTTP_TIMEOUT`, `OMNI_USER_AGENT`, `OMNI_QUIET`.
 - `OMNI_<PROVEEDOR>_BASE`: `OMNI_KNABEN_BASE`, `OMNI_TORRENTS_CSV_BASE`,
   `OMNI_TORLOCK_BASE`, `OMNI_PREDB_NET_BASE`, `OMNI_PREDATABA_SE_BASE`,
-  `OMNI_XREL_BASE`, `OMNI_CINEMETA_BASE`.
+  `OMNI_XREL_BASE`, `OMNI_CINEMETA_BASE`, `OMNI_ANIME_KITSU_BASE`.
 
 `PORT` y `HOST` **no existen** en Workers: Cloudflare gestiona el puerto.
 
@@ -247,6 +247,7 @@ curl -s localhost:8787/manifest.json | jq .logo
 | --- | --- |
 | `503` con «Assets no disponibles» en `/configure` o `/logo.png` | Falta `[assets]` / `binding = "ASSETS"` o el Wrangler es anterior a Workers Assets. Usa `wrangler@4`. |
 | El logo apunta a `localhost:8787` en producción | Estás viendo el manifiesto de `wrangler dev`. En producción `request.url` es la URL pública; si hay un proxy que reescribe Host, define `OMNI_PUBLIC_URL`. |
+| `streams: []` en una ficha de **anime** (`kitsu:…`, `mal:…`) | El manifiesto debe anunciar `types: [..., "anime"]` e `idPrefixes` con `kitsu`, `mal`, `anilist`, `anidb`. Desde la v1.1.0 está incluido: reinstala el addon para que Stremio descargue el manifiesto nuevo. |
 | `streams: []` tras desplegar | Revisa `/api/status` y `npm run worker:tail`: probablemente las APIs bloquean la IP de Cloudflare. Prueba el espejo de xREL. Nunca se devuelven resultados inventados. |
 | `Error: No such module "node:..."` al desplegar | Alguien añadió un módulo de Node al grafo del Worker. `npm test` lo detecta; mueve ese código a `src/server.js` / `src/assets-node.js`. |
 | `wrangler` pide Node 22 | El CLI v4 exige Node ≥ 22. Actualiza Node o usa `npx wrangler@3` (no recomendado). El addon Node sigue soportando 18+. |
