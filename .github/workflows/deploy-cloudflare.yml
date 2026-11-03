@@ -27,6 +27,19 @@ jobs:
       - run: npm test
       - name: Verificar el bundle del Worker (sin publicar)
         run: npm run worker:check
+      # Un `name` distinto en wrangler.toml publica en OTRO Worker y deja el
+      # dominio con la versión vieja (fue la causa de que los arreglos no se
+      # vieran en a1.noe359866.workers.dev). El nombre vive en un solo sitio.
+      - name: El nombre del Worker coincide con el dominio publicado
+        run: |
+          set -euo pipefail
+          expected="${{ vars.WORKER_NAME || 'a1' }}"
+          actual="$(sed -n 's/^name *= *"\(.*\)"/\1/p' wrangler.toml | head -1)"
+          echo "Worker esperado: $expected · encontrado: $actual"
+          test "$actual" = "$expected" || {
+            echo "::error::wrangler.toml publica en '$actual' pero el addon vive en '$expected'."
+            exit 1
+          }
       - name: Publicar en Cloudflare Workers
         if: ${{ !inputs.dry_run }}
         run: npm run worker:deploy

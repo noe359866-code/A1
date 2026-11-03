@@ -158,7 +158,7 @@ test('/configure inyecta el bootstrap desde el binding ASSETS', async () => {
   assert.match(page, /Generar enlace de instalación/);
   const boot = JSON.parse(page.match(/window\.OMNI_BOOTSTRAP = (\{.*?\});/s)[1]);
   assert.equal(boot.name, 'Omni Index');
-  assert.equal(boot.version, '1.0.0');
+  assert.equal(boot.version, '1.1.0');
 });
 
 test('los cuatro estáticos se sirven con CORS y caché, también bajo /c/…', async () => {

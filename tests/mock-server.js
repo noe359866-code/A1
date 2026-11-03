@@ -17,7 +17,22 @@ export function magnet(hash, name) {
   return `magnet:?xt=urn:btih:${hash}&dn=${encodeURIComponent(name)}&tr=${encodeURIComponent(TRACKER)}`;
 }
 
+export const ANIME_HASH = '7c9c1d0d2ce62ad3b8f4c0e1a9d5c1a0f3b2e4d6';
+
 function movieTitles(q) {
+  // Anime: los índices usan el título romaji o el inglés y la nomenclatura
+  // SxxExx; se imita para poder probar el flujo de ids kitsu/mal/anilist.
+  if (/frieren|sousou/i.test(q || '')) {
+    return [
+      ['[SubsPlease] Sousou no Frieren - 01 (1080p) [ABCD1234].mkv', ANIME_HASH, 1_400_000_000, 320],
+      ['Sousou.no.Frieren.S01E01.1080p.WEB-DL.AAC2.0.H.264-GROUP', ANIME_HASH, 1_380_000_000, 180],
+    ];
+  }
+  if (/attack on titan|shingeki/i.test(q || '')) {
+    return [
+      ['Attack.on.Titan.S01E01.1080p.BluRay.x264-GROUP', '1a2b3c4d5e6f708192a3b4c5d6e7f8091a2b3c4d', 1_100_000_000, 450],
+    ];
+  }
   const isSeries = /breaking|s\d{2}e\d{2}|season/i.test(q || '');
   if (isSeries) {
     return [
@@ -179,6 +194,44 @@ function cinemeta(url) {
   };
 }
 
+/**
+ * Anime Kitsu: imita `anime-kitsu.strem.fun/meta/series/kitsu:46474.json`.
+ * Devuelve el título oficial en romaji y alias en inglés, con episodios que
+ * incluyen `imdb_id` y `absoluteEpisode` como el addon real.
+ */
+function animeKitsu(url) {
+  const requested = decodeURIComponent(url.pathname.split('/meta/')[1] || '').replace('.json', '');
+  const head = requested.split('/').pop();
+  const known = /^(kitsu:46474|mal:52991|anilist:52991)/.test(head);
+  if (!known) return { payload: { err: 'not found' } };
+  const videos = Array.from({ length: 12 }, (_, index) => ({
+    id: `kitsu:46474:${index + 1}`,
+    title: `Frieren Episode ${index + 1}`,
+    season: 1,
+    episode: index + 1,
+    released: `2023-09-29T14:00:00.000Z`,
+    imdb_id: 'tt22248376',
+    imdbSeason: 1,
+    imdbEpisode: index + 1,
+    absoluteEpisode: index + 1,
+  }));
+  return {
+    payload: {
+      meta: {
+        id: 'kitsu:46474',
+        kitsu_id: '46474',
+        type: 'series',
+        name: 'Sousou no Frieren',
+        aliases: ['Frieren: Beyond Journey’s End', 'Frieren at the Funeral'],
+        year: '2023-2024',
+        releaseInfo: '2023-2024',
+        imdb_id: 'tt22248376',
+        videos,
+      },
+    },
+  };
+}
+
 function route(url, body) {
   const path = url.pathname;
   if (path === '/v2/search') return knaben(url);
@@ -187,7 +240,11 @@ function route(url, body) {
   if (path === '/' || path === '') return predbNet(url);
   if (path === '/api/search') return predatabaSe(url, body);
   if (path.startsWith('/v2/') && path.includes('releases')) return xrel(url);
-  if (path.startsWith('/meta/')) return cinemeta(url);
+  if (path.startsWith('/meta/')) {
+    // Anime Kitsu vive en un host distinto; en el mock se distingue por el id.
+    if (/^\/meta\/[^/]+\/(kitsu|mal|anilist|anidb|anime):/.test(path)) return animeKitsu(url);
+    return cinemeta(url);
+  }
   return { payload: {} };
 }
 
@@ -245,7 +302,7 @@ export function pointEnvAt(url) {
   for (const name of [
     'OMNI_KNABEN_BASE', 'OMNI_TORRENTS_CSV_BASE', 'OMNI_TORLOCK_BASE',
     'OMNI_PREDB_NET_BASE', 'OMNI_PREDATABA_SE_BASE', 'OMNI_XREL_BASE',
-    'OMNI_CINEMETA_BASE',
+    'OMNI_CINEMETA_BASE', 'OMNI_ANIME_KITSU_BASE',
   ]) {
     process.env[name] = url;
   }

@@ -150,7 +150,7 @@ Variables de entorno del servidor:
 | `OMNI_CONFIG` | JSON con valores por defecto del manifiesto raíz. |
 | `OMNI_PREDATABA_KEY`, `OMNI_CACHE_TTL`, `OMNI_MAX_STREAMS`, `OMNI_ENABLE_CATALOG` | Atajos de configuración. |
 | `OMNI_HTTP_TIMEOUT`, `OMNI_USER_AGENT`, `OMNI_QUIET` | Transporte y logs. |
-| `OMNI_<PROVEEDOR>_BASE` | Sobrescribe la URL base (`OMNI_KNABEN_BASE`, `OMNI_TORRENTS_CSV_BASE`, `OMNI_TORLOCK_BASE`, `OMNI_PREDB_NET_BASE`, `OMNI_PREDATABA_SE_BASE`, `OMNI_XREL_BASE`, `OMNI_CINEMETA_BASE`). Útil para proxies y tests. |
+| `OMNI_<PROVEEDOR>_BASE` | Sobrescribe la URL base (`OMNI_KNABEN_BASE`, `OMNI_TORRENTS_CSV_BASE`, `OMNI_TORLOCK_BASE`, `OMNI_PREDB_NET_BASE`, `OMNI_PREDATABA_SE_BASE`, `OMNI_XREL_BASE`, `OMNI_CINEMETA_BASE`, `OMNI_ANIME_KITSU_BASE`). Útil para proxies y tests. |
 
 En **Cloudflare Workers** los mismos nombres `OMNI_*` se definen en `[vars]`
 de `wrangler.toml`, como secretos (`wrangler secret put OMNI_PREDATABA_KEY`) o
@@ -186,6 +186,7 @@ Todas las respuestas incluyen CORS (`Access-Control-Allow-Origin: *`) y `Cache-C
 - `Torlock` exige no repetir la misma URL en menos de un minuto: caché con TTL mínimo de 60 s.
 - Infohashes: se aceptan hex de 40, base32 de 32 y magnets (`urn:btih:`), y los trackers del magnet se convierten a `sources: ["tracker:udp://…"]`.
 - Caché con TTL, dedupe de peticiones concurrentes, *stale-if-error* y rate limiting por proveedor. En Workers vive en el *isolate* (se pierde al reciclarse, igual que al reiniciar el proceso Node).
+- **Anime**: el manifiesto anuncia el tipo `anime` y los prefijos `kitsu`, `mal`, `anilist`, `anidb` y `anime`. Los metadatos se resuelven con `anime-kitsu.strem.fun` (título, alias y tabla de episodios), de modo que un episodio absoluto como `kitsu:12:1071` se traduce a `SxxExx` **en numeración IMDb** (Kitsu y IMDb no coinciden: un anime puede ser `S01E01` en Kitsu y `S02E01` en IMDb, y los releases usan IMDb) antes de buscar y, si el título romaji no está indexado, se reintenta con los alias ingleses.
 - **Núcleo portable**: `router.js` sólo usa `Request`/`Response`/`fetch`, `TextEncoder`/`TextDecoder` y `atob`/`btoa`; no hay `Buffer` ni imports `node:*` en el grafo del Worker (`tests/worker.test.js` lo vigila). El entorno se inyecta como objeto `env`; el único acceso a variables de proceso es un *fallback* para Node. Los estáticos llegan por `fs` en Node y por el binding `ASSETS` en Cloudflare.
 
 ---
@@ -194,7 +195,7 @@ Todas las respuestas incluyen CORS (`Access-Control-Allow-Origin: *`) y `Cache-C
 
 ```bash
 npm ci               # instala stremio-addon-linter (sólo desarrollo)
-npm test             # node:test (66 pruebas)
+npm test             # node:test (80 pruebas)
 npm run lint         # comprobación de sintaxis
 npm run worker:check # bundle de Cloudflare Workers sin publicar (Node >= 22)
 ```
@@ -203,6 +204,31 @@ La suite levanta un servidor HTTP local que simula las seis APIs y Cinemeta, y c
 
 - `tests/beamup.test.js` reproduce el **linter que Beamup ejecuta antes de aceptar un despliegue**: valida `/manifest.json` con `stremio-addon-linter`, comprueba el contrato Herokuish (`Procfile`, `package.json`, ausencia de `Dockerfile` en la raíz) y arranca el proceso real con un `PORT` arbitrario.
 - `tests/worker.test.js` llama directamente al handler `fetch(request, env)` del Worker con un doble del binding `ASSETS` y las APIs apuntando al mock: comprueba que **todo llega por `env`** (sin variables de proceso), el origen del manifiesto, la inyección del bootstrap, los estáticos, los streams reales contra el mock y el contrato «sin módulos de Node» del grafo de imports. El bundle también se ha verificado con `wrangler dev` (workerd real) y `wrangler deploy --dry-run`.
+
+---
+
+## Solución de problemas: `streams: []`
+
+Si Stremio no muestra ninguna fuente, comprueba en este orden:
+
+1. **La ficha es de anime.** Los catálogos Anime Kitsu / AniList / MAL entregan
+   ids `kitsu:…`, `mal:…`, `anilist:…`. Stremio **sólo** llama a `/stream` si el
+   manifiesto anuncia ese tipo y ese prefijo; desde la v1.1.0 se anuncian, pero
+   una instalación antigua conserva el manifiesto anterior: reinstala el addon.
+2. **El id no es de IMDb.** Prueba la URL a mano:
+   `https://<host>/stream/movie/tt1375666.json`. Si ahí sí hay streams, el
+   problema es el id que envía Stremio (anime), no el addon.
+3. **Título poco indexado.** Los seis índices son de scene/P2P: un documental o
+   una película regional puede no existir. `streams: []` es entonces correcto;
+   nunca se inventan resultados.
+4. **IP bloqueada.** Mira `https://<host>/api/status` (`failures`) y
+   `npm run worker:tail`. Torlock y xREL bloquean rangos de datacenter; prueba
+   `OMNI_XREL_BASE=https://api-alternate.xrel.top`.
+5. **Configuración restrictiva.** `minSeeders` alto, proveedores apagados o
+   `maxStreams` pequeño desde `/configure` vacían la lista. Compara con
+   `https://<host>/stream/movie/tt1375666.json` (config por defecto).
+6. **Instalación duplicada.** El id es `org.omniindex.addon`: si cambiaste de
+   host (Beamup <-> Workers), desinstala la versión anterior.
 
 ---
 

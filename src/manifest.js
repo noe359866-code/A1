@@ -1,5 +1,5 @@
 export const ADDON_ID = 'org.omniindex.addon';
-export const ADDON_VERSION = '1.0.0';
+export const ADDON_VERSION = '1.1.0';
 export const ADDON_NAME = 'Omni Index';
 export const ADDON_TAGLINE = 'Seis índices, una búsqueda';
 export const ADDON_DESCRIPTION = 'Seis índices, una búsqueda: Knaben, torrents-csv, Torlock, PreDB.net, predataba.se y xREL. Cruza torrents con nombres de releases scene/P2P.';
@@ -25,9 +25,33 @@ export function brandAssets(origin = '') {
  * recurso `meta`) sólo se anuncian cuando el usuario los activa. Así el addon
  * no contamina la pantalla de inicio por defecto.
  */
+/**
+ * Tipos e ids que el addon sabe resolver.
+ *
+ * `anime` es imprescindible: los catálogos de anime de Stremio (Anime Kitsu,
+ * AniList, MAL, AniDB) entregan fichas de tipo `anime` con ids `kitsu:…`,
+ * `mal:…`, etc. Si el manifiesto sólo anuncia `movie`/`series` + `tt`,
+ * Stremio NUNCA llama a /stream para esas fichas y la lista sale vacía.
+ */
+export const ADDON_TYPES = Object.freeze(['movie', 'series', 'anime']);
+export const STREAM_ID_PREFIXES = Object.freeze([
+  'tt',
+  'release:',
+  'kitsu:',
+  'kitsu',
+  'mal:',
+  'mal',
+  'anilist:',
+  'anilist',
+  'anidb:',
+  'anidb',
+  'anime:',
+  'anime',
+]);
+
 export function buildManifest(config, origin = '') {
   const resources = [
-    { name: 'stream', types: ['movie', 'series'], idPrefixes: ['tt', 'release:'] },
+    { name: 'stream', types: [...ADDON_TYPES], idPrefixes: [...STREAM_ID_PREFIXES] },
   ];
   const catalogs = [];
 
@@ -54,8 +78,8 @@ export function buildManifest(config, origin = '') {
     description: ADDON_DESCRIPTION,
     ...brandAssets(origin),
     resources,
-    types: ['movie', 'series'],
-    idPrefixes: ['tt', 'release:'],
+    types: [...ADDON_TYPES],
+    idPrefixes: [...STREAM_ID_PREFIXES],
     catalogs,
     behaviorHints: {
       configurable: true,

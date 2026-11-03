@@ -19,6 +19,7 @@ const limiters = {
   predatabaSe: new RateLimiter(1200),
   xrel: new RateLimiter(2600),
   cinemeta: new RateLimiter(200),
+  animeKitsu: new RateLimiter(400),
 };
 
 const failures = [];
