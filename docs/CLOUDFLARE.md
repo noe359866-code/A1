@@ -96,7 +96,7 @@ Tu Worker → Logs*, gracias a `[observability] enabled = true`).
 
 | Clave | Valor | Para qué |
 | --- | --- | --- |
-| `name` | `omni-index` | Nombre del Worker y del subdominio `*.workers.dev`. Cámbialo si ya existe. |
+| `name` | `a1` | Nombre del Worker y de su subdominio `*.workers.dev`. **Debe coincidir con el Worker que ya sirve el addon**: si cambia, `wrangler deploy` publica en otro servicio y la URL instalada en Stremio sigue con la versión vieja. |
 | `main` | `src/worker.js` | Entry point con `export default { fetch(request, env, ctx) }`. |
 | `compatibility_date` | `2025-06-01` | Fija el comportamiento de workerd; puedes actualizarla al día del despliegue. |
 | `compatibility_flags` | `[]` | Sin `nodejs_compat`. |

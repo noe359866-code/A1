@@ -2,8 +2,12 @@
 # Guía completa: docs/CLOUDFLARE.md
 # Comandos: npx wrangler@4 dev | npx wrangler@4 deploy
 #           (o `npm run worker:dev` / `npm run worker:deploy`)
+#
+# `name` DEBE coincidir con el nombre del Worker que ya sirve el addon
+# (https://a1.noe359866.workers.dev -> "a1"). Si no coincide, `wrangler deploy`
+# crea o actualiza OTRO Worker y el dominio sigue con la versión vieja.
 
-name = "omni-index"
+name = "a1"
 main = "src/worker.js"
 workers_dev = true
 compatibility_date = "2025-06-01"
