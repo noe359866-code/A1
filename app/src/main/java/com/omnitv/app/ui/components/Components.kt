@@ -106,22 +106,35 @@ fun TopTabBar(
     modifier: Modifier = Modifier,
     trailing: @Composable () -> Unit = {}
 ) {
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(start = 48.dp, end = 48.dp, top = 24.dp, bottom = 12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(10.dp)
-    ) {
-        tabs.forEach { tab ->
-            TabPill(
-                tab = tab,
-                selected = tab.route == currentRoute,
-                onClick = { onSelect(tab) }
-            )
+    Column(modifier.fillMaxWidth()) {
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .padding(start = 48.dp, end = 48.dp, top = 22.dp, bottom = 14.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            // Marca de la app (como el logo de Netflix en su barra superior)
+            Text("Omni", style = AppType.brand, color = TextPrimary)
+            Text("TV", style = AppType.brand, color = Accent)
+            Spacer(Modifier.width(22.dp))
+            tabs.forEach { tab ->
+                TabPill(
+                    tab = tab,
+                    selected = tab.route == currentRoute,
+                    onClick = { onSelect(tab) }
+                )
+            }
+            Spacer(Modifier.weight(1f))
+            trailing()
         }
-        Spacer(Modifier.weight(1f))
-        trailing()
+        // Separador sutil bajo la barra
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .height(1.dp)
+                .background(Color.White.copy(alpha = 0.07f))
+        )
     }
 }
 
@@ -437,6 +450,17 @@ fun HeroBanner(
             contentScale = ContentScale.Crop,
             modifier = Modifier.fillMaxSize()
         )
+        // Velo superior: funde la imagen con la barra de pestañas
+        Box(
+            Modifier
+                .fillMaxSize()
+                .background(
+                    Brush.verticalGradient(
+                        0f to Background.copy(alpha = 0.38f),
+                        0.22f to Color.Transparent
+                    )
+                )
+        )
         // Velo vertical: la imagen se funde con el fondo hacia abajo
         Box(
             Modifier
@@ -505,13 +529,22 @@ fun HeroBanner(
 
 @Composable
 fun TvToggle(checked: Boolean, onCheckedChange: (Boolean) -> Unit, modifier: Modifier = Modifier) {
+    var focused by remember { mutableStateOf(false) }
+    val scale by animateFloatAsState(if (focused) 1.12f else 1f, tween(140), label = "toggleScale")
+
     Box(
         modifier = modifier
+            .graphicsLayer { scaleX = scale; scaleY = scale }
             .width(52.dp)
             .height(30.dp)
             .clip(RoundedCornerShape(15.dp))
             .background(if (checked) Accent else TextTertiary)
+            .then(
+                if (focused) Modifier.border(2.dp, Color.White, RoundedCornerShape(15.dp))
+                else Modifier
+            )
             .clickable { onCheckedChange(!checked) }
+            .onFocusChanged { focused = it.isFocused }
     ) {
         Box(
             Modifier

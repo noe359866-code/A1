@@ -60,7 +60,7 @@ fun MoviesScreen(onOpenDetail: (Video) -> Unit) {
                     onClick = { onOpenDetail(video) },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(168.dp)
+                        .height(230.dp)
                 )
             }
         }

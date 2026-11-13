@@ -2,6 +2,7 @@ package com.omnitv.app.ui.screens
 
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -56,7 +57,7 @@ fun SettingsScreen(onSwitchProfile: () -> Unit) {
             .fillMaxSize()
             .background(Background)
             .verticalScroll(rememberScrollState())
-            .padding(horizontal = 64.dp)
+            .padding(horizontal = 48.dp)
     ) {
         Spacer(Modifier.height(12.dp))
         Text("Ajustes", style = AppType.screenTitle, color = TextPrimary)
@@ -183,7 +184,8 @@ private fun SettingsCard(
         Modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(18.dp))
-            .background(GlassFill)
+            .background(Color(0xFF15151B))
+            .border(1.dp, Color.White.copy(alpha = 0.06f), RoundedCornerShape(18.dp))
             .padding(vertical = 10.dp)
     ) {
         Row(

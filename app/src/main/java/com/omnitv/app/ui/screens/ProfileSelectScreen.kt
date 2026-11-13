@@ -42,6 +42,10 @@ fun ProfileSelectScreen(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
+        Text("OMNI TV", style = AppType.brandMark, color = com.omnitv.app.ui.theme.Accent)
+
+        Spacer(Modifier.height(16.dp))
+
         Text(
             "¿Quién está viendo?",
             style = AppType.hero,

@@ -88,15 +88,15 @@ fun SearchScreen(onOpenDetail: (Video) -> Unit) {
         Spacer(Modifier.height(28.dp))
 
         when {
-            query.isBlank() -> Text(
-                "Escribe un título, género o descripción para buscar en todo el catálogo.",
-                style = AppType.body,
-                color = TextSecondary
+            query.isBlank() -> EmptyState(
+                iconRes = R.drawable.ic_search,
+                title = "Busca en todo el catálogo",
+                subtitle = "Escribe un título, género o descripción"
             )
-            results.isEmpty() -> Text(
-                "Sin resultados para «$query».",
-                style = AppType.body,
-                color = TextSecondary
+            results.isEmpty() -> EmptyState(
+                iconRes = R.drawable.ic_search,
+                title = "Sin resultados para «$query»",
+                subtitle = "Prueba con otro término o género"
             )
             else -> {
                 Text(
@@ -117,7 +117,7 @@ fun SearchScreen(onOpenDetail: (Video) -> Unit) {
                             onClick = { onOpenDetail(video) },
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .height(168.dp)
+                                .height(230.dp)
                         )
                     }
                 }
@@ -174,5 +174,35 @@ private fun SuggestionChip(label: String, onClick: () -> Unit) {
             .padding(horizontal = 18.dp, vertical = 9.dp)
     ) {
         Text(label, style = AppType.metadata, color = TextPrimary)
+    }
+}
+
+/** Estado vacío con icono (sin resultados / búsqueda inicial). */
+@Composable
+private fun EmptyState(iconRes: Int, title: String, subtitle: String) {
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .padding(top = 56.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Box(
+            Modifier
+                .size(72.dp)
+                .clip(CircleShape)
+                .background(GlassFill),
+            contentAlignment = Alignment.Center
+        ) {
+            Image(
+                painter = painterResource(iconRes),
+                contentDescription = null,
+                modifier = Modifier.size(32.dp),
+                colorFilter = androidx.compose.ui.graphics.ColorFilter.tint(TextSecondary)
+            )
+        }
+        Spacer(Modifier.height(18.dp))
+        Text(title, style = AppType.sectionTitle, color = TextPrimary)
+        Spacer(Modifier.height(8.dp))
+        Text(subtitle, style = AppType.body, color = TextSecondary)
     }
 }

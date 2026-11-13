@@ -45,8 +45,8 @@ object Routes {
 }
 
 private val appTabs = listOf(
-    TabItem("Inicio", Routes.HOME, R.drawable.ic_play),
-    TabItem("Películas", Routes.MOVIES, R.drawable.ic_add),
+    TabItem("Inicio", Routes.HOME, R.drawable.ic_home),
+    TabItem("Películas", Routes.MOVIES, R.drawable.ic_film),
     TabItem("Buscar", Routes.SEARCH, R.drawable.ic_search),
     TabItem("Ajustes", Routes.SETTINGS, R.drawable.ic_settings)
 )

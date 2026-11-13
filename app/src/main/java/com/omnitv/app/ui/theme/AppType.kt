@@ -73,4 +73,16 @@ object AppType {
         fontWeight = FontWeight.Medium,
         fontSize = 13.sp
     )
+    val brand = TextStyle(
+        fontFamily = FontFamily.SansSerif,
+        fontWeight = FontWeight.ExtraBold,
+        fontSize = 22.sp,
+        letterSpacing = (-0.3).sp
+    )
+    val brandMark = TextStyle(
+        fontFamily = FontFamily.SansSerif,
+        fontWeight = FontWeight.Bold,
+        fontSize = 11.sp,
+        letterSpacing = 2.5.sp
+    )
 }
