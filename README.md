@@ -2,7 +2,7 @@
 
 <p align="center">
   <em>«Seis pantallas, una experiencia»</em> — una app de streaming <strong>solo para Android TV</strong>,
-  construida con <strong>Kotlin</strong>, <strong>Jetpack Compose for TV</strong> y <strong>Media3 ExoPlayer</strong>,
+  construida con <strong>Kotlin</strong>, <strong>Jetpack Compose</strong> y <strong>Media3 ExoPlayer</strong>,
   con un diseño inspirado en la experiencia de <strong>Apple TV / tvOS</strong>.
 </p>
 
@@ -14,7 +14,7 @@
 | --- | --- |
 | **Solo Android TV** | `AndroidManifest.xml` con `leanback` obligatorio, `touchscreen` opcional y `LEANBACK_LAUNCHER` + banner 320×180 para el launcher de TV |
 | **Diseño Apple TV** | Fondo casi negro `#0B0B0F`, acento azul `#0A84FF`, tarjetas con foco que escalan a 1.08, botones píldora, velos de degradado, tipografía de jerarquía marcada |
-| **Compose for TV** | `androidx.tv:tv-material` (`MaterialTheme`, `Card` con estados de foco D-pad) + Compose estándar con `focusRestorer` |
+| **Compose + foco D-pad** | Componentes con foco dibujados a mano (tarjetas que escalan a 1.08 con borde blanco, píldoras) y `focusRestorer` para que la fila recupere el foco al volver; tema Material 3 sobre Compose |
 | **Media3 ExoPlayer** | Reproductor estilo **Xuper TV**: franja EPG *Ahora/A continuación*, **multi-servidor** con conmutación automática ante errores, selectores de **calidad / audio / subtítulos**, **relación de aspecto y zoom** (16:9, 4:3, 21:9…), controles ±10 s, barra con búfer y auto-ocultado |
 | **Navegación por mando** | Pestañas superiores tipo tvOS (Inicio · Películas · Buscar · Ajustes), ficha de detalle y reproductor con `navigation-compose` |
 | **Perfiles como Netflix** | «¿Quién está viendo?», avatares con caras ilustradas estilo Netflix, modo infantil, *Continuar viendo* y *Mi lista* por perfil, gestión completa (crear/editar/eliminar) y cambio rápido desde la barra superior |
@@ -33,7 +33,9 @@
 4. **Detalle — transparente con tráiler de fondo** *(estilo Netflix)*: el
    **tráiler se reproduce en bucle y silenciado** detrás de la interfaz
    (con botón de sonido y chip *TRÁILER*), título grande, **match %** verde
-   («98 % para ti»), chip de tipo (**Película · Serie · Anime**), metadatos,
+   («98 % para ti», solo si el título trae valoración), chip de tipo
+   (**Película · Serie · Anime**), metadatos (sin huecos: lo que el origen no
+   trae —año, duración, nota— no se muestra),
    botones *Reproducir / Mi lista / Sonido del tráiler*, **lista de episodios**
    reproducibles en series y anime, reparto, géneros e info sobre velos de
    degradado. *Más como esto* al final.
@@ -112,7 +114,7 @@ Todo persistido en `SharedPreferences`.
 | Kotlin | 2.0.20 |
 | Android Gradle Plugin | 8.7.2 · Gradle 8.9 |
 | Jetpack Compose (BOM) | 2024.10.01 |
-| Compose for TV (`tv-material`) | 1.0.0 |
+| Compose Material 2 (`Text`) y Material 3 (tema) | versión del BOM 2024.10.01 |
 | Media3 ExoPlayer (+ HLS, ui) | 1.4.1 |
 | Navigation Compose | 2.8.4 |
 | Coil (imágenes) | 2.6.0 |
