@@ -95,3 +95,7 @@ devolviendo la lista de enlaces que sus `extractors` ya resuelven, en
 cualquiera de las dos formas anteriores. Desde el móvil (panel del QR) se
 añade la URL de esa API y Omni TV empezará a reproducir esos streams con
 todo el menú multi-servidor del reproductor.
+
+**Puente de referencia listo para copiar** (Python y Kotlin, con el punto
+de enganche para tus resolvers y guía de cableado CloudStream-style):
+[`tools/omni-stream-bridge/`](../tools/omni-stream-bridge/README.md).

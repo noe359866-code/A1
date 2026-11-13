@@ -187,6 +187,10 @@ externos entregan.
   entrega enlaces → flujo *demo* etiquetado (chip `DEMO`).
 - Soporta `.mp4` y `.m3u8` (HLS); los enlaces solo-torrent (`infoHash`) se
   ignoran de momento.
+- **Puente listo para copiar**: `tools/omni-stream-bridge/` (Python y
+  Kotlin) para que cualquier proyecto tuyo entregue sus streams a Omni TV
+  — solo hay que enganchar tus resolvers en `resolve()`.
+  Guía: [`tools/omni-stream-bridge/README.md`](tools/omni-stream-bridge/README.md).
 
 ## 🔗 Vinculación por QR (panel web embebido)
 
