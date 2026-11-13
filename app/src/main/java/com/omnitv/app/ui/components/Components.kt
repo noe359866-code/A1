@@ -305,12 +305,14 @@ fun Badge(text: String, modifier: Modifier = Modifier) {
 @Composable
 fun MetaLine(video: Video, modifier: Modifier = Modifier) {
     Row(modifier, verticalAlignment = Alignment.CenterVertically) {
-        val parts = listOf(
-            video.year.toString(),
-            video.durationLabel,
-            "★ ${video.ratingLabel}",
-            video.quality,
-            video.certification
+        // Solo datos que existen: un título remoto puede llegar sin año,
+        // duración, valoración o clasificación, y no se rellenan con ceros
+        val parts = listOfNotNull(
+            video.year.takeIf { it > 0 }?.toString(),
+            video.durationLabel.takeIf { video.durationMinutes > 0 },
+            "★ ${video.ratingLabel}".takeIf { video.hasRating },
+            video.quality.takeIf { it.isNotBlank() },
+            video.certification.takeIf { it.isNotBlank() }
         )
         parts.forEachIndexed { index, part ->
             if (index > 0) {

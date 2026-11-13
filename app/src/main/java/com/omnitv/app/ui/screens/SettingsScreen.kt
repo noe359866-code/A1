@@ -131,9 +131,9 @@ fun SettingsScreen(onSwitchProfile: () -> Unit) {
                     Text("Escanea el QR con tu móvil", style = AppType.sectionTitle, color = TextPrimary)
                     Spacer(Modifier.height(8.dp))
                     Text(
-                        "Se abrirá el panel web para enlazar tu cuenta, añadir addons " +
-                            "(manifest.json de Stremio) y registrar APIs. Todo llega al " +
-                            "televisor al instante.",
+                        "El QR abre el panel web ya desbloqueado; si escribes la dirección a mano, " +
+                            "te pedirá el código de abajo. Solo entonces podrás enlazar tu cuenta, " +
+                            "añadir addons (manifest.json de Stremio) y registrar APIs.",
                         style = AppType.metadata,
                         color = TextSecondary
                     )
@@ -150,6 +150,16 @@ fun SettingsScreen(onSwitchProfile: () -> Unit) {
                     StatusLine("Addons añadidos", "${SettingsStore.customAddons.size}")
                     StatusLine("Addons de streams", "${SettingsStore.streamAddons.size}")
                     StatusLine("APIs añadidas", "${SettingsStore.apiKeys.size}")
+                    StatusLine(
+                        "Claves de API",
+                        if (SettingsStore.apiKeys.isEmpty()) {
+                            "Sin claves"
+                        } else if (SettingsStore.secretsEncrypted) {
+                            "Cifradas en el televisor"
+                        } else {
+                            "Sin cifrar (Android 5.1 no admite el cifrado)"
+                        }
+                    )
                     if (PairingServer.lastAction.value.isNotEmpty()) {
                         Spacer(Modifier.height(10.dp))
                         Text(PairingServer.lastAction.value, style = AppType.metadata, color = Accent)

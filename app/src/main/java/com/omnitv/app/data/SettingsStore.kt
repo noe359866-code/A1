@@ -19,6 +19,12 @@ object SettingsStore {
     val SPEED_PRESETS = listOf(0.75f, 1f, 1.25f, 1.5f, 2f)
 
     private const val PREFS = "omni_tv_settings"
+
+    /** Claves de API cifradas con [SecretBox] (Android Keystore). */
+    private const val KEY_API_SEALED = "apiKeysEnc"
+
+    /** Claves de API sin cifrar: formato antiguo y dispositivos sin Keystore (API 22). */
+    private const val KEY_API_PLAIN = "apiKeys"
     private var prefs: SharedPreferences? = null
 
     /** Los vídeos empiezan a reproducirse solos al abrirlos. */
@@ -71,27 +77,80 @@ object SettingsStore {
     var apiKeys by mutableStateOf<Map<String, String>>(emptyMap())
         private set
 
+    /**
+     * Las claves de API están cifradas en disco (Android Keystore). Es
+     * `false` en dispositivos sin Keystore AES (API 22) o si el cifrado
+     * falló y hubo que guardarlas en claro: la interfaz lo dice tal cual.
+     */
+    var secretsEncrypted by mutableStateOf(false)
+        private set
+
     /** Se incrementa con cada cambio para refrescar listas observables. */
     var revision by mutableStateOf(0)
         private set
 
     fun init(context: Context) {
         if (prefs != null) return
-        prefs = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE).also { p ->
-            autoplay = p.getBoolean("autoplay", true)
-            autoNext = p.getBoolean("autoNext", true)
-            mutedStart = p.getBoolean("mutedStart", false)
-            subtitlesDefault = p.getBoolean("subtitlesDefault", false)
-            playbackSpeed = p.getFloat("playbackSpeed", 1f)
-            preferredQuality = p.getString("preferredQuality", "Auto") ?: "Auto"
-            pairingCode = p.getString("pairingCode", null) ?: generatePairingCode().also { code ->
-                p.edit().putString("pairingCode", code).apply()
-            }
-            linkedAccount = p.getString("linkedAccount", "") ?: ""
-            customAddons = parseStringList(p.getString("customAddons", "[]"))
-            streamAddons = parseStringList(p.getString("streamAddons", "[]"))
-            apiKeys = parseStringMap(p.getString("apiKeys", "{}"))
+        val p = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        prefs = p
+        autoplay = p.getBoolean("autoplay", true)
+        autoNext = p.getBoolean("autoNext", true)
+        mutedStart = p.getBoolean("mutedStart", false)
+        subtitlesDefault = p.getBoolean("subtitlesDefault", false)
+        playbackSpeed = p.getFloat("playbackSpeed", 1f)
+        preferredQuality = p.getString("preferredQuality", "Auto") ?: "Auto"
+        pairingCode = p.getString("pairingCode", null) ?: generatePairingCode().also { code ->
+            p.edit().putString("pairingCode", code).apply()
         }
+        linkedAccount = p.getString("linkedAccount", "") ?: ""
+        // Las URLs guardadas por versiones anteriores también pasan la política de red
+        customAddons = parseStringList(p.getString("customAddons", "[]")).filter { NetPolicy.isAllowed(it) }
+        streamAddons = parseStringList(p.getString("streamAddons", "[]")).filter { NetPolicy.isAllowed(it) }
+        loadApiKeys(p)
+    }
+
+    /**
+     * Lee las claves de API. Si quedan en claro de una versión anterior y
+     * el dispositivo puede cifrar, se migran al formato cifrado.
+     */
+    private fun loadApiKeys(p: SharedPreferences) {
+        val sealed = p.getString(KEY_API_SEALED, null)
+        val plain = p.getString(KEY_API_PLAIN, null)
+        apiKeys = when {
+            // Si no se puede descifrar (p. ej. datos restaurados en otro
+            // dispositivo) se parte de cero: hay que volver a introducirlas
+            sealed != null -> SecretBox.decrypt(sealed)?.let { parseStringMap(it) } ?: emptyMap()
+            plain != null -> parseStringMap(plain)
+            else -> emptyMap()
+        }
+        if (plain != null) {
+            persistApiKeys(apiKeys)
+        } else {
+            secretsEncrypted = SecretBox.available
+        }
+    }
+
+    /** Guarda las claves cifradas si es posible; si no, en claro (y lo refleja en [secretsEncrypted]). */
+    private fun persistApiKeys(keys: Map<String, String>) {
+        val json = org.json.JSONObject(keys).toString()
+        val sealed = if (keys.isEmpty()) null else SecretBox.encrypt(json)
+        update {
+            when {
+                keys.isEmpty() -> {
+                    remove(KEY_API_SEALED)
+                    remove(KEY_API_PLAIN)
+                }
+                sealed != null -> {
+                    putString(KEY_API_SEALED, sealed)
+                    remove(KEY_API_PLAIN)
+                }
+                else -> {
+                    putString(KEY_API_PLAIN, json)
+                    remove(KEY_API_SEALED)
+                }
+            }
+        }
+        secretsEncrypted = SecretBox.available && (keys.isEmpty() || sealed != null)
     }
 
     fun setAutoplay(value: Boolean) = update { putBoolean("autoplay", value) }.also { autoplay = value }
@@ -112,18 +171,24 @@ object SettingsStore {
         revision++
     }
 
-    /** Guarda los addons (URLs de manifest.json) añadidos desde el panel. */
+    /**
+     * Guarda los addons (URLs de manifest.json) añadidos desde el panel.
+     * Solo se aceptan las URLs que cumplen [NetPolicy] (https, o http en la red local).
+     */
     fun setCustomAddons(urls: List<String>) {
-        val cleaned = urls.map { it.trim() }.filter { it.startsWith("http") }.distinct()
+        val cleaned = urls.map { it.trim() }.filter { NetPolicy.isAllowed(it) }.distinct()
         update { putString("customAddons", org.json.JSONArray(cleaned).toString()) }.also {
             customAddons = cleaned
             revision++
         }
     }
 
-    /** Guarda los addons/proyectos de streams añadidos desde el panel. */
+    /**
+     * Guarda los addons/proyectos de streams añadidos desde el panel.
+     * Solo se aceptan las URLs que cumplen [NetPolicy] (https, o http en la red local).
+     */
     fun setStreamAddons(urls: List<String>) {
-        val cleaned = urls.map { it.trim() }.filter { it.startsWith("http") }.distinct()
+        val cleaned = urls.map { it.trim() }.filter { NetPolicy.isAllowed(it) }.distinct()
         update { putString("streamAddons", org.json.JSONArray(cleaned).toString()) }.also {
             streamAddons = cleaned
             revision++
@@ -133,10 +198,9 @@ object SettingsStore {
     /** Guarda las APIs añadidas desde el panel (nombre → clave). */
     fun setApiKeys(keys: Map<String, String>) {
         val cleaned = keys.filterKeys { it.isNotBlank() }.filterValues { it.isNotBlank() }
-        update { putString("apiKeys", org.json.JSONObject(cleaned).toString()) }.also {
-            apiKeys = cleaned
-            revision++
-        }
+        persistApiKeys(cleaned)
+        apiKeys = cleaned
+        revision++
     }
 
     /** Etiqueta legible de una velocidad (1,25×). */
@@ -145,7 +209,9 @@ object SettingsStore {
 
     private fun generatePairingCode(): String {
         val chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789" // sin 0/O/1/I
-        return (1..6).map { chars.random() }.joinToString("")
+        // Es la única credencial del panel: generador criptográfico, no kotlin.random
+        val random = java.security.SecureRandom()
+        return (1..6).map { chars[random.nextInt(chars.length)] }.joinToString("")
     }
 
     private fun parseStringList(json: String?): List<String> = runCatching {

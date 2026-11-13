@@ -58,12 +58,12 @@ object SweetFoxClient {
     private val posterRegex =
         """image\.tmdb\.org/t/p/(?:w\d{3}|original)/([\w.\-]+\.jpg)""".toRegex()
     private val altRegex = """alt="([^"]{2,120})"""".toRegex()
-    private val ratingRegex = """\b(\d\.\d)\b""".toRegex()
     private val yearRegex = """\b((19|20)\d{2})\b""".toRegex()
 
     internal fun parseCompanyPage(html: String): List<Video> {
         val results = LinkedHashMap<String, Video>()
-        for (match in linkRegex.findAll(html)) {
+        val links = linkRegex.findAll(html).toList()
+        for ((index, match) in links.withIndex()) {
             val kind = match.groupValues[1] // movie | tv | anime
             val tmdbId = match.groupValues[2]
             if (tmdbId in results) continue
@@ -74,7 +74,14 @@ object SweetFoxClient {
 
             val posterPath = posterRegex.find(window)?.groupValues?.get(1) ?: continue
             val title = altRegex.find(window)?.groupValues?.get(1) ?: "Sin título"
-            val rating = ratingRegex.find(window)?.groupValues?.get(1)?.toDoubleOrNull() ?: 7.0
+            // Valoración: solo texto visible de ESTA ficha (desde su enlace hasta el de
+            // la siguiente). Hay títulos sin nota (estrenos futuros): quedan en 0.0
+            // y la interfaz no muestra valoración, en vez de heredar la del vecino.
+            val cardEnd = links.drop(index + 1)
+                .firstOrNull { it.groupValues[2] != tmdbId }?.range?.first
+                ?: html.length
+            val card = html.substring(match.range.first, minOf(cardEnd, to))
+            val rating = ScrapeText.rating(card, title)
             val year = yearRegex.find(window)?.groupValues?.get(1)?.toIntOrNull() ?: 0
 
             val type = when (kind) {

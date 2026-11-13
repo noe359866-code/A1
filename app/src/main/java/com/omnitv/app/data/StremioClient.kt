@@ -107,7 +107,7 @@ object StremioClient {
         val rating = meta.optString("imdbRating", "").toDoubleOrNull()
             ?: meta.optJSONObject("app_extras")?.optJSONObject("ratings")
                 ?.optJSONObject("imdb")?.optString("rating")?.toDoubleOrNull()
-            ?: 7.0
+            ?: 0.0 // sin valoración en el addon: no se inventa (la interfaz la oculta)
 
         // Series de animación → anime (para el chip de tipo)
         val type = when {

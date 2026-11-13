@@ -73,4 +73,12 @@ dependencies {
 
     // Imágenes
     implementation(libs.coil.compose)
+
+    // Código QR del panel de vinculación (Ajustes → Vincular)
+    implementation(libs.zxing.core)
+
+    // Tests unitarios (JVM): política de red, panel de vinculación y parsers.
+    // org.json no existe en la JVM de escritorio (en Android lo pone el sistema).
+    testImplementation(libs.junit)
+    testImplementation(libs.json)
 }

@@ -88,7 +88,8 @@ El teléfono debe estar encendido y en la misma red Wi-Fi que la TV.
 
 ## Conectar Omni TV
 
-1. Averigua la IP del servidor (`http://<ip>:8787`).
+1. Averigua la IP del servidor **en tu red local**: `http://<ip-lan>:8787`
+   (por ejemplo `http://192.168.1.20:8787`).
 2. En Omni TV: **Ajustes → Vincular → 🎬 Añadir addons de streams** →
    pega la URL (una por línea) → **Guardar**. (También desde el panel web
    del QR, en el móvil.)
@@ -122,6 +123,19 @@ Respuesta esperada:
 
 - **Red**: el puente escucha en `0.0.0.0` para que la TV lo alcance por
   LAN. Úsalo solo en redes de confianza (no hay autenticación).
+- **`http://` solo dentro de la LAN**: desde Android 9 (`targetSdk 28+`) el
+  sistema bloquea el tráfico sin cifrar; Omni TV lo permite a nivel de
+  plataforma porque no hay forma de expresar «solo mi red» en el manifiesto,
+  y aplica la regla en código ([`NetPolicy`](../../app/src/main/java/com/omnitv/app/data/NetPolicy.kt)):
+  - `http://192.168.x.x:8787`, `http://10.x.x.x:8787`,
+    `http://172.16–31.x.x:8787`, `http://[::1]:8787`, `http://mi-pc.local:8787`
+    → **aceptado**.
+  - `http://8.8.8.8:8787`, `http://miproyecto.com:8787` → **rechazado**.
+  - `https://` → siempre aceptado.
+
+  Si publicas el puente en internet, ponlo detrás de HTTPS (un túnel o un
+  proxy inverso); un `http://` público no funcionará y además enviaría los
+  enlaces en claro.
 - **Tiempos**: Omni TV espera respuesta en ~6–8 s por addon; si tu
   scraping tarda más, cachea enlaces por id (`cacheMaxAge` es informativo).
 - **Formatos**: `.mp4` y `.m3u8` (HLS). Los enlaces que no sean

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Copia de seguridad automática (Android 6–11).
+    Los perfiles se copian; los ajustes del panel de vinculación NO: contienen
+    el código de emparejamiento, URLs de addons (que pueden llevar tokens) y
+    las claves de API.
+-->
+<full-backup-content>
+    <exclude domain="sharedpref" path="omni_tv_settings.xml" />
+</full-backup-content>

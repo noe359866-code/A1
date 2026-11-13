@@ -125,6 +125,13 @@ Sin dependencias de red propias: el cliente Stremio usa `HttpURLConnection` +
 Google, HLS de prueba de Apple *bipbop* y Mux) — aptos para desarrollar, no para
 distribución comercial.
 
+**Red y datos guardados** (ver [Seguridad](#-seguridad-y-datos-guardados)):
+
+- `https://` siempre; `http://` **solo hacia la red local** (`NetPolicy`).
+- El panel de vinculación **exige el código** antes de leer o escribir nada.
+- Las claves de API se cifran con el **Android Keystore** y quedan **fuera de
+  las copias de seguridad**.
+
 ## 🌐 Catálogo real (addons de Stremio)
 
 La app consume **catálogos reales** con el protocolo de addons de Stremio
@@ -164,6 +171,10 @@ Al elegir una plataforma se carga su **catálogo real**:
 - Los títulos (`tmdb:{id}`) se enriquecen con `meta/{type}/tmdb:{id}` de
   Nuvio (reparto, géneros, clasificación por edades) y sus episodios con la
   meta de Cinemeta. Filtros *Todas / Películas / Series*.
+- La valoración sale **solo del texto visible de esa ficha** (`ScrapeText`).
+  Si la web no la muestra (estrenos futuros, por ejemplo), el título queda
+  **sin nota**: la interfaz no enseña estrella ni «% para ti», en vez de
+  inventarse un 7,0.
 - Perfiles infantiles: sección no disponible (catálogo curado local).
 
 ## 🎬 Addon interno de streams — «Omni Streams»
@@ -187,6 +198,12 @@ externos entregan.
   entrega enlaces → flujo *demo* etiquetado (chip `DEMO`).
 - Soporta `.mp4` y `.m3u8` (HLS); los enlaces solo-torrent (`infoHash`) se
   ignoran de momento.
+- **Enlaces aceptados**: `https://` siempre; `http://` solo si el host es una
+  IP de la red local (`10.x`, `172.16–31.x`, `192.168.x`, `169.254.x`,
+  `127.x`), `localhost` o un nombre `*.local`. Un enlace `http://` hacia
+  internet se descarta (el manifiesto permite tráfico sin cifrar porque
+  `network_security_config` no sabe expresar rangos de IP; el límite lo pone
+  la app).
 - **Puente listo para copiar**: `tools/omni-stream-bridge/` (Python y
   Kotlin) para que cualquier proyecto tuyo entregue sus streams a Omni TV
   — solo hay que enganchar tus resolvers en `resolve()`.
@@ -195,19 +212,34 @@ externos entregan.
 ## 🔗 Vinculación por QR (panel web embebido)
 
 La pestaña **Ajustes → «Vincular cuenta · Addons · APIs»** muestra un **QR**
-con la URL del panel **debajo** (formato `http://{ip-del-tv}:8080/`, como el
-ejemplo `https://192.124.0.10:8080/`) y el **código de emparejamiento**.
+con la URL del panel **debajo** (`http://{ip-del-tv}:8080/`) y el **código de
+emparejamiento** (`K7QW9Z`, 6 caracteres sin `0/O/1/I`, generado con
+`SecureRandom`). El QR codifica esa URL **con** el código (`?code=…`).
 
 - Al escanear el QR, el móvil abre el **portal web servido por la propia TV**
-  (`data/PairingServer.kt`, servidor HTTP embebido en el puerto 8080):
+  (`data/PairingServer.kt`, servidor HTTP embebido en el puerto 8080) y puede:
   - **Enlazar cuenta** (email),
   - **Añadir addons** (URLs de `manifest.json` de Stremio — se cargan como
     filas nuevas del catálogo en caliente),
   - **Añadir APIs** (`NOMBRE=clave`, guardadas para integraciones).
-- Todo se valida con el código de emparejamiento y se persiste en
-  `SettingsStore`; el Inicio se recarga automáticamente al recibir cambios.
-- El estado en Ajustes es en vivo: servidor, cuenta, nº de addons y APIs y
-  la última acción recibida desde el panel.
+- **El código es la única llave.** El QR lo incluye en la URL
+  (`…:8080/?code=K7QW9Z`) y por eso abre el panel ya desbloqueado; si alguien
+  escribe `http://{ip-del-tv}:8080/` a mano, solo ve el campo del código.
+  Sin el código correcto **no se lee ni se escribe nada del televisor**: ni el
+  propio código, ni la cuenta, ni los addons, ni las claves. `GET /status`
+  responde `403`, y los formularios fallan sin tocar los ajustes.
+- **Freno a la fuerza bruta**: 5 fallos seguidos desde la misma IP bloquean a
+  ese cliente 60 s (`429`). Las peticiones están acotadas (16 KB de cabecera,
+  64 KB de cuerpo → `413`) y se responden con `no-store`, `no-referrer`,
+  `nosniff` y `X-Frame-Options: DENY`.
+- Todo se valida y se persiste en `SettingsStore`; el Inicio se recarga
+  automáticamente al recibir cambios. El estado en Ajustes es en vivo:
+  servidor, cuenta, nº de addons y APIs, si las claves están cifradas y la
+  última acción recibida.
+- Limitación honesta: el panel viaja **sin TLS** por la red local. En una
+  Wi-Fi ajena (hotel, cafetería) cualquiera puede intentar el código; por eso
+  hay límite de intentos y el código se genera con `SecureRandom`. Úsalo en tu
+  red de casa.
 - QR generado con **ZXing** (`com.google.zxing:core:3.5.3`).
 
 ## 🎬 «Por estudio» (como «Browse by studio» de sweetfox.app)
@@ -227,6 +259,8 @@ pestaña Plataformas (fusión de ambos modos de explorar):
   *Populares / Mejor valoradas / Recientes* (como las pestañas de la web).
 - Los títulos (`tmdb:{id}`) se enriquecen con la meta de Nuvio (reparto,
   géneros, certificación) y sus episodios con Cinemeta. Caché por estudio.
+- Igual que en Plataformas: sin valoración en la ficha → sin nota en la app
+  (caso real: «Avengers: Doomsday» aparece como `Movie2026`, sin nota).
 
 ## 🎯 «Solo en {plataforma}» (como «Only on» de flystream.net)
 
@@ -244,37 +278,47 @@ tarjetas con cierre **«Ver todo»** → catálogo completo de esa plataforma.
 A1/
 ├── app/
 │   ├── build.gradle.kts
-│   └── src/main/
-│       ├── AndroidManifest.xml          # leanback, banner TV, sin touchscreen
-│       ├── java/com/omnitv/app/
-│       │   ├── MainActivity.kt          # ComponentActivity + keep-screen-on
-│       │   ├── OmniTvApp.kt             # NavHost + pestañas + rutas
-│       │   ├── data/
-│       │   │   ├── Models.kt            # Video, Episode, MediaRow, StreamSource
-│       │   │   ├── Profile.kt           # perfiles + avatarRes (8 caras)
-│       │   │   ├── ProfileStore.kt      # persistencia de perfiles (SharedPreferences)
-│       │   │   ├── SettingsStore.kt     # ajustes + vinculación (cuenta/addons/APIs)
-│       │   │   ├── CatalogRepository.kt # catálogo demo + caché remoto + episodios
-│       │   │   ├── StremioClient.kt     # protocolo de addons Stremio (Cinemeta/Nuvio)
-│       │   │   ├── RemoteCatalog.kt     # filas remotas, plataformas, estudios, búsqueda
-│       │   │   ├── CinejoyClient.kt     # catálogo por plataforma (cinejoy.pk)
-│       │   │   ├── SweetFoxClient.kt    # catálogo por estudio (sweetfox.app)
-│       │   │   ├── Providers.kt         # 17 plataformas (logos TMDB)
-│       │   │   ├── Studios.kt           # 24 estudios (logos TMDB)
-│       │   │   └── PairingServer.kt     # servidor web :8080 + portal de vinculación
-│       │   ├── player/
-│       │   │   ├── PlayerScreen.kt      # reproductor estilo Xuper TV (Media3)
-│       │   │   └── PlayerUi.kt          # vidrio, píldoras, menús, EPG chip
-│       │   └── ui/
-│       │       ├── theme/               # Color, AppType (tipografía), Theme
-│       │       ├── components/          # Cards, PillButton, HeroBanner, OnlyOnSection…
-│       │       │                        # ProfileComponents, StudioSection
-│       │       └── screens/             # Perfiles, Home, Detail, Plataformas,
-│       │                                # StudioCatalog, Search, Settings…
-│       └── res/
-│           ├── drawable/                # tv_banner, iconos y 8 caras de avatar
-│           ├── mipmap*/                 # icono adaptativo (lupa con 6 puntos)
-│           └── values/                  # strings, colors, themes
+│   └── src/
+│       ├── main/
+│       │   ├── AndroidManifest.xml      # leanback, banner TV, sin touchscreen
+│       │   ├── java/com/omnitv/app/
+│       │   │   ├── MainActivity.kt      # ComponentActivity + keep-screen-on
+│       │   │   ├── OmniTvApp.kt         # NavHost + pestañas + rutas
+│       │   │   ├── data/
+│       │   │   │   ├── Models.kt            # Video, Episode, MediaRow, StreamSource
+│       │   │   │   ├── Profile.kt           # perfiles + avatarRes (8 caras)
+│       │   │   │   ├── ProfileStore.kt      # persistencia de perfiles (SharedPreferences)
+│       │   │   │   ├── SettingsStore.kt     # ajustes + vinculación (cuenta/addons/APIs)
+│       │   │   │   ├── CatalogRepository.kt # catálogo demo + caché remoto + episodios
+│       │   │   │   ├── StremioClient.kt     # protocolo de addons Stremio (Cinemeta/Nuvio)
+│       │   │   │   ├── RemoteCatalog.kt     # filas remotas, plataformas, estudios, búsqueda
+│       │   │   │   ├── CinejoyClient.kt     # catálogo por plataforma (cinejoy.pk)
+│       │   │   │   ├── SweetFoxClient.kt    # catálogo por estudio (sweetfox.app)
+│       │   │   │   ├── ScrapeText.kt        # lectura del HTML: un dato ausente no se inventa
+│       │   │   │   ├── Providers.kt         # 17 plataformas (logos TMDB)
+│       │   │   │   ├── Studios.kt           # 24 estudios (logos TMDB)
+│       │   │   │   ├── NetPolicy.kt         # URLs aceptadas (https; http solo en la LAN)
+│       │   │   │   ├── SecretBox.kt         # cifrado de secretos (Android Keystore AES-GCM)
+│       │   │   │   ├── PairingServer.kt     # servidor web :8080 (sockets)
+│       │   │   │   ├── PairingRouter.kt     # reglas del panel: sin código no hay datos
+│       │   │   │   ├── PairingPortal.kt     # HTML del panel (bloqueado y desbloqueado)
+│       │   │   │   └── PairingHttp.kt       # lectura HTTP, formularios, límite de intentos
+│       │   │   ├── player/
+│       │   │   │   ├── PlayerScreen.kt      # reproductor estilo Xuper TV (Media3)
+│       │   │   │   └── PlayerUi.kt          # vidrio, píldoras, menús, EPG chip
+│       │   │   └── ui/
+│       │   │       ├── theme/               # Color, AppType (tipografía), Theme
+│       │   │       ├── components/          # Cards, PillButton, HeroBanner, OnlyOnSection…
+│       │   │       │                        # ProfileComponents, StudioSection
+│       │   │       └── screens/             # Perfiles, Home, Detail, Plataformas,
+│       │   │                                # StudioCatalog, Search, Settings…
+│       │   └── res/
+│       │       ├── drawable/                # tv_banner, iconos y 8 caras de avatar
+│       │       ├── mipmap*/                 # icono adaptativo (lupa con 6 puntos)
+│       │       ├── values/                  # strings, colors, themes
+│       │       └── xml/                     # backup_rules / data_extraction_rules
+│       └── test/java/com/omnitv/app/data/   # tests unitarios de JVM (sin Android)
+├── .github/workflows/ci.yml             # tests + assembleDebug en cada push
 ├── docs/XUPER-TV-RESEARCH.md            # investigación del reproductor Xuper TV
 ├── gradle/libs.versions.toml            # catálogo de versiones
 └── gradlew / gradle/wrapper/            # Gradle 8.9
@@ -294,10 +338,43 @@ CLI con el SDK instalado.
 
 # Lint del contrato de TV
 ./gradlew lint
+
+# Tests unitarios de JVM (red, panel de vinculación y parsers)
+./gradlew testDebugUnitTest
 ```
+
+La integración continua (`.github/workflows/ci.yml`) ejecuta los tests y
+`assembleDebug` en cada push y pull request.
 
 > **Emulador:** crea un AVD con perfil *Android TV (1080p)*, API 22+ (recomendado 34).
 > La app solo aparece en el launcher de TV (categoría `LEANBACK_LAUNCHER`).
+
+## 🔐 Seguridad y datos guardados
+
+Lo que la app promete es lo que hace:
+
+| Dato | Dónde vive | Cifrado | Copia de seguridad |
+| --- | --- | --- | --- |
+| Claves de API (`NOMBRE=clave`) | `SharedPreferences` `omni_tv_settings` | **AES-256-GCM con clave del Android Keystore** (`SecretBox`) en Android 6.0+ | Excluidas |
+| Cuenta enlazada, addons y addons de streams | `omni_tv_settings` | No (URLs y email) | Excluidas |
+| Código de emparejamiento | `omni_tv_settings` | No | Excluido |
+| Perfiles y *Mi lista* | `SharedPreferences` de perfiles | No | Incluidas (no contienen secretos) |
+
+- **`allowBackup` sigue activo**, pero `res/xml/backup_rules.xml` (API 30-) y
+  `res/xml/data_extraction_rules.xml` (API 31+) **excluyen el fichero
+  `omni_tv_settings.xml`** tanto de la copia en la nube como del traslado a un
+  dispositivo nuevo: los secretos nunca salen del televisor.
+- El cifrado usa una clave que **no sale del Keystore**; el valor guardado es
+  hexadecimal (`longitud-IV · IV · texto cifrado + etiqueta GCM`). Las claves
+  antiguas en texto plano se **migran** al primer arranque.
+- **Android 5.1 (API 22) no tiene Keystore AES**: allí las claves se guardan sin
+  cifrar y la interfaz lo dice («Sin cifrar») en lugar de prometer un cifrado
+  que no existe. Desde Android 6.0 se muestra «Cifradas en el televisor».
+- Si el dato cifrado no se puede abrir (copia restaurada en otro aparato, dato
+  alterado), la app arranca **sin claves** en vez de con basura: hay que
+  volver a introducirlas.
+- El panel de vinculación y la política de red (`NetPolicy`) se describen en
+  sus secciones. `http://` sin cifrar nunca sale de la red local.
 
 ## 🍎 Decisiones de diseño (estética Apple TV)
 

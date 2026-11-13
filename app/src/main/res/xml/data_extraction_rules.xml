@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Copia en la nube y traspaso entre dispositivos (Android 12+).
+    Mismo criterio que backup_rules.xml: los ajustes del panel de vinculación
+    (código, URLs de addons, claves de API) no salen del televisor.
+-->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="sharedpref" path="omni_tv_settings.xml" />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="sharedpref" path="omni_tv_settings.xml" />
+    </device-transfer>
+</data-extraction-rules>

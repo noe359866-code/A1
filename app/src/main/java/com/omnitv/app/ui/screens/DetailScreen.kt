@@ -223,28 +223,28 @@ fun DetailScreen(
                 Spacer(Modifier.height(16.dp))
                 // Metadatos: match % estilo Netflix + año + duración/episodios + calidad
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        "${full.matchPercent} % para ti",
-                        style = androidx.compose.ui.text.TextStyle(
-                            fontFamily = FontFamily.SansSerif,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 15.sp
-                        ),
-                        color = AccentGreen
+                    // La afinidad se deriva de la valoración: sin valoración real no se muestra
+                    if (full.hasRating) {
+                        Text(
+                            "${full.matchPercent} % para ti",
+                            style = androidx.compose.ui.text.TextStyle(
+                                fontFamily = FontFamily.SansSerif,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 15.sp
+                            ),
+                            color = AccentGreen
+                        )
+                    }
+                    // Solo datos que existen (un título remoto puede llegar sin año o duración)
+                    val metaParts = listOfNotNull(
+                        full.year.takeIf { it > 0 }?.toString(),
+                        full.episodesLabel ?: full.durationLabel.takeIf { full.durationMinutes > 0 },
+                        full.quality.takeIf { it.isNotBlank() },
+                        full.certification.takeIf { it.isNotBlank() }
                     )
-                    Dot()
-                    Text("${full.year}", style = AppType.metadata, color = TextSecondary)
-                    Dot()
-                    Text(
-                        full.episodesLabel ?: full.durationLabel,
-                        style = AppType.metadata,
-                        color = TextSecondary
-                    )
-                    Dot()
-                    Text(full.quality, style = AppType.metadata, color = TextSecondary)
-                    if (full.certification.isNotEmpty()) {
-                        Dot()
-                        Text(full.certification, style = AppType.metadata, color = TextSecondary)
+                    metaParts.forEachIndexed { index, part ->
+                        if (index > 0 || full.hasRating) Dot()
+                        Text(part, style = AppType.metadata, color = TextSecondary)
                     }
                 }
 

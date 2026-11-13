@@ -1,0 +1,66 @@
+# Comprobaciones de cada push y pull request.
+#
+# - Los tests unitarios de JVM cubren la parte que más se rompe sin avisar:
+#   la política de red (http solo en la LAN), el panel de vinculación (sin
+#   código no se entrega nada) y los dos parsers de HTML.
+# - assembleDebug verifica que la app compila de verdad (dependencias de
+#   Compose TV, Media3, ZXing…). El build de release no se hace aquí porque
+#   necesita un keystore que no debe estar en el repositorio.
+#
+# Las versiones de las acciones se fijan a las que se ejecutan sobre Node 24
+# (las de Node 20 están retiradas y GitHub las rechaza con un aviso).
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+# Un push nuevo sobre la misma rama cancela la ejecución anterior
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Tests unitarios y compilación
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Descargar el código
+        uses: actions/checkout@v7
+
+      - name: JDK 17
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Preparar Gradle
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          # Caché estándar de GitHub Actions (no requiere ningún servicio externo)
+          cache-provider: basic
+
+      - name: Aceptar las licencias del SDK de Android
+        run: |
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          if [ -x "$SDKMANAGER" ]; then yes | "$SDKMANAGER" --licenses > /dev/null; fi
+
+      - name: Tests unitarios
+        run: ./gradlew --no-daemon :app:testDebugUnitTest
+
+      - name: Compilar la app (debug)
+        run: ./gradlew --no-daemon :app:assembleDebug
+
+      - name: Guardar el informe de los tests
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: informes-tests
+          path: app/build/reports/tests/
+          if-no-files-found: ignore

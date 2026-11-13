@@ -5,7 +5,8 @@
     - touchscreen opcional → el mando (D-pad) es el input principal.
     - banner 320×180 obligatorio para el launcher de TV.
 -->
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
@@ -19,13 +20,27 @@
         android:name="android.hardware.touchscreen"
         android:required="false" />
 
+    <!--
+        Copias de seguridad: se permiten, pero los ajustes del panel de
+        vinculación (código, URLs de addons, claves de API) quedan excluidos
+        (res/xml/backup_rules.xml y data_extraction_rules.xml).
+
+        usesCleartextTraffic: el puente de streams y los addons caseros se
+        sirven por http:// en la red local, y network_security_config no
+        admite rangos de IP. El límite «http solo en la LAN» lo impone
+        data/NetPolicy.kt sobre cada URL de addon y cada enlace de vídeo.
+    -->
     <application
         android:allowBackup="true"
         android:banner="@drawable/tv_banner"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:fullBackupContent="@xml/backup_rules"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:supportsRtl="true"
-        android:theme="@style/Theme.OmniTV">
+        android:theme="@style/Theme.OmniTV"
+        android:usesCleartextTraffic="true"
+        tools:targetApi="31">
 
         <activity
             android:name=".MainActivity"

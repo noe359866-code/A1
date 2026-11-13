@@ -74,7 +74,9 @@ class ProjectStreamAddon(
             for (i in 0 until array.length()) {
                 val item = array.optJSONObject(i) ?: continue
                 val url = item.optString("url").ifEmpty { item.optString("externalUrl") }
-                if (url.isBlank() || !url.startsWith("http")) continue // infoHash/torrent: no soportado
+                // Sin url (infoHash/torrent) no hay soporte; y los enlaces deben cumplir la
+                // política de red: https, o http solo dentro de la red local
+                if (url.isBlank() || !NetPolicy.isAllowed(url)) continue
                 val rawName = item.optString("name", item.optString("label", name))
                 val title = item.optString("title", "")
                 val quality = item.optString("quality", "").ifEmpty {

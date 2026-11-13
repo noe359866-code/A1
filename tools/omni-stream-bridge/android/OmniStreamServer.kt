@@ -101,6 +101,25 @@ class OmniStreamServer(
         }
     }
 
+    /**
+     * `http://` solo hacia la red local: IP privada literal (10/8, 172.16/12,
+     * 192.168/16, 169.254/16, 127/8) o `localhost`. Sin resolver DNS, para que
+     * un nombre público no pueda apuntar a la LAN.
+     */
+    private fun isLocalHttp(url: String): Boolean {
+        val host = runCatching { java.net.URI(url.trim()).host }.getOrNull()?.lowercase() ?: return false
+        if (host == "localhost" || host.endsWith(".local")) return true
+        val parts = host.split('.')
+        if (parts.size != 4) return false
+        val octets = parts.map { part ->
+            if (part.isEmpty() || part.length > 3 || !part.all { it in '0'..'9' }) return false
+            if (part.length > 1 && part[0] == '0') return false
+            part.toInt().also { if (it > 255) return false }
+        }
+        val (a, b) = octets
+        return a == 10 || a == 127 || (a == 172 && b in 16..31) || (a == 192 && b == 168) || (a == 169 && b == 254)
+    }
+
     private fun handleStream(out: OutputStream, rest: String) {
         val clean = if (rest.endsWith(".json")) rest.removeSuffix(".json") else rest
         val slash = clean.indexOf('/')
@@ -119,7 +138,10 @@ class OmniStreamServer(
         val normalizedKind = if (kind == "tv" || kind == "serie") "series" else kind
         val streams = try {
             resolver(normalizedKind, id)
-                .filter { it.url.startsWith("http://") || it.url.startsWith("https://") }
+                // Misma regla que la app: https siempre, http solo en la red local
+                // (el puente se sirve en http://<ip-lan>:8787 y lo que resuelve
+                // hacia fuera debe ir cifrado o quedarse en la LAN).
+                .filter { it.url.startsWith("https://") || (it.url.startsWith("http://") && isLocalHttp(it.url)) }
                 .distinctBy { it.url }
                 .take(24)
         } catch (_: Exception) {
