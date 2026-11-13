@@ -1,25 +1,25 @@
-node_modules/
-coverage/
-# Generado por beamup-cli en el primer despliegue (añade el remote `beamup`).
-# No versionarlo: contiene el nombre del proyecto y el último commit desplegado.
-beamup.json
-
-# NUNCA versionar claves privadas de despliegue: van en GitHub Secrets.
-beamup_deploy*
-id_rsa*
-*.key
-*.pem
-.ssh/
-.env
-.env.*
-!.env.example
-*.log
-.DS_Store
-dist/
+# Gradle
+.gradle/
 build/
+local.properties
 
-# Cloudflare Workers: estado local de wrangler, bundle de dry-run y secretos
-.wrangler/
-.dev.vars
-.dev.vars.*
-!.dev.vars.example
+# Android Studio / IntelliJ
+*.iml
+.idea/
+captures/
+.externalNativeBuild/
+.cxx/
+
+# Salidas
+*.apk
+*.aab
+*.ap_
+*.dex
+bin/
+gen/
+out/
+.navigation/
+
+# Sistema
+.DS_Store
+__pycache__/

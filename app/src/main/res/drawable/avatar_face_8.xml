@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Avatar 8 · rosa — gran sonrisa con dientes -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="200dp"
+    android:height="200dp"
+    android:viewportWidth="200"
+    android:viewportHeight="200">
+
+    <path
+        android:fillColor="#FFFF375F"
+        android:pathData="M44,10 h112 a34,34 0 0 1 34,34 v112 a34,34 0 0 1 -34,34 h-112 a34,34 0 0 1 -34,-34 v-112 a34,34 0 0 1 34,-34 z" />
+
+    <!-- Ojos -->
+    <path android:fillColor="#FF221712" android:pathData="M72,80 m-10,0 a10,10 0 1,0 20,0 a10,10 0 1,0 -20,0" />
+    <path android:fillColor="#FF221712" android:pathData="M128,80 m-10,0 a10,10 0 1,0 20,0 a10,10 0 1,0 -20,0" />
+
+    <!-- Boca grande -->
+    <path
+        android:fillColor="#FF221712"
+        android:pathData="M70,114 h60 a12,12 0 0 1 12,12 v2 a12,12 0 0 1 -12,12 h-60 a12,12 0 0 1 -12,-12 v-2 a12,12 0 0 1 12,-12 z" />
+
+    <!-- Dientes -->
+    <path android:fillColor="#FFFDF6F0" android:pathData="M72,120 h56 v8 h-56 z" />
+</vector>

@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Omni TV · manifiesto SOLO para Android TV.
+    - leanback obligatorio → solo aparece en televisores / Google TV.
+    - touchscreen opcional → el mando (D-pad) es el input principal.
+    - banner 320×180 obligatorio para el launcher de TV.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+    <!-- Solo Android TV / Google TV -->
+    <uses-feature
+        android:name="android.software.leanback"
+        android:required="true" />
+    <!-- El mando D-pad sustituye a la pantalla táctil -->
+    <uses-feature
+        android:name="android.hardware.touchscreen"
+        android:required="false" />
+
+    <application
+        android:allowBackup="true"
+        android:banner="@drawable/tv_banner"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.OmniTV">
+
+        <activity
+            android:name=".MainActivity"
+            android:configChanges="keyboard|keyboardHidden|orientation|screenSize|screenLayout|smallestScreenSize|uiMode"
+            android:exported="true"
+            android:launchMode="singleTask"
+            android:screenOrientation="landscape"
+            android:theme="@style/Theme.OmniTV">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <!-- Solo aparece en el launcher de Android TV -->
+                <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+
+</manifest>

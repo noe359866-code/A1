@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Avatar 3 · amarillo — ojos felices cerrados -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="200dp"
+    android:height="200dp"
+    android:viewportWidth="200"
+    android:viewportHeight="200">
+
+    <path
+        android:fillColor="#FFFFD60A"
+        android:pathData="M44,10 h112 a34,34 0 0 1 34,34 v112 a34,34 0 0 1 -34,34 h-112 a34,34 0 0 1 -34,-34 v-112 a34,34 0 0 1 34,-34 z" />
+
+    <!-- Ojos cerrados (arcos felices) -->
+    <path
+        android:pathData="M56,90 Q72,68 88,90"
+        android:strokeColor="#FF221712"
+        android:strokeWidth="9"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000" />
+    <path
+        android:pathData="M112,90 Q128,68 144,90"
+        android:strokeColor="#FF221712"
+        android:strokeWidth="9"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000" />
+
+    <!-- Sonrisa -->
+    <path
+        android:pathData="M64,124 Q100,154 136,124"
+        android:strokeColor="#FF221712"
+        android:strokeWidth="10"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000" />
+</vector>
