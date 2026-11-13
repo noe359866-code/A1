@@ -3,10 +3,8 @@ package com.omnitv.app.ui.components
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.focusable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
@@ -16,7 +14,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -34,6 +31,7 @@ import androidx.compose.material.Text
 import coil.compose.AsyncImage
 import com.omnitv.app.data.Studio
 import com.omnitv.app.data.Studios
+import com.omnitv.app.ui.theme.AppRadius
 import com.omnitv.app.ui.theme.AppType
 import com.omnitv.app.ui.theme.GlassFill
 import com.omnitv.app.ui.theme.TextPrimary
@@ -84,11 +82,11 @@ fun StudioTile(
     Column(
         Modifier
             .graphicsLayer { scaleX = scale; scaleY = scale }
-            .clip(RoundedCornerShape(14.dp))
+            .clip(AppRadius.md)
             .background(if (focused) GlassFill.copy(alpha = 0.95f) else GlassFill)
             .then(
-                if (focused) Modifier.border(2.dp, Color.White, RoundedCornerShape(14.dp))
-                else Modifier.border(1.dp, Color.White.copy(alpha = 0.10f), RoundedCornerShape(14.dp))
+                if (focused) Modifier.border(3.dp, Color.White, AppRadius.md)
+                else Modifier.border(1.dp, Color.White.copy(alpha = 0.10f), AppRadius.md)
             )
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },

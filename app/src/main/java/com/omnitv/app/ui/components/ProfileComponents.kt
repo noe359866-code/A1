@@ -43,6 +43,7 @@ import com.omnitv.app.R
 import com.omnitv.app.data.Profile
 import com.omnitv.app.data.avatarRes
 import com.omnitv.app.ui.theme.Accent
+import com.omnitv.app.ui.theme.AppRadius
 import com.omnitv.app.ui.theme.AppType
 import com.omnitv.app.ui.theme.GlassFill
 import com.omnitv.app.ui.theme.GlassFillStrong
@@ -86,7 +87,7 @@ fun AvatarView(
 fun KidsChip(modifier: Modifier = Modifier) {
     Box(
         modifier
-            .clip(RoundedCornerShape(4.dp))
+            .clip(AppRadius.xs)
             .background(Accent)
             .padding(horizontal = 7.dp, vertical = 2.dp)
     ) {
@@ -110,8 +111,8 @@ fun ProfileTile(
     Column(
         modifier = modifier
             .graphicsLayer { scaleX = scale; scaleY = scale }
-            .clip(RoundedCornerShape(20.dp))
-            .then(if (focused) Modifier.border(3.dp, Color.White, RoundedCornerShape(20.dp)) else Modifier)
+            .clip(AppRadius.lg)
+            .then(if (focused) Modifier.border(3.dp, Color.White, AppRadius.lg) else Modifier)
             .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onClick)
             .onFocusChanged { focused = it.isFocused }
             .padding(10.dp),
@@ -220,7 +221,7 @@ fun AddProfileTile(onClick: () -> Unit, modifier: Modifier = Modifier) {
                 .background(if (focused) GlassFillStrong else GlassFill)
                 .then(
                     if (focused) Modifier.border(3.dp, Color.White, shape)
-                    else Modifier.border(1.5.dp, TextSecondary.copy(alpha = 0.4f), shape)
+                    else Modifier.border(3.dp, TextSecondary.copy(alpha = 0.4f), shape)
                 ),
             contentAlignment = Alignment.Center
         ) {
@@ -297,7 +298,7 @@ fun ProfileBadge(profile: Profile?, onClick: () -> Unit, modifier: Modifier = Mo
 fun AvatarOption(resId: Int, selected: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
     var focused by remember { mutableStateOf(false) }
     val scale by animateFloatAsState(if (focused) 1.15f else 1f, tween(140), label = "optionScale")
-    val shape = RoundedCornerShape(14.dp)
+    val shape = AppRadius.md
 
     Box(
         modifier = modifier

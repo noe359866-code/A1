@@ -1,9 +1,6 @@
 package com.omnitv.app.ui.screens
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -20,7 +17,6 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -31,8 +27,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.res.painterResource
@@ -45,8 +39,8 @@ import com.omnitv.app.data.RemoteCatalog
 import com.omnitv.app.data.Video
 import com.omnitv.app.ui.components.PosterCard
 import com.omnitv.app.ui.components.RequestTvFocus
+import com.omnitv.app.ui.components.TvChip
 import com.omnitv.app.ui.components.TvTextField
-import com.omnitv.app.ui.theme.Accent
 import com.omnitv.app.ui.theme.AppType
 import com.omnitv.app.ui.theme.Background
 import com.omnitv.app.ui.theme.GlassFill
@@ -108,7 +102,7 @@ fun SearchScreen(onOpenDetail: (Video) -> Unit) {
         Spacer(Modifier.height(18.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             suggestions.forEach { suggestion ->
-                SuggestionChip(suggestion) { query = suggestion }
+                TvChip(suggestion, onClick = { query = suggestion })
             }
         }
 
@@ -156,22 +150,6 @@ fun SearchScreen(onOpenDetail: (Video) -> Unit) {
                 }
             }
         }
-    }
-}
-
-@Composable
-private fun SuggestionChip(label: String, onClick: () -> Unit) {
-    var focused by remember { mutableStateOf(false) }
-    Box(
-        Modifier
-            .clip(RoundedCornerShape(22.dp))
-            .background(if (focused) Accent else GlassFill)
-            .then(if (focused) Modifier.border(2.5.dp, Color.White, RoundedCornerShape(22.dp)) else Modifier)
-            .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onClick)
-            .onFocusChanged { focused = it.isFocused }
-            .padding(horizontal = 22.dp, vertical = 12.dp)
-    ) {
-        Text(label, style = AppType.metadata, color = TextPrimary)
     }
 }
 

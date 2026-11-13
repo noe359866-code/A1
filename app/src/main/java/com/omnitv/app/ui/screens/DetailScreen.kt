@@ -20,7 +20,6 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -67,13 +66,16 @@ import com.omnitv.app.ui.components.CircleIconButton
 import com.omnitv.app.ui.components.PillButton
 import com.omnitv.app.ui.components.PosterCard
 import com.omnitv.app.ui.components.RequestTvFocus
+import com.omnitv.app.ui.components.TvChip
 import com.omnitv.app.ui.theme.Accent
 import com.omnitv.app.ui.theme.AccentGreen
+import com.omnitv.app.ui.theme.AppRadius
 import com.omnitv.app.ui.theme.AppType
 import com.omnitv.app.ui.theme.Background
 import com.omnitv.app.ui.theme.GlassFill
 import com.omnitv.app.ui.theme.GlassFillStrong
 import com.omnitv.app.ui.theme.SurfaceElevated
+import com.omnitv.app.ui.theme.TextMuted
 import com.omnitv.app.ui.theme.TextPrimary
 import com.omnitv.app.ui.theme.TextSecondary
 import com.omnitv.app.ui.theme.TextTertiary
@@ -310,7 +312,8 @@ fun DetailScreen(
                         "Catálogo real de ${full.source} · los addons de catálogo no incluyen " +
                             "enlaces de reproducción: se reproducirá una demostración",
                         style = AppType.metadata,
-                        color = TextTertiary
+                        // No `TextTertiary` (2,5:1 sobre el fondo): es texto real
+                        color = TextMuted
                     )
                 }
             }
@@ -337,8 +340,8 @@ fun DetailScreen(
                         Spacer(Modifier.height(14.dp))
                         LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                             items(seasons) { season ->
-                                SeasonChip(
-                                    label = "Temporada $season",
+                                TvChip(
+                                    text = "Temporada $season",
                                     selected = season == currentSeason,
                                     onClick = { selectedSeason = season }
                                 )
@@ -444,7 +447,7 @@ fun DetailScreen(
 private fun TypeChip(type: VideoType) {
     Box(
         Modifier
-            .clip(RoundedCornerShape(5.dp))
+            .clip(AppRadius.xs)
             .background(Color.White.copy(alpha = 0.18f))
             .padding(horizontal = 10.dp, vertical = 4.dp)
     ) {
@@ -460,7 +463,7 @@ private fun TypeChip(type: VideoType) {
 private fun AccentChip(text: String) {
     Box(
         Modifier
-            .clip(RoundedCornerShape(5.dp))
+            .clip(AppRadius.xs)
             .background(Accent)
             .padding(horizontal = 10.dp, vertical = 4.dp)
     ) {
@@ -472,44 +475,11 @@ private fun AccentChip(text: String) {
 private fun InfoChip(text: String) {
     Box(
         Modifier
-            .clip(RoundedCornerShape(9.dp))
+            .clip(AppRadius.sm)
             .background(GlassFillStrong)
             .padding(horizontal = 14.dp, vertical = 8.dp)
     ) {
         Text(text, style = AppType.metadata, color = TextPrimary)
-    }
-}
-
-@Composable
-private fun SeasonChip(label: String, selected: Boolean, onClick: () -> Unit) {
-    var focused by remember { mutableStateOf(false) }
-    Box(
-        Modifier
-            .clip(RoundedCornerShape(9.dp))
-            .background(
-                when {
-                    focused -> Accent
-                    selected -> GlassFillStrong
-                    else -> GlassFill
-                }
-            )
-            .then(
-                if (focused) Modifier.border(1.5.dp, Color.White.copy(alpha = 0.6f), RoundedCornerShape(9.dp))
-                else Modifier
-            )
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null,
-                onClick = onClick
-            )
-            .onFocusChanged { focused = it.isFocused }
-            .padding(horizontal = 16.dp, vertical = 9.dp)
-    ) {
-        Text(
-            label,
-            style = AppType.metadata,
-            color = if (focused || selected) TextPrimary else TextSecondary
-        )
     }
 }
 
@@ -533,7 +503,7 @@ private fun Dot() {
         Modifier
             .padding(horizontal = 10.dp)
             .size(3.dp)
-            .clip(RoundedCornerShape(2.dp))
+            .clip(AppRadius.xs)
             .background(TextTertiary)
     )
 }
@@ -552,10 +522,10 @@ private fun EpisodeRow(episode: Episode, onClick: () -> Unit) {
         Modifier
             .fillMaxWidth()
             .graphicsLayer { scaleX = scale; scaleY = scale }
-            .clip(RoundedCornerShape(14.dp))
+            .clip(AppRadius.md)
             .background(if (focused) SurfaceElevated.copy(alpha = 0.85f) else GlassFill)
             .then(
-                if (focused) Modifier.border(1.5.dp, Color.White.copy(alpha = 0.5f), RoundedCornerShape(14.dp))
+                if (focused) Modifier.border(3.dp, Color.White.copy(alpha = 0.5f), AppRadius.md)
                 else Modifier
             )
             .clickable(
@@ -586,13 +556,13 @@ private fun EpisodeRow(episode: Episode, onClick: () -> Unit) {
                 modifier = Modifier
                     .width(168.dp)
                     .height(94.dp)
-                    .clip(RoundedCornerShape(10.dp))
+                    .clip(AppRadius.sm)
             )
             Box(
                 Modifier
                     .align(Alignment.Center)
                     .size(34.dp)
-                    .clip(RoundedCornerShape(17.dp))
+                    .clip(AppRadius.lg)
                     .background(Color.Black.copy(alpha = 0.55f)),
                 contentAlignment = Alignment.Center
             ) {

@@ -17,7 +17,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -39,8 +38,6 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -71,6 +68,12 @@ import com.omnitv.app.ui.components.MetaLine
 import com.omnitv.app.ui.components.PillButton
 import com.omnitv.app.ui.components.SeekBar
 import com.omnitv.app.ui.components.formatTime
+import com.omnitv.app.ui.theme.AppRadius
+import com.omnitv.app.ui.theme.AppType
+import com.omnitv.app.ui.theme.LiveAccent
+import com.omnitv.app.ui.theme.TextMuted
+import com.omnitv.app.ui.theme.TextPrimary
+import com.omnitv.app.ui.theme.TextSecondary
 import kotlinx.coroutines.delay
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -596,7 +599,7 @@ fun PlayerScreen(
             ) {
                 LoadingSpinner()
                 Spacer(Modifier.height(14.dp))
-                Text("Cargando…", style = fontSize15(), color = Color(0xFF8E8E93))
+                Text("Cargando…", style = fontSize15(), color = TextSecondary)
             }
         }
 
@@ -625,7 +628,7 @@ fun PlayerScreen(
                 ) {
                     Text("No se pudo reproducir el vídeo", style = fontSize20(), color = Color.White)
                     Spacer(Modifier.height(8.dp))
-                    Text(hasError ?: "", style = fontSize13(), color = Color(0xFF8E8E93))
+                    Text(hasError ?: "", style = fontSize13(), color = TextSecondary)
                     Spacer(Modifier.height(22.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
                         PillButton(
@@ -702,14 +705,14 @@ fun PlayerScreen(
                         Spacer(Modifier.height(8.dp))
                         // Franja EPG estilo Xuper TV: qué se emite ahora y después
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            EpgChip("AHORA", Color(0xFFE50914))
+                            EpgChip("AHORA", LiveAccent)
                             Spacer(Modifier.width(8.dp))
-                            Text(video.title, style = fontSize13(), color = Color(0xFFE5E5EA))
+                            Text(video.title, style = fontSize13(), color = TextPrimary)
                             nextVideo?.let {
                                 Spacer(Modifier.width(16.dp))
-                                EpgChip("A CONTINUACIÓN", Color(0xFF636366))
+                                EpgChip("A CONTINUACIÓN", TextMuted)
                                 Spacer(Modifier.width(8.dp))
-                                Text(it.title, style = fontSize13(), color = Color(0xFF8E8E93))
+                                Text(it.title, style = fontSize13(), color = TextSecondary)
                             }
                         }
                     }
@@ -734,7 +737,7 @@ fun PlayerScreen(
                                 modifier = Modifier
                                     .width(200.dp)
                                     .height(112.dp)
-                                    .clip(RoundedCornerShape(10.dp))
+                                    .clip(AppRadius.sm)
                             )
                             Spacer(Modifier.width(20.dp))
                             Column {
@@ -745,7 +748,7 @@ fun PlayerScreen(
                                 Text(
                                     video.description,
                                     style = fontSize13(),
-                                    color = Color(0xFF8E8E93),
+                                    color = TextSecondary,
                                     maxLines = 2,
                                     overflow = TextOverflow.Ellipsis,
                                     modifier = Modifier.fillMaxWidth()
@@ -779,11 +782,11 @@ fun PlayerScreen(
                                         modifier = Modifier
                                             .width(132.dp)
                                             .height(74.dp)
-                                            .clip(RoundedCornerShape(10.dp))
+                                            .clip(AppRadius.sm)
                                     )
                                     Spacer(Modifier.width(16.dp))
                                     Column {
-                                        EpgChip("A CONTINUACIÓN", Color(0xFFE50914))
+                                        EpgChip("A CONTINUACIÓN", LiveAccent)
                                         Spacer(Modifier.height(6.dp))
                                         Text(
                                             next.title,
@@ -797,7 +800,7 @@ fun PlayerScreen(
                                             if (SettingsStore.autoNext) "Empieza en $nextCountdown s"
                                             else "Listo para reproducir",
                                             style = fontSize13(),
-                                            color = Color(0xFF8E8E93)
+                                            color = TextSecondary
                                         )
                                     }
                                 }
@@ -859,7 +862,7 @@ fun PlayerScreen(
                 ) {
                     // Tiempos + barra de progreso
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(formatTime(positionMs), style = fontSize13(), color = Color(0xFF8E8E93))
+                        Text(formatTime(positionMs), style = fontSize13(), color = TextSecondary)
                         Spacer(Modifier.width(16.dp))
                         SeekBar(
                             positionMs = positionMs,
@@ -871,7 +874,7 @@ fun PlayerScreen(
                         Text(
                             if (durationMs > 0) "-${formatTime(durationMs - positionMs)}" else "--:--",
                             style = fontSize13(),
-                            color = Color(0xFF8E8E93)
+                            color = TextSecondary
                         )
                     }
 
@@ -968,25 +971,14 @@ fun PlayerScreen(
 }
 
 /* -------------------------------------------------------------------------- */
-/*  Estilos tipográficos locales del reproductor                              */
+/*  Estilos tipográficos                                                        */
 /* -------------------------------------------------------------------------- */
 
-private fun fontSize22() = androidx.compose.ui.text.TextStyle(
-    fontFamily = FontFamily.SansSerif, fontWeight = FontWeight.SemiBold, fontSize = 26.sp
-)
-
-private fun fontSize20() = androidx.compose.ui.text.TextStyle(
-    fontFamily = FontFamily.SansSerif, fontWeight = FontWeight.SemiBold, fontSize = 24.sp
-)
-
-private fun fontSize17() = androidx.compose.ui.text.TextStyle(
-    fontFamily = FontFamily.SansSerif, fontWeight = FontWeight.SemiBold, fontSize = 21.sp
-)
-
-private fun fontSize15() = androidx.compose.ui.text.TextStyle(
-    fontFamily = FontFamily.SansSerif, fontWeight = FontWeight.Medium, fontSize = 19.sp
-)
-
-private fun fontSize13() = androidx.compose.ui.text.TextStyle(
-    fontFamily = FontFamily.SansSerif, fontWeight = FontWeight.Medium, fontSize = 18.sp
-)
+// El reproductor tenía sus propios tamaños (26/24/21/19/18 sp) al margen del
+// tema, así que cualquier ajuste de la escala se olvidaba de esta pantalla.
+// Ahora usa `AppType`, igual que el resto de la app.
+private fun fontSize22() = AppType.sectionTitle   // títulos destacados
+private fun fontSize20() = AppType.body           // texto principal
+private fun fontSize17() = AppType.body           // títulos de las fichas
+private fun fontSize15() = AppType.metadata       // avisos y estados
+private fun fontSize13() = AppType.metadata       // pies y segundas líneas

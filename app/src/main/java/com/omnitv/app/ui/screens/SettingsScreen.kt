@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
@@ -42,8 +41,10 @@ import com.omnitv.app.ui.components.RequestTvFocus
 import com.omnitv.app.ui.components.SettingRow
 import com.omnitv.app.ui.components.TvToggle
 import com.omnitv.app.ui.theme.Accent
+import com.omnitv.app.ui.theme.AppRadius
 import com.omnitv.app.ui.theme.AppType
 import com.omnitv.app.ui.theme.Background
+import com.omnitv.app.ui.theme.SurfaceCard
 import com.omnitv.app.ui.theme.TextPrimary
 import com.omnitv.app.ui.theme.TextSecondary
 import androidx.compose.material.Text
@@ -120,7 +121,7 @@ fun SettingsScreen(onSwitchProfile: () -> Unit) {
                         data = PairingServer.pairingUrl(),
                         modifier = Modifier
                             .size(176.dp)
-                            .clip(RoundedCornerShape(12.dp))
+                            .clip(AppRadius.md)
                     )
                     Spacer(Modifier.height(12.dp))
                     Text(
@@ -279,9 +280,9 @@ private fun SettingsCard(
     Column(
         Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(18.dp))
-            .background(Color(0xFF15151B))
-            .border(1.dp, Color.White.copy(alpha = 0.06f), RoundedCornerShape(18.dp))
+            .clip(AppRadius.lg)
+            .background(SurfaceCard)
+            .border(1.dp, Color.White.copy(alpha = 0.06f), AppRadius.lg)
             .padding(vertical = 10.dp)
     ) {
         Row(
@@ -291,7 +292,7 @@ private fun SettingsCard(
             Box(
                 Modifier
                     .size(42.dp)
-                    .clip(RoundedCornerShape(11.dp))
+                    .clip(AppRadius.sm)
                     .background(Accent.copy(alpha = 0.22f)),
                 contentAlignment = Alignment.Center
             ) {

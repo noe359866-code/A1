@@ -16,3 +16,33 @@ val FocusBorder = Color(0xFFFFFFFF)
 val GlassFill = Color(0x28787880)     // fill terciario translúcido
 val GlassFillStrong = Color(0x4D787880)
 val Danger = Color(0xFFFF453A)        // systemRed dark (acciones destructivas)
+
+/* -------------------------------------------------------------------------- */
+/*  Tokens semánticos                                                         */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Texto **atenuado pero legible** (avisos, pies, notas al margen).
+ *
+ * `TextTertiary` no sirve para texto: sobre `Background` da 2,5:1, por debajo
+ * del mínimo de 4,5:1 de las pautas de accesibilidad, y en un televisor con el
+ * contraste bajo del salón desaparece. Este gris es `systemGray2` (≈ 6:1 sobre
+ * el fondo) y sí se lee. `TextTertiary` se queda para adornos no textuales
+ * (puntos separadores, pista del interruptor apagado).
+ */
+val TextMuted = Color(0xFFAEAEB2)     // systemGray2 dark
+
+/** Verde de disponibilidad y estados correctos (alias explícito de [AccentGreen]). */
+val Success = AccentGreen
+
+/** Acento en vivo: el rojo de «AHORA» de la guía del reproductor. */
+val LiveAccent = Color(0xFFE50914)
+
+/** Texto sobre un fondo claro (botón blanco enfocado). Casi negro, no negro puro. */
+val OnLight = Color(0xFF0E0E13)
+
+/** Superficie casi blanca de los botones primarios en reposo. */
+val SurfaceBright = Color(0xFFF2F2F7)
+
+/** Fondo de tarjeta dentro de las pantallas de ajustes (un paso sobre [Surface]). */
+val SurfaceCard = Color(0xFF15151B)

@@ -69,7 +69,9 @@ fun HomeScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(Background),
-        verticalArrangement = Arrangement.spacedBy(34.dp),
+        // 28 dp: las filas se leen como un bloque y no como pantallas
+        // separadas; el héroe ya aporta su propio aire abajo.
+        verticalArrangement = Arrangement.spacedBy(28.dp),
         contentPadding = PaddingValues(bottom = 56.dp)
     ) {
         item(key = "hero") {

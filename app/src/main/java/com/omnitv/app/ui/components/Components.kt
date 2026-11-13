@@ -4,6 +4,7 @@ package com.omnitv.app.ui.components
 
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
@@ -16,12 +17,14 @@ import androidx.compose.foundation.focusable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -29,7 +32,6 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -39,6 +41,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
@@ -61,10 +64,14 @@ import coil.compose.AsyncImage
 import com.omnitv.app.R
 import com.omnitv.app.data.MediaRow
 import com.omnitv.app.data.Video
+import com.omnitv.app.ui.theme.AppRadius
+import com.omnitv.app.ui.theme.AppSpacing
 import com.omnitv.app.ui.theme.AppType
 import com.omnitv.app.ui.theme.Background
 import com.omnitv.app.ui.theme.GlassFill
 import com.omnitv.app.ui.theme.GlassFillStrong
+import com.omnitv.app.ui.theme.Surface
+import com.omnitv.app.ui.theme.SurfaceBright
 import com.omnitv.app.ui.theme.SurfaceElevated
 import com.omnitv.app.ui.theme.TextPrimary
 import com.omnitv.app.ui.theme.TextSecondary
@@ -155,9 +162,11 @@ private fun TabPill(tab: TabItem, selected: Boolean, onClick: () -> Unit) {
     Row(
         modifier = Modifier
             .graphicsLayer { scaleX = scale; scaleY = scale }
-            .clip(RoundedCornerShape(22.dp))
+            .clip(AppRadius.lg)
             .background(background)
-            .then(if (focused) Modifier.border(2.5.dp, Color.White, RoundedCornerShape(22.dp)) else Modifier)
+            // La pestaña enfocada se pinta de blanco: el anillo tiene que ser
+            // oscuro o se funde con el relleno.
+            .then(if (focused) Modifier.border(3.dp, Background.copy(alpha = 0.85f), AppRadius.lg) else Modifier)
             .clickable(onClick = onClick)
             .onFocusChanged { focused = it.isFocused }
             .padding(horizontal = 22.dp, vertical = 12.dp),
@@ -218,23 +227,29 @@ fun PillButton(
         danger && focused -> Danger
         danger -> Danger.copy(alpha = 0.22f)
         primary && focused -> Color.White
-        primary -> Color(0xFFF2F2F7)
+        primary -> SurfaceBright
         focused -> GlassFillStrong
         else -> GlassFill
     }
     val contentColor = when {
         danger && !focused -> Danger
-        primary -> Background
+        primary -> OnLight
         else -> TextPrimary
     }
+    // Solo el primario tiene relleno claro (blanco, o blanco puro al enfocar):
+    // ahí un anillo blanco no se vería y va oscuro. El resto son rellenos
+    // oscuros (vidrio o rojo), donde el anillo blanco es el que contrasta.
+    val ringColor = if (primary) Background.copy(alpha = 0.85f) else Color.White
 
     Row(
         modifier = modifier
             .height(60.dp)
             .graphicsLayer { scaleX = scale; scaleY = scale }
-            .clip(RoundedCornerShape(30.dp))
+            .clip(AppRadius.pill)
             .background(background)
-            .then(if (focused && !primary) Modifier.border(2.5.dp, Color.White.copy(alpha = 0.75f), RoundedCornerShape(30.dp)) else Modifier)
+            .then(
+                if (focused) Modifier.border(3.dp, ringColor, AppRadius.pill) else Modifier
+            )
             .clickable(onClick = onClick)
             .onFocusChanged { focused = it.isFocused }
             .padding(horizontal = 30.dp),
@@ -276,7 +291,12 @@ fun CircleIconButton(
             .graphicsLayer { scaleX = scale; scaleY = scale }
             .clip(CircleShape)
             .background(if (focused) Color.White else background)
-            .then(if (focused) Modifier.border(3.dp, Color.White, CircleShape) else Modifier)
+            // El botón enfocado es blanco, así que un anillo blanco sería
+            // invisible: el foco se marca con un halo **oscuro** por fuera.
+            .then(
+                if (focused) Modifier.border(3.dp, Background.copy(alpha = 0.85f), CircleShape)
+                else Modifier
+            )
             .clickable(onClick = onClick)
             .onFocusChanged { focused = it.isFocused },
         contentAlignment = Alignment.Center
@@ -298,9 +318,10 @@ fun CircleIconButton(
 fun Badge(text: String, modifier: Modifier = Modifier) {
     Box(
         modifier = modifier
-            .clip(RoundedCornerShape(5.dp))
+            .clip(AppRadius.xs)
+            // Relleno vertical 6 dp: con 4 la versalita de 15 sp toca los bordes
             .background(Accent)
-            .padding(horizontal = 8.dp, vertical = 4.dp)
+            .padding(horizontal = 10.dp, vertical = 6.dp)
     ) {
         Text(text, style = AppType.chip, color = Color.White)
     }
@@ -343,23 +364,27 @@ fun PosterCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier.size(260.dp, 150.dp)
 ) {
-    // Tarjeta con foco propio: escala 1.08 y borde blanco (como tvOS).
+    // Tarjeta con foco propio: escala 1.08, borde blanco y **sombra** (como
+    // tvOS). La sombra es lo que separa la tarjeta enfocada del fondo oscuro:
+    // solo con borde, en un televisor con poco contraste se pierde el relieve.
     // (tv-material es Material 2 y su Card no existe en esta versión; así no
     // dependemos de la API experimental Card de Material 3 para TV.)
     var focused by remember { mutableStateOf(false) }
     val scale by animateFloatAsState(if (focused) 1.08f else 1f, label = "cardScale")
+    val elevation by animateDpAsState(if (focused) 18.dp else 0.dp, label = "cardElevation")
     Box(
         modifier
             .graphicsLayer {
                 scaleX = scale
                 scaleY = scale
             }
-            .clip(RoundedCornerShape(12.dp))
-            .background(Color(0xFF16161C))
+            .shadow(elevation, AppRadius.md, clip = false)
+            .clip(AppRadius.md)
+            .background(Surface)
             .border(
                 width = if (focused) 3.dp else 1.dp,
                 color = if (focused) Color.White else Color.White.copy(alpha = 0.08f),
-                shape = RoundedCornerShape(12.dp)
+                shape = AppRadius.md
             )
             .onFocusChanged { focused = it.isFocused }
             .focusable()
@@ -388,7 +413,7 @@ fun PosterCard(
         Column(
             Modifier
                 .align(Alignment.BottomStart)
-                .padding(12.dp)
+                .padding(14.dp)
         ) {
             Text(
                 video.title,
@@ -415,15 +440,15 @@ private fun ProgressBar(progress: Float, modifier: Modifier = Modifier) {
     Box(
         modifier
             .fillMaxWidth()
-            .height(3.dp)
-            .clip(RoundedCornerShape(2.dp))
-            .background(Color.White.copy(alpha = 0.28f))
+            .height(5.dp)
+            .clip(AppRadius.pill)
+            .background(Color.White.copy(alpha = 0.30f))
     ) {
         Box(
             Modifier
                 .fillMaxWidth(progress.coerceIn(0f, 1f))
-                .height(3.dp)
-                .clip(RoundedCornerShape(2.dp))
+                .height(5.dp)
+                .clip(AppRadius.pill)
                 .background(Accent)
         )
     }
@@ -440,10 +465,10 @@ fun SectionRow(row: MediaRow, onOpenDetail: (Video) -> Unit, modifier: Modifier 
             row.title,
             style = AppType.sectionTitle,
             color = TextPrimary,
-            modifier = Modifier.padding(start = 48.dp, bottom = 16.dp)
+            modifier = Modifier.padding(start = AppSpacing.screenMargin, bottom = 14.dp)
         )
         LazyRow(
-            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 48.dp),
+            contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = AppSpacing.screenMargin),
             horizontalArrangement = Arrangement.spacedBy(20.dp),
             modifier = Modifier
                 .fillMaxWidth()
@@ -573,10 +598,12 @@ fun TvToggle(checked: Boolean, onCheckedChange: (Boolean) -> Unit, modifier: Mod
             .graphicsLayer { scaleX = scale; scaleY = scale }
             .width(72.dp)
             .height(40.dp)
-            .clip(RoundedCornerShape(20.dp))
-            .background(if (checked) Accent else TextTertiary)
+            .clip(AppRadius.lg)
+            // Apagado no es «invisible»: el usuario tiene que ver que existe un
+            // interruptor aunque esté en off.
+            .background(if (checked) Accent else Color.White.copy(alpha = 0.22f))
             .then(
-                if (focused) Modifier.border(3.dp, Color.White, RoundedCornerShape(20.dp))
+                if (focused) Modifier.border(3.dp, Color.White, AppRadius.lg)
                 else Modifier
             )
             .clickable { onCheckedChange(!checked) }
@@ -602,32 +629,48 @@ fun SeekBar(positionMs: Long, durationMs: Long, bufferedMs: Long, modifier: Modi
     val fraction = if (durationMs > 0) (positionMs.toFloat() / durationMs).coerceIn(0f, 1f) else 0f
     val bufferedFraction = if (durationMs > 0) (bufferedMs.toFloat() / durationMs).coerceIn(0f, 1f) else 0f
 
-    Box(modifier.height(34.dp), contentAlignment = Alignment.CenterStart) {
+    // Cápsula (no `xs`): con 8 dp de alto, un radio de 4 dp se ve como un
+    // rectángulo. El tirador marca el punto exacto de reproducción; sin él,
+    // a 3 m la barra solo indica «por aquí vas» de forma aproximada.
+    BoxWithConstraints(
+        modifier.height(34.dp),
+        contentAlignment = Alignment.CenterStart
+    ) {
+        // Se mide una sola vez y sirve para las tres capas y el tirador.
+        val trackWidth = maxWidth
+
         Box(
             Modifier
-                .fillMaxWidth()
+                .width(trackWidth)
                 .height(8.dp)
-                .clip(RoundedCornerShape(4.dp))
+                .clip(AppRadius.pill)
                 .background(Color.White.copy(alpha = 0.22f))
         )
         Box(
             Modifier
-                .fillMaxWidth(bufferedFraction)
+                .width(trackWidth * bufferedFraction)
                 .height(8.dp)
-                .clip(RoundedCornerShape(4.dp))
+                .clip(AppRadius.pill)
                 .background(Color.White.copy(alpha = 0.38f))
         )
         Box(
             Modifier
-                .fillMaxWidth(fraction)
+                .width(trackWidth * fraction)
                 .height(8.dp)
-                .clip(RoundedCornerShape(4.dp))
+                .clip(AppRadius.pill)
+                .background(Color.White)
+        )
+        // Tirador: círculo de 20 dp centrado en el extremo de lo reproducido.
+        Box(
+            Modifier
+                .offset(x = ((trackWidth - 20.dp) * fraction).coerceAtLeast(0.dp))
+                .size(20.dp)
+                .clip(CircleShape)
                 .background(Color.White)
         )
     }
 }
 
-/* -------------------------------------------------------------------------- */
 /*  Spinner de carga                                                          */
 /* -------------------------------------------------------------------------- */
 
@@ -669,9 +712,9 @@ fun SettingRow(
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp))
+            .clip(AppRadius.md)
             .background(if (highlighted) SurfaceElevated else Color.Transparent)
-            .then(if (highlighted) Modifier.border(2.dp, Color.White.copy(alpha = 0.35f), RoundedCornerShape(14.dp)) else Modifier)
+            .then(if (highlighted) Modifier.border(3.dp, Color.White.copy(alpha = 0.35f), AppRadius.md) else Modifier)
             .onFocusChanged { highlighted = it.hasFocus }
             .then(
                 if (onClick != null) {
@@ -699,5 +742,57 @@ fun SettingRow(
         }
         Spacer(Modifier.width(16.dp))
         trailing()
+    }
+}
+
+/* -------------------------------------------------------------------------- */
+/*  Chip de filtro (uno solo para toda la app)                                */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Chip de selección/atajo: sugerencias de búsqueda, filtros de plataforma,
+ * filtros de estudio y temporadas.
+ *
+ * Estaba duplicado en cuatro pantallas con tres combinaciones de relleno
+ * (18/9, 22/12, 16/9) y dos de color, así que el mismo tipo de control se veía
+ * distinto según dónde apareciera. Aquí hay uno solo: 22/12 dp de relleno,
+ * cápsula exacta, anillo de foco de 3 dp y tres estados (reposo, seleccionado,
+ * enfocado).
+ */
+@Composable
+fun TvChip(
+    text: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    selected: Boolean = false,
+    style: androidx.compose.ui.text.TextStyle = AppType.body
+) {
+    var focused by remember { mutableStateOf(false) }
+    val background = when {
+        focused -> Accent
+        selected -> GlassFillStrong
+        else -> GlassFill
+    }
+    // Sobre el azul del foco el anillo oscuro contrasta más que el blanco.
+    val ring = if (focused) Background.copy(alpha = 0.85f) else Color.Transparent
+
+    Box(
+        modifier = modifier
+            .clip(AppRadius.pill)
+            .background(background)
+            .then(if (focused) Modifier.border(3.dp, ring, AppRadius.pill) else Modifier)
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onClick
+            )
+            .onFocusChanged { focused = it.isFocused }
+            .padding(horizontal = 22.dp, vertical = 12.dp)
+    ) {
+        Text(
+            text,
+            style = style,
+            color = if (focused || selected) TextPrimary else TextSecondary
+        )
     }
 }

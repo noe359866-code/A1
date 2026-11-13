@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -44,6 +43,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
 import com.omnitv.app.ui.theme.Accent
+import com.omnitv.app.ui.theme.AppRadius
 import com.omnitv.app.ui.theme.AppType
 import com.omnitv.app.ui.theme.GlassFill
 import com.omnitv.app.ui.theme.SurfaceElevated
@@ -99,7 +99,7 @@ fun TvTextField(
 ) {
     var focused by remember { mutableStateOf(false) }
     val keyboard = LocalSoftwareKeyboardController.current
-    val shape = RoundedCornerShape(14.dp)
+    val shape = AppRadius.md
 
     Row(
         modifier = modifier
