@@ -148,6 +148,7 @@ fun SettingsScreen(onSwitchProfile: () -> Unit) {
                     StatusLine("Servidor", if (PairingServer.running.value) "Activo en ${PairingServer.localIpv4()}:8080" else "Iniciando…")
                     StatusLine("Cuenta enlazada", SettingsStore.linkedAccount.ifEmpty { "Sin enlazar" })
                     StatusLine("Addons añadidos", "${SettingsStore.customAddons.size}")
+                    StatusLine("Addons de streams", "${SettingsStore.streamAddons.size}")
                     StatusLine("APIs añadidas", "${SettingsStore.apiKeys.size}")
                     if (PairingServer.lastAction.value.isNotEmpty()) {
                         Spacer(Modifier.height(10.dp))

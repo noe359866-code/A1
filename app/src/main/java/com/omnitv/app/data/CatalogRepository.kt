@@ -479,22 +479,24 @@ object CatalogRepository {
 
     /** Convierte un episodio en un [Video] transitorio reproducible. */
     fun episodeVideo(parent: Video, episode: Episode): Video {
-        // Episodio remoto sin stream → flujo demo (los addons de catálogo
-        // no incluyen enlaces de reproducción)
+        // Episodio remoto sin stream propio: se conserva el id Stremio del
+        // episodio para que «Omni Streams» (StreamHub) pida los enlaces a
+        // los proyectos externos; si nadie entrega, el reproductor usa el
+        // flujo demo etiquetado
         if (episode.videoUrl.isEmpty()) {
-            val demo = demoStreamFor("${parent.id}~${episode.id}")
             return parent.copy(
                 id = "${parent.id}~${episode.id}",
                 title = "${parent.title} · ${episode.title}",
                 description = episode.description,
                 cardUrl = episode.thumbnailUrl,
                 durationMinutes = episode.durationMinutes,
-                videoUrl = demo,
+                videoUrl = "",
                 streamFormat = StreamFormat.MP4,
-                sources = listOf(StreamSource("Servidor demo 1", demo, StreamFormat.MP4)),
-                badge = "DEMO",
+                sources = emptyList(),
+                badge = null,
                 progress = 0f,
-                episodes = emptyList()
+                episodes = emptyList(),
+                streamId = episode.streamId ?: "${parent.id}:${episode.season}:${episode.number}"
             )
         }
         val mirror = episode.videoUrl.replace(VID, VID_ALT)

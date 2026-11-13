@@ -59,6 +59,14 @@ object SettingsStore {
     var customAddons by mutableStateOf<List<String>>(emptyList())
         private set
 
+    /**
+     * URLs de addons/proyectos de STREAMS añadidos desde el panel
+     * (p. ej. StreamFlix Reborn, Torrentio, Comet…). El addon interno
+     * «Omni Streams» les pide enlaces de reproducción.
+     */
+    var streamAddons by mutableStateOf<List<String>>(emptyList())
+        private set
+
     /** APIs añadidas desde el panel (nombre → clave). */
     var apiKeys by mutableStateOf<Map<String, String>>(emptyMap())
         private set
@@ -81,6 +89,7 @@ object SettingsStore {
             }
             linkedAccount = p.getString("linkedAccount", "") ?: ""
             customAddons = parseStringList(p.getString("customAddons", "[]"))
+            streamAddons = parseStringList(p.getString("streamAddons", "[]"))
             apiKeys = parseStringMap(p.getString("apiKeys", "{}"))
         }
     }
@@ -108,6 +117,15 @@ object SettingsStore {
         val cleaned = urls.map { it.trim() }.filter { it.startsWith("http") }.distinct()
         update { putString("customAddons", org.json.JSONArray(cleaned).toString()) }.also {
             customAddons = cleaned
+            revision++
+        }
+    }
+
+    /** Guarda los addons/proyectos de streams añadidos desde el panel. */
+    fun setStreamAddons(urls: List<String>) {
+        val cleaned = urls.map { it.trim() }.filter { it.startsWith("http") }.distinct()
+        update { putString("streamAddons", org.json.JSONArray(cleaned).toString()) }.also {
+            streamAddons = cleaned
             revision++
         }
     }

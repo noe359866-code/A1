@@ -73,7 +73,9 @@ data class Video(
     /** Nombre del addon de origen ("Cinemeta" / "Nuvio"). */
     val source: String = "",
     /** Tipo Stremio remoto ("movie"/"series") para pedir la ficha completa. */
-    val remoteType: String? = null
+    val remoteType: String? = null,
+    /** Id Stremio del stream (`tt123:1:2` / `tmdb:123:1:2` en episodios). */
+    val streamId: String? = null
 ) {
     val durationLabel: String
         get() = if (durationMinutes >= 60) {

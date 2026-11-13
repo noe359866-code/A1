@@ -166,6 +166,28 @@ Al elegir una plataforma se carga su **catálogo real**:
   meta de Cinemeta. Filtros *Todas / Películas / Series*.
 - Perfiles infantiles: sección no disponible (catálogo curado local).
 
+## 🎬 Addon interno de streams — «Omni Streams»
+
+El addon **«Omni Streams»** (`data/StreamHub.kt`) tiene una única misión:
+**entregar enlaces de reproducción de otros proyectos** (StreamFlix Reborn
+y afines, Torrentio, Comet, MediaFusion…), igual que los addons de streams
+de Stremio. Él no extrae contenido: solo retransmite lo que los proyectos
+externos entregan.
+
+- **Protocolo**: `GET {base}/stream/{tipo}/{id}.json` (forma Stremio) o
+  `GET {base}/stream/{tipo}/{id}` (forma simple) — documentado en
+  [`docs/STREAM-ADDON-PROTOCOL.md`](docs/STREAM-ADDON-PROTOCOL.md) para
+  que cualquier proyecto/fork pueda entregar sus streams.
+- **Configuración**: Ajustes → Vincular → «🎬 Añadir addons de streams»
+  (o panel web del QR), una URL por línea.
+- **Reproducción**: al abrir un título remoto, «Omni Streams» consulta en
+  paralelo todos los proyectos (10 s máx.), normaliza y deduplica enlaces
+  y los pasa al **reproductor multi-servidor** (menú de servidores con el
+  nombre del proyecto, fallback automático si un enlace cae). Si nadie
+  entrega enlaces → flujo *demo* etiquetado (chip `DEMO`).
+- Soporta `.mp4` y `.m3u8` (HLS); los enlaces solo-torrent (`infoHash`) se
+  ignoran de momento.
+
 ## 🔗 Vinculación por QR (panel web embebido)
 
 La pestaña **Ajustes → «Vincular cuenta · Addons · APIs»** muestra un **QR**

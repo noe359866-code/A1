@@ -118,7 +118,7 @@ object PairingServer {
                 method == "GET" && path == "/status" -> {
                     respond(
                         s, "200 OK",
-                        """{"account":${json(SettingsStore.linkedAccount)},"addons":${SettingsStore.customAddons.size},"apis":${SettingsStore.apiKeys.size}}""",
+                        """{"account":${json(SettingsStore.linkedAccount)},"addons":${SettingsStore.customAddons.size},"streams":${SettingsStore.streamAddons.size},"apis":${SettingsStore.apiKeys.size}}""",
                         contentType = "application/json; charset=utf-8"
                     )
                 }
@@ -133,6 +133,9 @@ object PairingServer {
                     form["addons"]?.let { text ->
                         SettingsStore.setCustomAddons(text.lines().map { it.trim() }.filter { it.startsWith("http") })
                     }
+                    form["streamAddons"]?.let { text ->
+                        SettingsStore.setStreamAddons(text.lines().map { it.trim() }.filter { it.startsWith("http") })
+                    }
                     form["apis"]?.let { text ->
                         val keys = text.lines()
                             .map { it.trim() }
@@ -143,7 +146,7 @@ object PairingServer {
                             }
                         SettingsStore.setApiKeys(keys)
                     }
-                    lastAction.value = "✅ Configuración guardada desde el panel web (addons: ${SettingsStore.customAddons.size}, APIs: ${SettingsStore.apiKeys.size})"
+                    lastAction.value = "✅ Configuración guardada desde el panel web (addons: ${SettingsStore.customAddons.size}, streams: ${SettingsStore.streamAddons.size}, APIs: ${SettingsStore.apiKeys.size})"
                     respond(
                         s, "200 OK",
                         portalHtml(
@@ -213,6 +216,7 @@ object PairingServer {
                <input name="code" placeholder="Ej: ${esc(SettingsStore.pairingCode)}" required></label>"""
         }
         val addonsValue = esc(SettingsStore.customAddons.joinToString("\n"))
+        val streamsValue = esc(SettingsStore.streamAddons.joinToString("\n"))
         val apisValue = esc(SettingsStore.apiKeys.entries.joinToString("\n") { "${it.key}=${it.value}" })
 
         return """
@@ -258,6 +262,15 @@ object PairingServer {
         <textarea name="addons" placeholder="https://v3-cinemeta.strem.io/manifest.json">$addonsValue</textarea>
       </label>
       <p class="hint">Cualquier addon de Stremio compatible (catálogo/meta). Aparecerá como filas nuevas en el Inicio.</p>
+    </div>
+    <div class="card">
+      <h2>🎬 Añadir addons de streams</h2>
+      <label>Proyectos que entregan enlaces de reproducción (una URL por línea)
+        <textarea name="streamAddons" placeholder="https://tu-proyecto.ejemplo">$streamsValue</textarea>
+      </label>
+      <p class="hint">El addon interno «Omni Streams» les pide los streams con el protocolo
+        <code>stream/{tipo}/{id}</code> (Stremio). Compatible con proyectos tipo
+        StreamFlix Reborn, Torrentio, Comet… que expongan su API de enlaces.</p>
     </div>
     <div class="card">
       <h2>🔑 Añadir APIs</h2>

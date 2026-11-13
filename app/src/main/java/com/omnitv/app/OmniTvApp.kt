@@ -24,6 +24,7 @@ import com.omnitv.app.data.ProfileStore
 import com.omnitv.app.data.Providers
 import com.omnitv.app.data.RemoteCatalog
 import com.omnitv.app.data.Studios
+import com.omnitv.app.data.StreamHub
 import com.omnitv.app.data.StremioClient
 import com.omnitv.app.data.Video
 import com.omnitv.app.ui.theme.AppType
@@ -248,21 +249,45 @@ fun OmniTvApp() {
                 arguments = listOf(navArgument("videoId") { type = NavType.StringType })
             ) { entry ->
                 val videoId = entry.arguments?.getString("videoId").orEmpty()
-                val video = CatalogRepository.find(videoId)
-                if (video != null) {
-                    // Los títulos del catálogo real no traen streams → flujo demo
-                    PlayerScreen(
-                        video = CatalogRepository.withDemoFallback(video),
-                        onBack = { navController.popBackStack() },
-                        onPlayNext = { next ->
-                            // Auto-next: sustituye el reproductor actual por el siguiente
-                            navController.navigate(Routes.player(next.id)) {
-                                popUpTo(Routes.PLAYER) { inclusive = true }
+                val raw = remember(videoId) { CatalogRepository.find(videoId) }
+                // Los títulos remotos se resuelven con el addon interno
+                // «Omni Streams» (proyectos externos); si nadie entrega
+                // enlaces, se reproduce el flujo demo etiquetado
+                var resolved by remember {
+                    mutableStateOf(if (raw != null && !raw.isRemote) raw else null)
+                }
+                when {
+                    raw == null -> LaunchedEffect(Unit) { navController.popBackStack() }
+                    resolved == null -> {
+                        Box(Modifier.fillMaxSize().background(Background), contentAlignment = Alignment.Center) {
+                            Text("Buscando enlaces…", style = AppType.metadata, color = TextSecondary)
+                        }
+                        LaunchedEffect(videoId) {
+                            val streams = StreamHub.resolve(raw)
+                            resolved = if (streams.isNotEmpty()) {
+                                raw.copy(
+                                    sources = streams,
+                                    videoUrl = streams.first().url,
+                                    streamFormat = streams.first().format,
+                                    badge = null
+                                )
+                            } else {
+                                CatalogRepository.withDemoFallback(raw)
                             }
                         }
-                    )
-                } else {
-                    LaunchedEffect(Unit) { navController.popBackStack() }
+                    }
+                    else -> {
+                        PlayerScreen(
+                            video = resolved!!,
+                            onBack = { navController.popBackStack() },
+                            onPlayNext = { next ->
+                                // Auto-next: sustituye el reproductor actual por el siguiente
+                                navController.navigate(Routes.player(next.id)) {
+                                    popUpTo(Routes.PLAYER) { inclusive = true }
+                                }
+                            }
+                        )
+                    }
                 }
             }
         }
