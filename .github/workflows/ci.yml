@@ -96,7 +96,7 @@ jobs:
               except FileNotFoundError:
                   continue
               errors = [l for l in lines if re.match(r'^(e: |FAILURE:|\* What went wrong|Execution failed)', l)]
-              for line in errors[:12]:
+              for line in errors[:40]:
                   note(line)
               for line in [l for l in lines if 'FAILED' in l][:8]:
                   note(line)
