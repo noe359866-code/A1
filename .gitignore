@@ -1,0 +1,24 @@
+# Gradle
+.gradle/
+build/
+local.properties
+
+# Android Studio / IntelliJ
+*.iml
+.idea/
+captures/
+.externalNativeBuild/
+.cxx/
+
+# Salidas
+*.apk
+*.aab
+*.ap_
+*.dex
+bin/
+gen/
+out/
+.navigation/
+
+# Sistema
+.DS_Store

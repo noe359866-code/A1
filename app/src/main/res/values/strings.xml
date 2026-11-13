@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Omni TV</string>
+    <string name="app_tagline">Seis pantallas, una experiencia</string>
+
+    <!-- Descripciones de accesibilidad -->
+    <string name="cd_play">Reproducir</string>
+    <string name="cd_pause">Pausar</string>
+    <string name="cd_back">Volver</string>
+    <string name="cd_search">Buscar</string>
+    <string name="cd_settings">Ajustes</string>
+    <string name="cd_poster">Cartel del título</string>
+</resources>
