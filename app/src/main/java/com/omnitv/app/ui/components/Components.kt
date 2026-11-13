@@ -70,6 +70,7 @@ import com.omnitv.app.ui.theme.AppType
 import com.omnitv.app.ui.theme.Background
 import com.omnitv.app.ui.theme.GlassFill
 import com.omnitv.app.ui.theme.GlassFillStrong
+import com.omnitv.app.ui.theme.OnLight
 import com.omnitv.app.ui.theme.Surface
 import com.omnitv.app.ui.theme.SurfaceBright
 import com.omnitv.app.ui.theme.SurfaceElevated
