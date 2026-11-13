@@ -63,7 +63,7 @@ import androidx.compose.material.Text
 fun SearchScreen(onOpenDetail: (Video) -> Unit) {
     var query by rememberSaveable { mutableStateOf("") }
     val kidsOnly = ProfileStore.currentProfile?.isKids == true
-    val localResults = remember(query, kidsOnly) { CatalogRepository.search(query, kidsOnly) }
+    val localResults = remember(query, kidsOnly) { CatalogRepository.search(query, kidsOnly = kidsOnly) }
 
     // Búsqueda remota (catálogo real) con rebote
     var remoteResults by remember { mutableStateOf<List<Video>>(emptyList()) }

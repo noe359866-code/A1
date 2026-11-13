@@ -3,6 +3,7 @@
 package com.omnitv.app.ui.components
 
 import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
@@ -52,8 +53,6 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.Canvas
-import androidx.tv.material.Card
-import androidx.tv.material.CardDefaults
 import androidx.compose.material.Text
 import coil.compose.AsyncImage
 import com.omnitv.app.R
@@ -339,51 +338,69 @@ fun PosterCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier.size(248.dp, 140.dp)
 ) {
-    Card(
-        onClick = onClick,
-        modifier = modifier,
-        shape = RoundedCornerShape(12.dp),
-        scale = CardDefaults.scale(focusedScale = 1.08f)
+    // Tarjeta con foco propio: escala 1.08 y borde blanco (como tvOS).
+    // (tv-material es Material 2 y su Card no existe en esta versión; así no
+    // dependemos de la API experimental Card de Material 3 para TV.)
+    var focused by remember { mutableStateOf(false) }
+    val scale by animateFloatAsState(if (focused) 1.08f else 1f, label = "cardScale")
+    Box(
+        modifier
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+            }
+            .clip(RoundedCornerShape(12.dp))
+            .background(Color(0xFF16161C))
+            .border(
+                width = if (focused) 2.dp else 1.dp,
+                color = if (focused) Color.White else Color.White.copy(alpha = 0.08f),
+                shape = RoundedCornerShape(12.dp)
+            )
+            .onFocusChanged { focused = it.isFocused }
+            .focusable()
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onClick
+            )
     ) {
-        Box(Modifier.fillMaxSize()) {
-            AsyncImage(
-                model = video.cardUrl,
-                contentDescription = video.title,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize()
-            )
-            Box(
-                Modifier
-                    .fillMaxSize()
-                    .background(
-                        Brush.verticalGradient(
-                            0.5f to Color.Transparent,
-                            1f to Color.Black.copy(alpha = 0.72f)
-                        )
+        AsyncImage(
+            model = video.cardUrl,
+            contentDescription = video.title,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier.fillMaxSize()
+        )
+        Box(
+            Modifier
+                .fillMaxSize()
+                .background(
+                    Brush.verticalGradient(
+                        0.5f to Color.Transparent,
+                        1f to Color.Black.copy(alpha = 0.72f)
                     )
-            )
-            Column(
-                Modifier
-                    .align(Alignment.BottomStart)
-                    .padding(12.dp)
-            ) {
-                Text(
-                    video.title,
-                    style = AppType.cardTitle,
-                    color = TextPrimary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
                 )
-                Spacer(Modifier.height(6.dp))
-                if (video.progress > 0f) {
-                    ProgressBar(video.progress)
-                } else {
-                    Text(video.durationLabel, style = AppType.metadata, color = TextSecondary)
-                }
+        )
+        Column(
+            Modifier
+                .align(Alignment.BottomStart)
+                .padding(12.dp)
+        ) {
+            Text(
+                video.title,
+                style = AppType.cardTitle,
+                color = TextPrimary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Spacer(Modifier.height(6.dp))
+            if (video.progress > 0f) {
+                ProgressBar(video.progress)
+            } else if (video.durationMinutes > 0) {
+                Text(video.durationLabel, style = AppType.metadata, color = TextSecondary)
             }
-            video.badge?.let {
-                Badge(it, Modifier.align(Alignment.TopStart).padding(10.dp))
-            }
+        }
+        video.badge?.let {
+            Badge(it, Modifier.align(Alignment.TopStart).padding(10.dp))
         }
     }
 }

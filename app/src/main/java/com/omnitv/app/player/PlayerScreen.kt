@@ -7,6 +7,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -558,10 +559,16 @@ fun PlayerScreen(
             update = { view ->
                 view.player = player
                 view.resizeMode = aspectMode.resizeMode
-                // 0f = relación natural del vídeo
-                view.setAspectRatio(if (aspectMode.ratio > 0f) aspectMode.ratio else 0f) // 0f = natural
             },
-            modifier = Modifier.fillMaxSize()
+            // Las relaciones fijas (16:9, 4:3, 21:9) recortan con aspectRatio;
+            // los modos Ajustar/Llenar/Zoom dejan la relación natural del vídeo.
+            modifier = if (aspectMode.ratio > 0f) {
+                Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(aspectMode.ratio)
+            } else {
+                Modifier.fillMaxSize()
+            }
         )
 
         // Botón central grande al pausar (como Xuper TV)

@@ -407,6 +407,24 @@ object CatalogRepository {
             catalog
         }
 
+    /**
+     * Búsqueda local (título, géneros, descripción y reparto) sobre el
+     * catálogo disponible para el perfil. Los perfiles infantiles solo ven y
+     * buscan contenido TP/7+ ([catalogFor]).
+     */
+    fun search(query: String, kidsOnly: Boolean = false): List<Video> {
+        val q = query.trim()
+        if (q.isEmpty()) return emptyList()
+        return catalog
+            .filter { video -> !kidsOnly || video.certification == "TP" || video.certification == "7+" }
+            .filter { video ->
+                video.title.contains(q, ignoreCase = true) ||
+                    video.genres.any { it.contains(q, ignoreCase = true) } ||
+                    video.description.contains(q, ignoreCase = true) ||
+                    video.cast.any { it.contains(q, ignoreCase = true) }
+            }
+    }
+
     fun featuredFor(profile: Profile?): Video =
         if (profile?.isKids == true) {
             catalog.first { it.id == "big-buck-bunny" }
