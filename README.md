@@ -146,6 +146,25 @@ La app consume **catálogos reales** con el protocolo de addons de Stremio
   streams (p. ej. Torrentio). Los perfiles infantiles solo ven el catálogo
   local curado (los addons no dan clasificación por edades).
 
+## 📺 Plataformas (como «Browse by Provider» de cinejoy.pk)
+
+Pestaña **Plataformas** inspirada en el *Browse by Provider* de
+[cinejoy.pk](https://cinejoy.pk/): rejilla con las **17 plataformas**
+(Netflix, Amazon Prime Video, Disney+, Apple TV+, Hulu, HBO Max, Paramount+,
+Peacock, Crunchyroll, Starz, AMC+, MGM+, YouTube Premium, YouTube, Tubi TV,
+Pluto TV) con sus logos (CDN público de TMDB, `image.tmdb.org`).
+
+Al elegir una plataforma se carga su **catálogo real**:
+
+- **Películas por plataforma** desde `https://cinejoy.pk/provider/{id}`
+  (parser tolerante del HTML del servidor).
+- **Películas y series** de Netflix, Disney+ y Prime Video desde los
+  catálogos del addon **Nuvio** (`netflix-movies`, `disney-plus-series`, …).
+- Los títulos (`tmdb:{id}`) se enriquecen con `meta/{type}/tmdb:{id}` de
+  Nuvio (reparto, géneros, clasificación por edades) y sus episodios con la
+  meta de Cinemeta. Filtros *Todas / Películas / Series*.
+- Perfiles infantiles: sección no disponible (catálogo curado local).
+
 ## 📁 Estructura del proyecto
 
 ```

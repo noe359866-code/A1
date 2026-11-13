@@ -135,7 +135,7 @@ object StremioClient {
             year = year,
             durationMinutes = runtime,
             rating = rating,
-            certification = "", // sin dato en los catálogos
+            certification = meta.optString("certification", meta.optString("ageRating", "")),
             quality = "HD",
             genres = genres,
             videoUrl = "", // sin stream: el reproductor usa la demo con aviso

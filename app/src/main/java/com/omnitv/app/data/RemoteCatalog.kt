@@ -96,15 +96,62 @@ object RemoteCatalog {
     }
 
     /**
-     * Ficha completa de un título remoto (episodios, reparto) desde Cinemeta
-     * o Nuvio según el origen; actualiza el caché.
+     * Ficha completa de un título remoto (episodios, reparto):
+     * - ids `tt…` → meta de Cinemeta/Nuvio;
+     * - ids `tmdb:…` (cinejoy.pk) → meta de Nuvio, que resuelve el canónico.
+     * Los episodios (`videos[]`) se completan desde Cinemeta cuando existen.
+     * El caché conserva tanto el id canónico como el id de navegación.
      */
     suspend fun fetchDetail(video: Video): Video? {
-        val base = StremioClient.baseFor(video.source)
         val type = video.remoteType ?: return null
+        val base = if (video.id.startsWith("tmdb:")) {
+            StremioClient.NUVIO
+        } else {
+            StremioClient.baseFor(video.source)
+        }
         val meta = StremioClient.fetchMeta(base, type, video.id) ?: return null
-        val full = StremioClient.parseVideo(meta, video.source)
+        var full = StremioClient.parseVideo(meta, video.source)
+
+        // Episodios reales desde Cinemeta (su meta trae videos[] por temporada)
+        if (full.episodes.isEmpty() && full.id.startsWith("tt")) {
+            StremioClient.fetchMeta(StremioClient.CINEMETA, type, full.id)?.let { cinemetaMeta ->
+                val enriched = StremioClient.parseVideo(cinemetaMeta, full.source)
+                if (enriched.episodes.isNotEmpty()) {
+                    full = full.copy(
+                        episodes = enriched.episodes,
+                        cast = full.cast.ifEmpty { enriched.cast }
+                    )
+                }
+            }
+        }
+
         CatalogRepository.registerRemote(full)
-        return full
+        val stable = full.copy(id = video.id) // conservar el id con el que se navegó
+        CatalogRepository.registerRemote(stable)
+        return stable
+    }
+
+    /**
+     * Catálogo de una plataforma («Plataformas»): títulos reales de
+     * cinejoy.pk + catálogos Nuvio de la plataforma (Netflix, Disney+,
+     * Prime Video) cuando existen.
+     */
+    suspend fun fetchProvider(provider: StreamingProvider): List<Video> {
+        val scraped = CinejoyClient.fetchProvider(provider.id)
+        val nuvio = coroutineScope {
+            listOfNotNull(provider.nuvioMoviesCatalog, provider.nuvioSeriesCatalog)
+                .map { catalog ->
+                    async {
+                        val type = if ("series" in catalog) "series" else "movie"
+                        StremioClient.fetchCatalog(StremioClient.NUVIO, type, catalog)
+                            .map { StremioClient.parseVideo(it, StremioClient.NUVIO_NAME) }
+                    }
+                }
+                .awaitAll()
+                .flatten()
+        }
+        return (scraped + nuvio)
+            .distinctBy { it.id }
+            .also { list -> list.forEach { CatalogRepository.registerRemote(it) } }
     }
 }

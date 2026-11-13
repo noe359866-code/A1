@@ -21,6 +21,7 @@ import androidx.navigation.navArgument
 import androidx.tv.material.Text
 import com.omnitv.app.data.CatalogRepository
 import com.omnitv.app.data.ProfileStore
+import com.omnitv.app.data.Providers
 import com.omnitv.app.data.RemoteCatalog
 import com.omnitv.app.data.StremioClient
 import com.omnitv.app.data.Video
@@ -36,6 +37,8 @@ import com.omnitv.app.ui.screens.EditProfileScreen
 import com.omnitv.app.ui.screens.HomeScreen
 import com.omnitv.app.ui.screens.ManageProfilesScreen
 import com.omnitv.app.ui.screens.MoviesScreen
+import com.omnitv.app.ui.screens.PlatformCatalogScreen
+import com.omnitv.app.ui.screens.PlataformasScreen
 import com.omnitv.app.ui.screens.ProfileSelectScreen
 import com.omnitv.app.ui.screens.SearchScreen
 import com.omnitv.app.ui.screens.SettingsScreen
@@ -47,19 +50,23 @@ object Routes {
     const val EDIT_PROFILE = "editProfile/{profileId}"
     const val HOME = "home"
     const val MOVIES = "movies"
+    const val PLATFORMS = "platforms"
     const val SEARCH = "search"
     const val SETTINGS = "settings"
     const val DETAIL = "detail/{videoId}"
     const val PLAYER = "player/{videoId}"
+    const val PLATFORM = "platform/{providerId}"
 
     fun editProfile(profileId: String) = "editProfile/$profileId"
     fun detail(videoId: String) = "detail/$videoId"
     fun player(videoId: String) = "player/$videoId"
+    fun platform(providerId: Int) = "platform/$providerId"
 }
 
 private val appTabs = listOf(
     TabItem("Inicio", Routes.HOME, R.drawable.ic_home),
     TabItem("Películas", Routes.MOVIES, R.drawable.ic_film),
+    TabItem("Plataformas", Routes.PLATFORMS, R.drawable.ic_platforms),
     TabItem("Buscar", Routes.SEARCH, R.drawable.ic_search),
     TabItem("Ajustes", Routes.SETTINGS, R.drawable.ic_settings)
 )
@@ -143,6 +150,29 @@ fun OmniTvApp() {
                     SearchScreen(
                         onOpenDetail = { navController.navigate(Routes.detail(it.id.substringBefore('~'))) }
                     )
+                }
+            }
+            composable(Routes.PLATFORMS) {
+                TvScaffold(appTabs, currentRoute, navController::selectTab, trailing = profileBadge) {
+                    PlataformasScreen(
+                        onOpenProvider = { navController.navigate(Routes.platform(it.id)) }
+                    )
+                }
+            }
+            composable(
+                route = Routes.PLATFORM,
+                arguments = listOf(navArgument("providerId") { type = NavType.IntType })
+            ) { entry ->
+                val providerId = entry.arguments?.getInt("providerId") ?: -1
+                val provider = Providers.byId(providerId)
+                if (provider != null) {
+                    PlatformCatalogScreen(
+                        provider = provider,
+                        onBack = { navController.popBackStack() },
+                        onOpenDetail = { navController.navigate(Routes.detail(it.id)) }
+                    )
+                } else {
+                    LaunchedEffect(Unit) { navController.popBackStack() }
                 }
             }
             composable(Routes.SETTINGS) {
