@@ -8,7 +8,9 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.unit.dp
 import com.omnitv.app.data.CatalogRepository
 import com.omnitv.app.data.ProfileStore
@@ -19,6 +21,7 @@ import com.omnitv.app.data.StreamingProvider
 import com.omnitv.app.data.Video
 import com.omnitv.app.ui.components.HeroBanner
 import com.omnitv.app.ui.components.OnlyOnSection
+import com.omnitv.app.ui.components.RequestTvFocus
 import com.omnitv.app.ui.components.SectionRow
 import com.omnitv.app.ui.components.StudioStripSection
 import com.omnitv.app.ui.theme.Background
@@ -57,6 +60,11 @@ fun HomeScreen(
         RemoteCatalog.featured.value ?: CatalogRepository.featuredFor(profile)
     }
 
+    // Foco inicial en «Reproducir» del héroe: con el D-pad, arrancar en la
+    // barra de pestañas obliga a bajar por toda la barra antes de ver algo.
+    val heroFocus = remember { FocusRequester() }
+    RequestTvFocus(heroFocus, key = featured.id)
+
     LazyColumn(
         modifier = Modifier
             .fillMaxSize()
@@ -68,7 +76,8 @@ fun HomeScreen(
             HeroBanner(
                 video = featured,
                 onPlay = { onPlay(featured) },
-                onInfo = { onOpenDetail(featured) }
+                onInfo = { onOpenDetail(featured) },
+                playFocusRequester = heroFocus
             )
         }
         items(rows.take(2), key = { it.title }) { row ->

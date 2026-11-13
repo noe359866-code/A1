@@ -3,7 +3,6 @@ package com.omnitv.app.ui.screens
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.focusable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -51,7 +50,6 @@ import com.omnitv.app.data.Video
 import com.omnitv.app.data.VideoType
 import com.omnitv.app.data.Providers
 import com.omnitv.app.ui.components.CircleIconButton
-import com.omnitv.app.ui.components.PillButton
 import com.omnitv.app.ui.components.PosterCard
 import com.omnitv.app.ui.components.StudioTile
 import com.omnitv.app.ui.theme.Accent
@@ -278,7 +276,7 @@ fun PlatformCatalogScreen(
                 }
             } else {
                 LazyVerticalGrid(
-                    columns = GridCells.Fixed(4),
+                    columns = GridCells.Fixed(5),
                     contentPadding = PaddingValues(bottom = 56.dp),
                     horizontalArrangement = Arrangement.spacedBy(20.dp),
                     verticalArrangement = Arrangement.spacedBy(24.dp)
@@ -300,7 +298,7 @@ fun PlatformCatalogScreen(
             onClick = onBack,
             modifier = Modifier
                 .align(Alignment.TopStart)
-                .padding(28.dp)
+                .padding(48.dp)
         )
     }
 }
@@ -335,7 +333,7 @@ private fun FilterChip(text: String, selected: Boolean, onClick: () -> Unit) {
             style = androidx.compose.ui.text.TextStyle(
                 fontFamily = androidx.compose.ui.text.font.FontFamily.SansSerif,
                 fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
-                fontSize = 13.sp
+                fontSize = 17.sp
             ),
             color = TextPrimary
         )

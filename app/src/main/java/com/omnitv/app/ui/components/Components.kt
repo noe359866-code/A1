@@ -39,6 +39,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.graphics.Brush
@@ -47,6 +49,7 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -131,8 +134,8 @@ fun TopTabBar(
         Box(
             Modifier
                 .fillMaxWidth()
-                .height(1.dp)
-                .background(Color.White.copy(alpha = 0.07f))
+                .height(2.dp)
+                .background(Color.White.copy(alpha = 0.10f))
         )
     }
 }
@@ -152,20 +155,21 @@ private fun TabPill(tab: TabItem, selected: Boolean, onClick: () -> Unit) {
     Row(
         modifier = Modifier
             .graphicsLayer { scaleX = scale; scaleY = scale }
-            .clip(RoundedCornerShape(19.dp))
+            .clip(RoundedCornerShape(22.dp))
             .background(background)
+            .then(if (focused) Modifier.border(2.5.dp, Color.White, RoundedCornerShape(22.dp)) else Modifier)
             .clickable(onClick = onClick)
             .onFocusChanged { focused = it.isFocused }
-            .padding(horizontal = 20.dp, vertical = 10.dp),
+            .padding(horizontal = 22.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Image(
             painter = painterResource(tab.iconRes),
             contentDescription = null,
-            modifier = Modifier.size(16.dp),
+            modifier = Modifier.size(22.dp),
             colorFilter = androidx.compose.ui.graphics.ColorFilter.tint(content)
         )
-        Spacer(Modifier.width(8.dp))
+        Spacer(Modifier.width(10.dp))
         Text(tab.label, style = AppType.tab, color = content)
     }
 }
@@ -226,14 +230,14 @@ fun PillButton(
 
     Row(
         modifier = modifier
-            .height(50.dp)
+            .height(60.dp)
             .graphicsLayer { scaleX = scale; scaleY = scale }
-            .clip(RoundedCornerShape(25.dp))
+            .clip(RoundedCornerShape(30.dp))
             .background(background)
-            .then(if (focused && !primary) Modifier.border(1.5.dp, Color.White.copy(alpha = 0.6f), RoundedCornerShape(25.dp)) else Modifier)
+            .then(if (focused && !primary) Modifier.border(2.5.dp, Color.White.copy(alpha = 0.75f), RoundedCornerShape(30.dp)) else Modifier)
             .clickable(onClick = onClick)
             .onFocusChanged { focused = it.isFocused }
-            .padding(horizontal = 26.dp),
+            .padding(horizontal = 30.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         if (iconRes != null) {
@@ -272,6 +276,7 @@ fun CircleIconButton(
             .graphicsLayer { scaleX = scale; scaleY = scale }
             .clip(CircleShape)
             .background(if (focused) Color.White else background)
+            .then(if (focused) Modifier.border(3.dp, Color.White, CircleShape) else Modifier)
             .clickable(onClick = onClick)
             .onFocusChanged { focused = it.isFocused },
         contentAlignment = Alignment.Center
@@ -336,7 +341,7 @@ fun MetaLine(video: Video, modifier: Modifier = Modifier) {
 fun PosterCard(
     video: Video,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier.size(248.dp, 140.dp)
+    modifier: Modifier = Modifier.size(260.dp, 150.dp)
 ) {
     // Tarjeta con foco propio: escala 1.08 y borde blanco (como tvOS).
     // (tv-material es Material 2 y su Card no existe en esta versión; así no
@@ -352,7 +357,7 @@ fun PosterCard(
             .clip(RoundedCornerShape(12.dp))
             .background(Color(0xFF16161C))
             .border(
-                width = if (focused) 2.dp else 1.dp,
+                width = if (focused) 3.dp else 1.dp,
                 color = if (focused) Color.White else Color.White.copy(alpha = 0.08f),
                 shape = RoundedCornerShape(12.dp)
             )
@@ -442,6 +447,9 @@ fun SectionRow(row: MediaRow, onOpenDetail: (Video) -> Unit, modifier: Modifier 
             horizontalArrangement = Arrangement.spacedBy(20.dp),
             modifier = Modifier
                 .fillMaxWidth()
+                // `focusRestorer` devuelve el foco a la última tarjeta visitada
+                // al volver a la fila; el desplazamiento al elemento enfocado
+                // ya lo hace LazyRow por su cuenta.
                 .focusRestorer()
         ) {
             items(row.items, key = { it.id }) { video ->
@@ -460,9 +468,13 @@ fun HeroBanner(
     video: Video,
     onPlay: () -> Unit,
     onInfo: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    playFocusRequester: FocusRequester? = null
 ) {
-    Box(modifier.fillMaxWidth().height(470.dp)) {
+    // Alto proporcional (60 % de la pantalla, hasta 470 dp): en un lienzo de
+    // 960×540 dp, 470 dp fijos se comen casi todo el primer pantallazo.
+    val heroHeight = (LocalConfiguration.current.screenHeightDp * 0.60f).dp.coerceAtMost(470.dp)
+    Box(modifier.fillMaxWidth().height(heroHeight)) {
         AsyncImage(
             model = video.backdropUrl,
             contentDescription = null,
@@ -529,7 +541,12 @@ fun HeroBanner(
                     text = "Reproducir",
                     iconRes = R.drawable.ic_play,
                     primary = true,
-                    onClick = onPlay
+                    onClick = onPlay,
+                    modifier = if (playFocusRequester != null) {
+                        Modifier.focusRequester(playFocusRequester)
+                    } else {
+                        Modifier
+                    }
                 )
                 PillButton(
                     text = "Más información",
@@ -554,12 +571,12 @@ fun TvToggle(checked: Boolean, onCheckedChange: (Boolean) -> Unit, modifier: Mod
     Box(
         modifier = modifier
             .graphicsLayer { scaleX = scale; scaleY = scale }
-            .width(52.dp)
-            .height(30.dp)
-            .clip(RoundedCornerShape(15.dp))
+            .width(72.dp)
+            .height(40.dp)
+            .clip(RoundedCornerShape(20.dp))
             .background(if (checked) Accent else TextTertiary)
             .then(
-                if (focused) Modifier.border(2.dp, Color.White, RoundedCornerShape(15.dp))
+                if (focused) Modifier.border(3.dp, Color.White, RoundedCornerShape(20.dp))
                 else Modifier
             )
             .clickable { onCheckedChange(!checked) }
@@ -568,8 +585,8 @@ fun TvToggle(checked: Boolean, onCheckedChange: (Boolean) -> Unit, modifier: Mod
         Box(
             Modifier
                 .align(if (checked) Alignment.CenterEnd else Alignment.CenterStart)
-                .padding(3.dp)
-                .size(24.dp)
+                .padding(4.dp)
+                .size(32.dp)
                 .clip(CircleShape)
                 .background(Color.White)
         )
@@ -585,26 +602,26 @@ fun SeekBar(positionMs: Long, durationMs: Long, bufferedMs: Long, modifier: Modi
     val fraction = if (durationMs > 0) (positionMs.toFloat() / durationMs).coerceIn(0f, 1f) else 0f
     val bufferedFraction = if (durationMs > 0) (bufferedMs.toFloat() / durationMs).coerceIn(0f, 1f) else 0f
 
-    Box(modifier.height(22.dp), contentAlignment = Alignment.CenterStart) {
+    Box(modifier.height(34.dp), contentAlignment = Alignment.CenterStart) {
         Box(
             Modifier
                 .fillMaxWidth()
-                .height(5.dp)
-                .clip(RoundedCornerShape(3.dp))
+                .height(8.dp)
+                .clip(RoundedCornerShape(4.dp))
                 .background(Color.White.copy(alpha = 0.22f))
         )
         Box(
             Modifier
                 .fillMaxWidth(bufferedFraction)
-                .height(5.dp)
-                .clip(RoundedCornerShape(3.dp))
+                .height(8.dp)
+                .clip(RoundedCornerShape(4.dp))
                 .background(Color.White.copy(alpha = 0.38f))
         )
         Box(
             Modifier
                 .fillMaxWidth(fraction)
-                .height(5.dp)
-                .clip(RoundedCornerShape(3.dp))
+                .height(8.dp)
+                .clip(RoundedCornerShape(4.dp))
                 .background(Color.White)
         )
     }
@@ -646,13 +663,16 @@ fun SettingRow(
     modifier: Modifier = Modifier,
     onClick: (() -> Unit)? = null
 ) {
-    var focused by remember { mutableStateOf(false) }
+    // `hasFocus` (no `isFocused`): la fila se ilumina también cuando el foco
+    // está en el interruptor de dentro, que es lo habitual en un televisor.
+    var highlighted by remember { mutableStateOf(false) }
     Row(
         modifier = modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(14.dp))
-            .background(if (focused) SurfaceElevated else Color.Transparent)
-            .onFocusChanged { focused = it.isFocused }
+            .background(if (highlighted) SurfaceElevated else Color.Transparent)
+            .then(if (highlighted) Modifier.border(2.dp, Color.White.copy(alpha = 0.35f), RoundedCornerShape(14.dp)) else Modifier)
+            .onFocusChanged { highlighted = it.hasFocus }
             .then(
                 if (onClick != null) {
                     Modifier.clickable(
@@ -661,7 +681,10 @@ fun SettingRow(
                         onClick = onClick
                     )
                 } else {
-                    Modifier.focusable()
+                    // Sin acción propia: la fila NO es un foco más. Si lo fuera,
+                    // el usuario caería en ella, pulsaría OK y no pasaría nada;
+                    // el foco útil es el interruptor de `trailing`.
+                    Modifier
                 }
             )
             .padding(horizontal = 22.dp, vertical = 18.dp),

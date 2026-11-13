@@ -8,8 +8,11 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.omnitv.app.R
@@ -18,6 +21,7 @@ import com.omnitv.app.data.ProfileStore
 import com.omnitv.app.ui.components.AddProfileTile
 import com.omnitv.app.ui.components.PillButton
 import com.omnitv.app.ui.components.ProfileTile
+import com.omnitv.app.ui.components.RequestTvFocus
 import com.omnitv.app.ui.theme.AppType
 import com.omnitv.app.ui.theme.Background
 import com.omnitv.app.ui.theme.TextPrimary
@@ -34,6 +38,11 @@ fun ProfileSelectScreen(
     onAddProfile: () -> Unit
 ) {
     val profiles = ProfileStore.profiles
+
+    // Foco inicial en el primer perfil: con el mando, el foco por defecto cae
+    // en «Gestionar perfiles» y el primer OK no entra a ver nada.
+    val firstProfileFocus = remember { FocusRequester() }
+    RequestTvFocus(firstProfileFocus, key = profiles.firstOrNull()?.id)
 
     Column(
         modifier = Modifier
@@ -56,8 +65,16 @@ fun ProfileSelectScreen(
         Spacer(Modifier.height(52.dp))
 
         Row(horizontalArrangement = Arrangement.spacedBy(28.dp)) {
-            profiles.forEach { profile ->
-                ProfileTile(profile = profile, onClick = { onSelected(profile) })
+            profiles.forEachIndexed { index, profile ->
+                ProfileTile(
+                    profile = profile,
+                    onClick = { onSelected(profile) },
+                    modifier = if (index == 0) {
+                        Modifier.focusRequester(firstProfileFocus)
+                    } else {
+                        Modifier
+                    }
+                )
             }
             AddProfileTile(onClick = onAddProfile)
         }

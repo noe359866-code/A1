@@ -3,7 +3,6 @@ package com.omnitv.app.ui.components
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.focusable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -82,7 +81,7 @@ fun OnlyOnSection(
                 style = androidx.compose.ui.text.TextStyle(
                     fontFamily = androidx.compose.ui.text.font.FontFamily.SansSerif,
                     fontWeight = FontWeight.Bold,
-                    fontSize = 22.sp
+                    fontSize = 26.sp
                 ),
                 color = Accent
             )
@@ -236,7 +235,7 @@ private fun SeeAllCard(provider: StreamingProvider, onClick: () -> Unit) {
                 style = androidx.compose.ui.text.TextStyle(
                     fontFamily = androidx.compose.ui.text.font.FontFamily.SansSerif,
                     fontWeight = FontWeight.Bold,
-                    fontSize = 13.sp
+                    fontSize = 17.sp
                 ),
                 color = TextSecondary,
                 textAlign = TextAlign.Center,

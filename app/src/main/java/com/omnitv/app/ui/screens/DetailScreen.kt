@@ -3,7 +3,6 @@ package com.omnitv.app.ui.screens
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.focusable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -33,11 +32,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -64,6 +66,7 @@ import com.omnitv.app.data.VideoType
 import com.omnitv.app.ui.components.CircleIconButton
 import com.omnitv.app.ui.components.PillButton
 import com.omnitv.app.ui.components.PosterCard
+import com.omnitv.app.ui.components.RequestTvFocus
 import com.omnitv.app.ui.theme.Accent
 import com.omnitv.app.ui.theme.AccentGreen
 import com.omnitv.app.ui.theme.AppType
@@ -96,6 +99,7 @@ fun DetailScreen(
     onOpenDetail: (Video) -> Unit
 ) {
     val context = LocalContext.current
+    val screenHeight = LocalConfiguration.current.screenHeightDp.dp
 
     // Ficha completa: se enriquece con la meta remota (episodios, reparto)
     var full by remember(video.id) { mutableStateOf(video) }
@@ -108,6 +112,11 @@ fun DetailScreen(
     val related = remember(full.id, full.episodes.size) { CatalogRepository.related(full.id) }
     var muted by remember { mutableStateOf(true) }
     var selectedSeason by remember { mutableStateOf(1) }
+
+    // Foco inicial en «Reproducir»: es la acción que el usuario viene a hacer.
+    // Si el foco cayera en «Atrás», el primer OK saldría de la ficha.
+    val playFocus = remember { FocusRequester() }
+    RequestTvFocus(playFocus, key = video.id)
 
     // Título a reproducir: primer episodio en series/anime, el vídeo en películas
     val playTarget = remember(full.id, full.episodes.size) {
@@ -153,6 +162,10 @@ fun DetailScreen(
                         this.player = trailerPlayer
                         useController = false
                         resizeMode = AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+                        // El tráiler es fondo decorativo: no debe robar el foco
+                        // del mando a los botones de la ficha.
+                        isFocusable = false
+                        isFocusableInTouchMode = false
                     }
                 },
                 update = { it.player = trailerPlayer },
@@ -198,8 +211,10 @@ fun DetailScreen(
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
         ) {
-            // Zona superior: el tráiler se ve a la izquierda con la info encima
-            Spacer(Modifier.height(190.dp))
+            // Zona superior: el tráiler se ve a la izquierda con la info encima.
+            // El hueco es proporcional a la pantalla (no 190 dp fijos): así el
+            // tráiler se sigue viendo tanto en 1080p como en un panel 4K.
+            Spacer(Modifier.height(screenHeight * 0.30f))
             Column(
                 Modifier
                     .padding(horizontal = 48.dp)
@@ -230,7 +245,7 @@ fun DetailScreen(
                             style = androidx.compose.ui.text.TextStyle(
                                 fontFamily = FontFamily.SansSerif,
                                 fontWeight = FontWeight.Bold,
-                                fontSize = 15.sp
+                                fontSize = 19.sp
                             ),
                             color = AccentGreen
                         )
@@ -265,7 +280,8 @@ fun DetailScreen(
                         text = "Reproducir",
                         iconRes = R.drawable.ic_play,
                         primary = true,
-                        onClick = { onPlay(playTarget) }
+                        onClick = { onPlay(playTarget) },
+                        modifier = Modifier.focusRequester(playFocus)
                     )
                     val inMyList = ProfileStore.currentProfile?.myList?.contains(full.id) == true
                     PillButton(
@@ -401,7 +417,7 @@ fun DetailScreen(
             onClick = onBack,
             modifier = Modifier
                 .align(Alignment.TopStart)
-                .padding(28.dp)
+                .padding(48.dp)
         )
 
         // Estado del fondo (arriba a la derecha)
@@ -556,7 +572,7 @@ private fun EpisodeRow(episode: Episode, onClick: () -> Unit) {
             style = androidx.compose.ui.text.TextStyle(
                 fontFamily = FontFamily.SansSerif,
                 fontWeight = FontWeight.Bold,
-                fontSize = 24.sp
+                fontSize = 28.sp
             ),
             color = if (focused) TextPrimary else TextSecondary,
             modifier = Modifier.width(34.dp)
@@ -591,7 +607,7 @@ private fun EpisodeRow(episode: Episode, onClick: () -> Unit) {
                     style = androidx.compose.ui.text.TextStyle(
                         fontFamily = FontFamily.SansSerif,
                         fontWeight = FontWeight.SemiBold,
-                        fontSize = 16.sp
+                        fontSize = 20.sp
                     ),
                     color = TextPrimary,
                     maxLines = 1,

@@ -3,7 +3,6 @@ package com.omnitv.app.ui.screens
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -22,6 +21,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
@@ -37,12 +38,12 @@ import com.omnitv.app.data.SettingsStore
 import com.omnitv.app.ui.components.AvatarView
 import com.omnitv.app.ui.components.KidsChip
 import com.omnitv.app.ui.components.PillButton
+import com.omnitv.app.ui.components.RequestTvFocus
 import com.omnitv.app.ui.components.SettingRow
 import com.omnitv.app.ui.components.TvToggle
 import com.omnitv.app.ui.theme.Accent
 import com.omnitv.app.ui.theme.AppType
 import com.omnitv.app.ui.theme.Background
-import com.omnitv.app.ui.theme.GlassFill
 import com.omnitv.app.ui.theme.TextPrimary
 import com.omnitv.app.ui.theme.TextSecondary
 import androidx.compose.material.Text
@@ -55,6 +56,12 @@ import androidx.compose.material.Text
 @Composable
 fun SettingsScreen(onSwitchProfile: () -> Unit) {
     val profile = ProfileStore.currentProfile
+
+    // Foco inicial en «Calidad preferida», la primera fila pulsable del
+    // listado: el mando entra en el contenido y no tiene que recorrer la
+    // tarjeta de perfil para empezar a ajustar cosas.
+    val firstFocus = remember { FocusRequester() }
+    RequestTvFocus(firstFocus)
 
     Column(
         Modifier
@@ -197,6 +204,7 @@ fun SettingsScreen(onSwitchProfile: () -> Unit) {
                 title = "Calidad preferida",
                 subtitle = "Se aplica automáticamente al iniciar cada vídeo",
                 trailing = { ValueText(SettingsStore.preferredQuality) },
+                modifier = Modifier.focusRequester(firstFocus),
                 onClick = {
                     val presets = SettingsStore.QUALITY_PRESETS
                     val next = presets[(presets.indexOf(SettingsStore.preferredQuality) + 1) % presets.size]
@@ -300,7 +308,7 @@ private fun SettingsCard(
                 style = androidx.compose.ui.text.TextStyle(
                     fontFamily = FontFamily.SansSerif,
                     fontWeight = FontWeight.SemiBold,
-                    fontSize = 18.sp
+                    fontSize = 22.sp
                 ),
                 color = TextPrimary
             )

@@ -116,7 +116,7 @@ fun ControlPill(
             style = androidx.compose.ui.text.TextStyle(
                 fontFamily = FontFamily.SansSerif,
                 fontWeight = FontWeight.SemiBold,
-                fontSize = 15.sp
+                fontSize = 19.sp
             ),
             color = contentColor
         )
@@ -186,7 +186,7 @@ fun OptionMenu(
                 style = androidx.compose.ui.text.TextStyle(
                     fontFamily = FontFamily.SansSerif,
                     fontWeight = FontWeight.Bold,
-                    fontSize = 12.sp,
+                    fontSize = 16.sp,
                     letterSpacing = 1.sp
                 ),
                 color = Color(0xFF8E8E93),
@@ -230,7 +230,7 @@ private fun OptionRow(option: PlayerOption) {
             style = androidx.compose.ui.text.TextStyle(
                 fontFamily = FontFamily.SansSerif,
                 fontWeight = if (option.selected) FontWeight.SemiBold else FontWeight.Normal,
-                fontSize = 15.sp
+                fontSize = 19.sp
             ),
             color = if (focused) Color.White else ControlWhite.copy(alpha = if (option.selected) 1f else 0.8f)
         )
@@ -254,7 +254,7 @@ fun EpgChip(text: String, color: Color, modifier: Modifier = Modifier) {
             style = androidx.compose.ui.text.TextStyle(
                 fontFamily = FontFamily.SansSerif,
                 fontWeight = FontWeight.Bold,
-                fontSize = 10.sp,
+                fontSize = 14.sp,
                 letterSpacing = 0.8.sp
             ),
             color = Color.White
@@ -305,7 +305,7 @@ fun InfoChip(text: String, modifier: Modifier = Modifier) {
             style = androidx.compose.ui.text.TextStyle(
                 fontFamily = FontFamily.SansSerif,
                 fontWeight = FontWeight.SemiBold,
-                fontSize = 11.sp
+                fontSize = 15.sp
             ),
             color = ControlWhite
         )

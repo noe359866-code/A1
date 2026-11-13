@@ -554,6 +554,10 @@ fun PlayerScreen(
                     this.player = player
                     useController = false
                     setKeepContentOnPlayerReset(true)
+                    // La vista de vídeo no debe quedarse el foco del D-pad: los
+                    // controles (y el Box raíz) son quienes lo manejan.
+                    isFocusable = false
+                    isFocusableInTouchMode = false
                 }
             },
             update = { view ->
@@ -968,21 +972,21 @@ fun PlayerScreen(
 /* -------------------------------------------------------------------------- */
 
 private fun fontSize22() = androidx.compose.ui.text.TextStyle(
-    fontFamily = FontFamily.SansSerif, fontWeight = FontWeight.SemiBold, fontSize = 22.sp
+    fontFamily = FontFamily.SansSerif, fontWeight = FontWeight.SemiBold, fontSize = 26.sp
 )
 
 private fun fontSize20() = androidx.compose.ui.text.TextStyle(
-    fontFamily = FontFamily.SansSerif, fontWeight = FontWeight.SemiBold, fontSize = 20.sp
+    fontFamily = FontFamily.SansSerif, fontWeight = FontWeight.SemiBold, fontSize = 24.sp
 )
 
 private fun fontSize17() = androidx.compose.ui.text.TextStyle(
-    fontFamily = FontFamily.SansSerif, fontWeight = FontWeight.SemiBold, fontSize = 17.sp
+    fontFamily = FontFamily.SansSerif, fontWeight = FontWeight.SemiBold, fontSize = 21.sp
 )
 
 private fun fontSize15() = androidx.compose.ui.text.TextStyle(
-    fontFamily = FontFamily.SansSerif, fontWeight = FontWeight.Medium, fontSize = 15.sp
+    fontFamily = FontFamily.SansSerif, fontWeight = FontWeight.Medium, fontSize = 19.sp
 )
 
 private fun fontSize13() = androidx.compose.ui.text.TextStyle(
-    fontFamily = FontFamily.SansSerif, fontWeight = FontWeight.Medium, fontSize = 13.sp
+    fontFamily = FontFamily.SansSerif, fontWeight = FontWeight.Medium, fontSize = 18.sp
 )

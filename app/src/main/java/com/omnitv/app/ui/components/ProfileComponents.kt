@@ -13,12 +13,10 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -28,9 +26,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
@@ -48,7 +46,6 @@ import com.omnitv.app.ui.theme.Accent
 import com.omnitv.app.ui.theme.AppType
 import com.omnitv.app.ui.theme.GlassFill
 import com.omnitv.app.ui.theme.GlassFillStrong
-import com.omnitv.app.ui.theme.SurfaceElevated
 import com.omnitv.app.ui.theme.TextPrimary
 import com.omnitv.app.ui.theme.TextSecondary
 
@@ -113,14 +110,16 @@ fun ProfileTile(
     Column(
         modifier = modifier
             .graphicsLayer { scaleX = scale; scaleY = scale }
+            .clip(RoundedCornerShape(20.dp))
+            .then(if (focused) Modifier.border(3.dp, Color.White, RoundedCornerShape(20.dp)) else Modifier)
             .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onClick)
             .onFocusChanged { focused = it.isFocused }
-            .padding(8.dp),
+            .padding(10.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         AvatarView(
             avatarIndex = profile.avatarIndex,
-            size = 118.dp,
+            size = 132.dp,
             ringColor = if (focused) Color.White else null
         )
         Spacer(Modifier.height(14.dp))
@@ -129,7 +128,7 @@ fun ProfileTile(
             style = TextStyle(
                 fontFamily = FontFamily.SansSerif,
                 fontWeight = FontWeight.SemiBold,
-                fontSize = 17.sp
+                fontSize = 21.sp
             ),
             color = if (focused) TextPrimary else TextSecondary
         )
@@ -189,7 +188,7 @@ fun ManageProfileTile(
             style = TextStyle(
                 fontFamily = FontFamily.SansSerif,
                 fontWeight = FontWeight.SemiBold,
-                fontSize = 17.sp
+                fontSize = 21.sp
             ),
             color = if (focused) TextPrimary else TextSecondary
         )
@@ -203,20 +202,20 @@ fun ManageProfileTile(
 @Composable
 fun AddProfileTile(onClick: () -> Unit, modifier: Modifier = Modifier) {
     var focused by remember { mutableStateOf(false) }
-    val scale by animateFloatAsState(if (focused) 1.10f else 1f, tween(160), label = "addScale")
-    val shape = avatarShape(118.dp)
+    val scale by animateFloatAsState(if (focused) 1.08f else 1f, tween(160), label = "addScale")
+    val shape = avatarShape(132.dp)
 
     Column(
         modifier = modifier
             .graphicsLayer { scaleX = scale; scaleY = scale }
             .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onClick)
             .onFocusChanged { focused = it.isFocused }
-            .padding(8.dp),
+            .padding(10.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Box(
             Modifier
-                .size(118.dp)
+                .size(132.dp)
                 .clip(shape)
                 .background(if (focused) GlassFillStrong else GlassFill)
                 .then(
@@ -240,7 +239,7 @@ fun AddProfileTile(onClick: () -> Unit, modifier: Modifier = Modifier) {
             style = TextStyle(
                 fontFamily = FontFamily.SansSerif,
                 fontWeight = FontWeight.SemiBold,
-                fontSize = 17.sp
+                fontSize = 21.sp
             ),
             color = if (focused) TextPrimary else TextSecondary
         )
@@ -254,15 +253,16 @@ fun AddProfileTile(onClick: () -> Unit, modifier: Modifier = Modifier) {
 @Composable
 fun ProfileBadge(profile: Profile?, onClick: () -> Unit, modifier: Modifier = Modifier) {
     var focused by remember { mutableStateOf(false) }
-    val scale by animateFloatAsState(if (focused) 1.12f else 1f, tween(150), label = "badgeScale")
-    val shape = avatarShape(42.dp)
+    val scale by animateFloatAsState(if (focused) 1.10f else 1f, tween(150), label = "badgeScale")
+    // 48 dp: el mínimo que se puede enfocar con un mando sin que cueste acertar.
+    val shape = avatarShape(48.dp)
 
     Box(
         modifier = modifier
             .graphicsLayer { scaleX = scale; scaleY = scale }
             .clip(shape)
             .then(
-                if (focused) Modifier.border(2.dp, Color.White, shape)
+                if (focused) Modifier.border(3.dp, Color.White, shape)
                 else Modifier
             )
             .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onClick)
@@ -273,7 +273,7 @@ fun ProfileBadge(profile: Profile?, onClick: () -> Unit, modifier: Modifier = Mo
                 painter = painterResource(avatarRes(profile.avatarIndex)),
                 contentDescription = "Perfil ${profile.name}",
                 contentScale = ContentScale.Crop,
-                modifier = Modifier.size(42.dp)
+                modifier = Modifier.size(48.dp)
             )
         } else {
             Box(
@@ -325,29 +325,24 @@ fun AvatarOption(resId: Int, selected: Boolean, onClick: () -> Unit, modifier: M
 /* -------------------------------------------------------------------------- */
 
 @Composable
-fun NameField(value: String, onValueChange: (String) -> Unit, modifier: Modifier = Modifier) {
-    var focused by remember { mutableStateOf(false) }
-
-    Box(
-        modifier = modifier
-            .height(56.dp)
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(13.dp))
-            .background(if (focused) SurfaceElevated else GlassFill)
-            .onFocusChanged { focused = it.isFocused }
-            .padding(horizontal = 18.dp),
-        contentAlignment = Alignment.CenterStart
-    ) {
-        if (value.isEmpty()) {
-            Text("Nombre del perfil", style = AppType.body, color = TextSecondary)
-        }
-        BasicTextField(
-            value = value,
-            onValueChange = onValueChange,
-            singleLine = true,
-            textStyle = TextStyle(color = TextPrimary, fontSize = 18.sp),
-            cursorBrush = SolidColor(Accent),
-            modifier = Modifier.fillMaxWidth()
-        )
-    }
+fun NameField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    modifier: Modifier = Modifier,
+    focusRequester: FocusRequester? = null
+) {
+    // Mismo tratamiento que la búsqueda: el mando abre el teclado en pantalla
+    // con OK. Sin eso, en un televisor no se puede escribir el nombre.
+    // Se crea siempre (no solo cuando falta el del llamante) para no hacer un
+    // `remember` condicional, que rompe la composición si el parámetro cambia.
+    val ownRequester = remember { FocusRequester() }
+    TvTextField(
+        value = value,
+        onValueChange = onValueChange,
+        placeholder = "Nombre del perfil",
+        modifier = modifier,
+        // El `FocusRequester` tiene que ir al campo (nodo enfocable), no al Row
+        // que lo envuelve: si va al Row, `requestFocus` no mueve nada.
+        focusRequester = focusRequester ?: ownRequester
+    )
 }

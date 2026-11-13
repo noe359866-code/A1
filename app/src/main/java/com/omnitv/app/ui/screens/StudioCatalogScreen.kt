@@ -3,7 +3,6 @@ package com.omnitv.app.ui.screens
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.focusable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -157,7 +156,7 @@ fun StudioCatalogScreen(
                 }
             } else {
                 LazyVerticalGrid(
-                    columns = GridCells.Fixed(4),
+                    columns = GridCells.Fixed(5),
                     contentPadding = PaddingValues(bottom = 56.dp),
                     horizontalArrangement = Arrangement.spacedBy(20.dp),
                     verticalArrangement = Arrangement.spacedBy(24.dp)
@@ -179,7 +178,7 @@ fun StudioCatalogScreen(
             onClick = onBack,
             modifier = Modifier
                 .align(Alignment.TopStart)
-                .padding(28.dp)
+                .padding(48.dp)
         )
     }
 }
@@ -214,7 +213,7 @@ private fun StudioFilterChip(text: String, selected: Boolean, onClick: () -> Uni
             style = androidx.compose.ui.text.TextStyle(
                 fontFamily = FontFamily.SansSerif,
                 fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
-                fontSize = 13.sp
+                fontSize = 17.sp
             ),
             color = TextPrimary
         )
