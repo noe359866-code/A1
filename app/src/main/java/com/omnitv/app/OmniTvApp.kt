@@ -113,7 +113,7 @@ fun OmniTvApp() {
             composable(Routes.HOME) {
                 TvScaffold(appTabs, currentRoute, navController::selectTab, trailing = profileBadge) {
                     HomeScreen(
-                        onOpenDetail = { navController.navigate(Routes.detail(it.id)) },
+                        onOpenDetail = { navController.navigate(Routes.detail(it.id.substringBefore('~'))) },
                         onPlay = { navController.navigate(Routes.player(it.id)) }
                     )
                 }
@@ -121,14 +121,14 @@ fun OmniTvApp() {
             composable(Routes.MOVIES) {
                 TvScaffold(appTabs, currentRoute, navController::selectTab, trailing = profileBadge) {
                     MoviesScreen(
-                        onOpenDetail = { navController.navigate(Routes.detail(it.id)) }
+                        onOpenDetail = { navController.navigate(Routes.detail(it.id.substringBefore('~'))) }
                     )
                 }
             }
             composable(Routes.SEARCH) {
                 TvScaffold(appTabs, currentRoute, navController::selectTab, trailing = profileBadge) {
                     SearchScreen(
-                        onOpenDetail = { navController.navigate(Routes.detail(it.id)) }
+                        onOpenDetail = { navController.navigate(Routes.detail(it.id.substringBefore('~'))) }
                     )
                 }
             }
@@ -151,8 +151,8 @@ fun OmniTvApp() {
                     DetailScreen(
                         video = video,
                         onBack = { navController.popBackStack() },
-                        onPlay = { navController.navigate(Routes.player(video.id)) },
-                        onOpenDetail = { navController.navigate(Routes.detail(it.id)) }
+                        onPlay = { navController.navigate(Routes.player(it.id)) },
+                        onOpenDetail = { navController.navigate(Routes.detail(it.id.substringBefore('~'))) }
                     )
                 } else {
                     LaunchedEffect(Unit) { navController.popBackStack() }

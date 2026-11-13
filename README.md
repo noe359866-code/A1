@@ -30,7 +30,13 @@
    *Estrenos destacados*, *Top 10 hoy*, *Cortometrajes premiados* y *Transmisiones en directo · HLS*.
 2. **Películas** — rejilla con todo el catálogo (filtrado en perfiles infantiles).
 3. **Buscar** — campo de búsqueda con sugerencias de género y rejilla de resultados.
-4. **Detalle** — fondo a sangre con velo, título grande, metadatos (año · duración · ★ · calidad · clasificación), botones *Reproducir* / *Mi lista* y recomendaciones.
+4. **Detalle — transparente con tráiler de fondo** *(estilo Netflix)*: el
+   **tráiler se reproduce en bucle y silenciado** detrás de la interfaz
+   (con botón de sonido y chip *TRÁILER*), título grande, **match %** verde
+   («98 % para ti»), chip de tipo (**Película · Serie · Anime**), metadatos,
+   botones *Reproducir / Mi lista / Sonido del tráiler*, **lista de episodios**
+   reproducibles en series y anime, reparto, géneros e info sobre velos de
+   degradado. *Más como esto* al final.
 5. **Reproductor** — estilo Xuper TV sobre Media3 ExoPlayer (ver sección propia).
    Al salir, el progreso se guarda en el perfil activo.
 6. **Ajustes** — tarjetas con iconos: perfil activo, **Autoplay / Auto-next**,

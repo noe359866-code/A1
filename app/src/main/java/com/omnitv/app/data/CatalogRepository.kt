@@ -265,6 +265,100 @@ object CatalogRepository {
             videoUrl = "https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8",
             streamFormat = StreamFormat.HLS,
             badge = "HLS"
+        ),
+        Video(
+            id = "conejo-rebelde",
+            title = "Conejo Rebelde",
+            description = "Un gigantesco conejo de buen corazón y sus amigos se enfrentan a una banda de roedores " +
+                "que ha invadido el bosque. Comedia animada episodio a episodio para toda la familia.",
+            backdropUrl = "$IMG/BigBuckBunny.jpg",
+            cardUrl = "$IMG/BigBuckBunny.jpg",
+            year = 2024,
+            durationMinutes = 10,
+            rating = 8.2,
+            certification = "TP",
+            quality = "HD",
+            genres = listOf("Animación", "Comedia", "Familia"),
+            videoUrl = "$VID/BigBuckBunny.mp4",
+            badge = "NUEVA TEMPORADA",
+            type = VideoType.SERIES,
+            cast = listOf("Jan Morgenstern", "Bassie the Bunny"),
+            episodes = listOf(
+                Episode(
+                    id = "ep1",
+                    title = "El gran robo de zanahorias",
+                    number = 1,
+                    durationMinutes = 10,
+                    description = "El bosque despierta con una noticia: alguien se ha llevado toda la cosecha.",
+                    thumbnailUrl = "$IMG/BigBuckBunny.jpg",
+                    videoUrl = "$VID/BigBuckBunny.mp4"
+                ),
+                Episode(
+                    id = "ep2",
+                    title = "Travesuras en el estanque",
+                    number = 2,
+                    durationMinutes = 1,
+                    description = "La banda de roedores vuelve a atacar, esta vez en el estanque del bosque.",
+                    thumbnailUrl = "$IMG/ForBiggerFun.jpg",
+                    videoUrl = "$VID/ForBiggerFun.mp4"
+                ),
+                Episode(
+                    id = "ep3",
+                    title = "Fuego en el campamento",
+                    number = 3,
+                    durationMinutes = 1,
+                    description = "Un campamento que se sale de control pone a prueba la amistad del grupo.",
+                    thumbnailUrl = "$IMG/ForBiggerBlazes.jpg",
+                    videoUrl = "$VID/ForBiggerBlazes.mp4"
+                )
+            )
+        ),
+        Video(
+            id = "cronicas-sintel",
+            title = "Crónicas de Sintel",
+            description = "Una joven guerrera cruza reinos peligrosos en busca del dragón que se llevó a su cría. " +
+                "Aventura épica de anime, capítulo a capítulo.",
+            backdropUrl = "$IMG/Sintel.jpg",
+            cardUrl = "$IMG/Sintel.jpg",
+            year = 2024,
+            durationMinutes = 12,
+            rating = 8.6,
+            certification = "12+",
+            quality = "4K",
+            genres = listOf("Anime", "Aventura", "Fantasía"),
+            videoUrl = "$VID/Sintel.mp4",
+            badge = "ANIME",
+            type = VideoType.ANIME,
+            cast = listOf("Halina Reijn", "Thom Hoffman"),
+            episodes = listOf(
+                Episode(
+                    id = "ep1",
+                    title = "La forja del acero",
+                    number = 1,
+                    durationMinutes = 15,
+                    description = "Sintel aprende que todo gran viaje empieza con una espada bien forjada.",
+                    thumbnailUrl = "$IMG/Sintel.jpg",
+                    videoUrl = "$VID/Sintel.mp4"
+                ),
+                Episode(
+                    id = "ep2",
+                    title = "El taller de los sueños",
+                    number = 2,
+                    durationMinutes = 11,
+                    description = "En un taller surrealista, dos viajeros descubren que nada es lo que parece.",
+                    thumbnailUrl = "$IMG/ElephantsDream.jpg",
+                    videoUrl = "$VID/ElephantsDream.mp4"
+                ),
+                Episode(
+                    id = "ep3",
+                    title = "Lágrimas de acero",
+                    number = 3,
+                    durationMinutes = 12,
+                    description = "La batalla final contra las máquinas decidirá el destino de todos los reinos.",
+                    thumbnailUrl = "$IMG/TearsOfSteel.jpg",
+                    videoUrl = "$VID/TearsOfSteel.mp4"
+                )
+            )
         )
     ).map { withServers(it) }
 
@@ -299,15 +393,18 @@ object CatalogRepository {
             rows += MediaRow("Mi lista", myList)
         }
 
+        val kidsOnly = profile?.isKids == true
         val continueItems = profile?.progress.orEmpty()
-            .filterKeys { it in availableIds }
-            .mapNotNull { (id, _) -> available.find { it.id == id } }
+            .mapNotNull { (id, _) -> find(id) }
+            .filter { !kidsOnly || it.certification == "TP" || it.certification == "7+" }
         if (continueItems.isNotEmpty()) {
             rows += MediaRow("Continuar viendo", continueItems)
         }
 
         rows += listOf(
             MediaRow("Estrenos destacados", byIds("tears-of-steel", "sintel", "big-buck-bunny", "escapes", "joyrides", "gti")),
+            MediaRow("Series para maratón", byIds("conejo-rebelde", "cronicas-sintel")),
+            MediaRow("Anime destacado", byIds("cronicas-sintel")),
             MediaRow("Top 10 hoy", byIds("big-buck-bunny", "sintel", "fun", "meltdowns", "elephants-dream", "grand", "subaru", "bullrun", "blazes", "escapes")),
             MediaRow("Cortometrajes premiados", byIds("sintel", "big-buck-bunny", "elephants-dream", "tears-of-steel")),
             MediaRow("Transmisiones en directo · HLS", byIds("apple-hls", "mux-hls"))
@@ -321,21 +418,55 @@ object CatalogRepository {
 
     private fun byIds(vararg ids: String): List<Video> = ids.mapNotNull { find(it) }
 
-    fun find(id: String): Video? = catalog.firstOrNull { it.id == id }
-
-    fun search(query: String, kidsOnly: Boolean = false): List<Video> {
-        val q = query.trim().lowercase()
-        if (q.isEmpty()) return emptyList()
-        val source = if (kidsOnly) catalogFor(Profile(id = "", name = "", isKids = true)) else catalog
-        return source.filter { v ->
-            v.title.lowercase().contains(q) ||
-                v.description.lowercase().contains(q) ||
-                v.genres.any { it.lowercase().contains(q) }
+    /**
+     * Busca un título por id. Los episodios se referencian como
+     * `«idDelTítulo~idDelEpisodio»` y se devuelven como un [Video] transitorio
+     * (así el reproductor funciona sin cambios y el auto-next encadena
+     * episodios).
+     */
+    fun find(id: String): Video? {
+        if ('~' in id) {
+            val parentId = id.substringBefore('~')
+            val episodeId = id.substringAfter('~')
+            val parent = find(parentId) ?: return null
+            val episode = parent.episodes.firstOrNull { it.id == episodeId } ?: return null
+            return episodeVideo(parent, episode)
         }
+        return catalog.firstOrNull { it.id == id }
+    }
+
+    /** Convierte un episodio en un [Video] transitorio reproducible. */
+    fun episodeVideo(parent: Video, episode: Episode): Video {
+        val mirror = episode.videoUrl.replace(VID, VID_ALT)
+        val servers = buildList {
+            add(StreamSource("Servidor 1", episode.videoUrl, StreamFormat.MP4))
+            if (mirror != episode.videoUrl) add(StreamSource("Servidor 2", mirror, StreamFormat.MP4))
+        }
+        return parent.copy(
+            id = "${parent.id}~${episode.id}",
+            title = "${parent.title} · ${episode.title}",
+            description = episode.description,
+            cardUrl = episode.thumbnailUrl,
+            durationMinutes = episode.durationMinutes,
+            videoUrl = episode.videoUrl,
+            streamFormat = StreamFormat.MP4,
+            sources = servers,
+            badge = null,
+            progress = 0f,
+            episodes = emptyList()
+        )
     }
 
     /** Títulos relacionados: comparten al menos un género. */
     fun related(id: String, limit: Int = 6): List<Video> {
+        // Dentro de una serie/anime: el «siguiente» son los episodios restantes
+        if ('~' in id) {
+            val parentId = id.substringBefore('~')
+            val episodeId = id.substringAfter('~')
+            val parent = find(parentId) ?: return emptyList()
+            val index = parent.episodes.indexOfFirst { it.id == episodeId }
+            return parent.episodes.drop(index + 1).take(limit).map { episodeVideo(parent, it) }
+        }
         val current = find(id) ?: return emptyList()
         return catalog
             .filter { it.id != id && it.genres.any { g -> g in current.genres } }
