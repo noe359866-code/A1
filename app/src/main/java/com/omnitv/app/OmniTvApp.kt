@@ -23,6 +23,7 @@ import com.omnitv.app.data.CatalogRepository
 import com.omnitv.app.data.ProfileStore
 import com.omnitv.app.data.Providers
 import com.omnitv.app.data.RemoteCatalog
+import com.omnitv.app.data.Studios
 import com.omnitv.app.data.StremioClient
 import com.omnitv.app.data.Video
 import com.omnitv.app.ui.theme.AppType
@@ -42,6 +43,7 @@ import com.omnitv.app.ui.screens.PlataformasScreen
 import com.omnitv.app.ui.screens.ProfileSelectScreen
 import com.omnitv.app.ui.screens.SearchScreen
 import com.omnitv.app.ui.screens.SettingsScreen
+import com.omnitv.app.ui.screens.StudioCatalogScreen
 
 /** Rutas de navegación. */
 object Routes {
@@ -56,11 +58,13 @@ object Routes {
     const val DETAIL = "detail/{videoId}"
     const val PLAYER = "player/{videoId}"
     const val PLATFORM = "platform/{providerId}"
+    const val STUDIO = "studio/{studioId}"
 
     fun editProfile(profileId: String) = "editProfile/$profileId"
     fun detail(videoId: String) = "detail/$videoId"
     fun player(videoId: String) = "player/$videoId"
     fun platform(providerId: Int) = "platform/$providerId"
+    fun studio(studioId: Int) = "studio/$studioId"
 }
 
 private val appTabs = listOf(
@@ -136,7 +140,8 @@ fun OmniTvApp() {
                         onOpenDetail = { navController.navigate(Routes.detail(it.id.substringBefore('~'))) },
                         onPlay = { navController.navigate(Routes.player(it.id)) },
                         onSeeAll = { navController.navigate(Routes.platform(it.id)) },
-                        onOpenPlatforms = { navController.navigate(Routes.PLATFORMS) }
+                        onOpenPlatforms = { navController.navigate(Routes.PLATFORMS) },
+                        onOpenStudio = { navController.navigate(Routes.studio(it.id)) }
                     )
                 }
             }
@@ -157,8 +162,25 @@ fun OmniTvApp() {
             composable(Routes.PLATFORMS) {
                 TvScaffold(appTabs, currentRoute, navController::selectTab, trailing = profileBadge) {
                     PlataformasScreen(
-                        onOpenProvider = { navController.navigate(Routes.platform(it.id)) }
+                        onOpenProvider = { navController.navigate(Routes.platform(it.id)) },
+                        onOpenStudio = { navController.navigate(Routes.studio(it.id)) }
                     )
+                }
+            }
+            composable(
+                route = Routes.STUDIO,
+                arguments = listOf(navArgument("studioId") { type = NavType.IntType })
+            ) { entry ->
+                val studioId = entry.arguments?.getInt("studioId") ?: -1
+                val studio = Studios.byId(studioId)
+                if (studio != null) {
+                    StudioCatalogScreen(
+                        studio = studio,
+                        onBack = { navController.popBackStack() },
+                        onOpenDetail = { navController.navigate(Routes.detail(it.id)) }
+                    )
+                } else {
+                    LaunchedEffect(Unit) { navController.popBackStack() }
                 }
             }
             composable(

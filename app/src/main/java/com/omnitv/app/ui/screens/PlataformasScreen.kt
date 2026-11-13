@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -44,12 +45,15 @@ import com.omnitv.app.R
 import com.omnitv.app.data.ProfileStore
 import com.omnitv.app.data.RemoteCatalog
 import com.omnitv.app.data.StreamingProvider
+import com.omnitv.app.data.Studio
+import com.omnitv.app.data.Studios
 import com.omnitv.app.data.Video
 import com.omnitv.app.data.VideoType
 import com.omnitv.app.data.Providers
 import com.omnitv.app.ui.components.CircleIconButton
 import com.omnitv.app.ui.components.PillButton
 import com.omnitv.app.ui.components.PosterCard
+import com.omnitv.app.ui.components.StudioTile
 import com.omnitv.app.ui.theme.Accent
 import com.omnitv.app.ui.theme.AppType
 import com.omnitv.app.ui.theme.Background
@@ -63,7 +67,10 @@ import com.omnitv.app.ui.theme.TextSecondary
  * Crunchyroll…) con sus logos. Al elegir uno se abre su catálogo real.
  */
 @Composable
-fun PlataformasScreen(onOpenProvider: (StreamingProvider) -> Unit) {
+fun PlataformasScreen(
+    onOpenProvider: (StreamingProvider) -> Unit,
+    onOpenStudio: (Studio) -> Unit
+) {
     val kidsOnly = ProfileStore.currentProfile?.isKids == true
 
     Column(
@@ -76,7 +83,7 @@ fun PlataformasScreen(onOpenProvider: (StreamingProvider) -> Unit) {
         Text("Plataformas", style = AppType.screenTitle, color = TextPrimary)
         Spacer(Modifier.height(6.dp))
         Text(
-            "Explora por proveedor · catálogo real de cinejoy.pk y Nuvio",
+            "Explora por proveedor y por estudio · catálogo real de cinejoy.pk, Nuvio y sweetfox.app",
             style = AppType.metadata,
             color = TextSecondary
         )
@@ -104,8 +111,27 @@ fun PlataformasScreen(onOpenProvider: (StreamingProvider) -> Unit) {
             horizontalArrangement = Arrangement.spacedBy(20.dp),
             verticalArrangement = Arrangement.spacedBy(28.dp)
         ) {
-            items(Providers.all, key = { it.id }) { provider ->
+            item(span = { GridItemSpan(maxLineSpan) }) {
+                Text("Plataformas de streaming", style = AppType.sectionTitle, color = TextPrimary)
+            }
+            items(Providers.all, key = { "provider-${it.id}" }) { provider ->
                 ProviderTile(provider, onClick = { onOpenProvider(provider) })
+            }
+            // Fusión con el «Browse by studio» de sweetfox.app
+            item(span = { GridItemSpan(maxLineSpan) }) {
+                Column {
+                    Spacer(Modifier.height(10.dp))
+                    Text("Estudios · Browse by studio", style = AppType.sectionTitle, color = TextPrimary)
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        "DreamWorks, Marvel, Pixar, Ghibli, A24, DC, Warner Bros.…",
+                        style = AppType.metadata,
+                        color = TextSecondary
+                    )
+                }
+            }
+            items(Studios.all, key = { "studio-${it.id}" }) { studio ->
+                StudioTile(studio, onClick = { onOpenStudio(studio) })
             }
         }
     }

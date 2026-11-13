@@ -161,4 +161,14 @@ object RemoteCatalog {
     /** [fetchProvider] con caché por id de plataforma. */
     suspend fun fetchProviderCached(provider: StreamingProvider): List<Video> =
         providerCache[provider.id] ?: fetchProvider(provider).also { providerCache[provider.id] = it }
+
+    /** Caché de catálogos por estudio (sweetfox.app). */
+    private val studioCache = java.util.concurrent.ConcurrentHashMap<Int, List<Video>>()
+
+    /** Catálogo real de un estudio («Por estudio»), con caché. */
+    suspend fun fetchStudio(studio: Studio): List<Video> =
+        studioCache[studio.id] ?: SweetFoxClient.fetchStudio(studio.id).also { list ->
+            list.forEach { CatalogRepository.registerRemote(it) }
+            studioCache[studio.id] = list
+        }
 }

@@ -13,11 +13,13 @@ import androidx.compose.ui.unit.dp
 import com.omnitv.app.data.CatalogRepository
 import com.omnitv.app.data.ProfileStore
 import com.omnitv.app.data.RemoteCatalog
+import com.omnitv.app.data.Studio
 import com.omnitv.app.data.StreamingProvider
 import com.omnitv.app.data.Video
 import com.omnitv.app.ui.components.HeroBanner
 import com.omnitv.app.ui.components.OnlyOnSection
 import com.omnitv.app.ui.components.SectionRow
+import com.omnitv.app.ui.components.StudioStripSection
 import com.omnitv.app.ui.theme.Background
 
 /**
@@ -34,7 +36,8 @@ fun HomeScreen(
     onOpenDetail: (Video) -> Unit,
     onPlay: (Video) -> Unit,
     onSeeAll: (StreamingProvider) -> Unit,
-    onOpenPlatforms: () -> Unit
+    onOpenPlatforms: () -> Unit,
+    onOpenStudio: (Studio) -> Unit
 ) {
     val profile = ProfileStore.currentProfile
 
@@ -77,6 +80,10 @@ fun HomeScreen(
                     onSeeAll = onSeeAll,
                     onOpenPlatforms = onOpenPlatforms
                 )
+            }
+            // «Por estudio» — como el «Browse by studio» de sweetfox.app
+            item(key = "studios") {
+                StudioStripSection(onOpenStudio = onOpenStudio)
             }
         }
         items(rows.drop(2), key = { it.title }) { row ->

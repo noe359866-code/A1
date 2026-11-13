@@ -165,6 +165,24 @@ Al elegir una plataforma se carga su **catálogo real**:
   meta de Cinemeta. Filtros *Todas / Películas / Series*.
 - Perfiles infantiles: sección no disponible (catálogo curado local).
 
+## 🎬 «Por estudio» (como «Browse by studio» de sweetfox.app)
+
+Sección del Inicio **«Por estudio»** — inspirada en el *Browse by studio* de
+[sweetfox.app](https://sweetfox.app/) — y bloque **«Estudios»** dentro de la
+pestaña Plataformas (fusión de ambos modos de explorar):
+
+- Tira/rejilla con los **24 estudios** del original: DreamWorks Animation,
+  Marvel, LAIKA, Lionsgate, Blumhouse, NEON, Legendary, 20th Century, New
+  Line, Walt Disney, Illumination, Pixar, Universal, TOHO, A24, Focus
+  Features, Columbia, Searchlight, Studio Ghibli, Amblin, Lucasfilm, DC,
+  Paramount y Warner Bros. (logos del CDN público de TMDB).
+- Al elegir un estudio se carga su **catálogo real** desde
+  `https://sweetfox.app/company/{id}` (parser tolerante del HTML del
+  servidor) con filtros *Todas / Películas / Series* y orden
+  *Populares / Mejor valoradas / Recientes* (como las pestañas de la web).
+- Los títulos (`tmdb:{id}`) se enriquecen con la meta de Nuvio (reparto,
+  géneros, certificación) y sus episodios con Cinemeta. Caché por estudio.
+
 ## 🎯 «Solo en {plataforma}» (como «Only on» de flystream.net)
 
 Sección del Inicio inspirada en el *Only on Netflix* de
