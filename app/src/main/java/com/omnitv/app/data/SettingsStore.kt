@@ -45,6 +45,28 @@ object SettingsStore {
     var preferredQuality by mutableStateOf("Auto")
         private set
 
+    // ---------------- Vinculación (QR del panel de Ajustes) ----------------
+
+    /** Código de emparejamiento del televisor (se muestra junto al QR). */
+    var pairingCode by mutableStateOf("------")
+        private set
+
+    /** Cuenta enlazada desde el panel web (email). */
+    var linkedAccount by mutableStateOf("")
+        private set
+
+    /** URLs de manifest.json de addons Stremio añadidos desde el panel. */
+    var customAddons by mutableStateOf<List<String>>(emptyList())
+        private set
+
+    /** APIs añadidas desde el panel (nombre → clave). */
+    var apiKeys by mutableStateOf<Map<String, String>>(emptyMap())
+        private set
+
+    /** Se incrementa con cada cambio para refrescar listas observables. */
+    var revision by mutableStateOf(0)
+        private set
+
     fun init(context: Context) {
         if (prefs != null) return
         prefs = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE).also { p ->
@@ -54,6 +76,12 @@ object SettingsStore {
             subtitlesDefault = p.getBoolean("subtitlesDefault", false)
             playbackSpeed = p.getFloat("playbackSpeed", 1f)
             preferredQuality = p.getString("preferredQuality", "Auto") ?: "Auto"
+            pairingCode = p.getString("pairingCode", null) ?: generatePairingCode().also { code ->
+                p.edit().putString("pairingCode", code).apply()
+            }
+            linkedAccount = p.getString("linkedAccount", "") ?: ""
+            customAddons = parseStringList(p.getString("customAddons", "[]"))
+            apiKeys = parseStringMap(p.getString("apiKeys", "{}"))
         }
     }
 
@@ -69,9 +97,48 @@ object SettingsStore {
 
     fun setPreferredQuality(value: String) = update { putString("preferredQuality", value) }.also { preferredQuality = value }
 
+    /** Enlaza una cuenta desde el panel web del QR. */
+    fun setLinkedAccount(email: String) = update { putString("linkedAccount", email) }.also {
+        linkedAccount = email
+        revision++
+    }
+
+    /** Guarda los addons (URLs de manifest.json) añadidos desde el panel. */
+    fun setCustomAddons(urls: List<String>) {
+        val cleaned = urls.map { it.trim() }.filter { it.startsWith("http") }.distinct()
+        update { putString("customAddons", org.json.JSONArray(cleaned).toString()) }.also {
+            customAddons = cleaned
+            revision++
+        }
+    }
+
+    /** Guarda las APIs añadidas desde el panel (nombre → clave). */
+    fun setApiKeys(keys: Map<String, String>) {
+        val cleaned = keys.filterKeys { it.isNotBlank() }.filterValues { it.isNotBlank() }
+        update { putString("apiKeys", org.json.JSONObject(cleaned).toString()) }.also {
+            apiKeys = cleaned
+            revision++
+        }
+    }
+
     /** Etiqueta legible de una velocidad (1,25×). */
     fun speedLabel(speed: Float = playbackSpeed): String =
         String.format(java.util.Locale.US, "%.2f", speed).replace('.', ',').trimEnd('0').trimEnd(',') + "×"
+
+    private fun generatePairingCode(): String {
+        val chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789" // sin 0/O/1/I
+        return (1..6).map { chars.random() }.joinToString("")
+    }
+
+    private fun parseStringList(json: String?): List<String> = runCatching {
+        val array = org.json.JSONArray(json ?: "[]")
+        buildList { for (i in 0 until array.length()) array.optString(i).takeIf { it.isNotBlank() }?.let { add(it) } }
+    }.getOrDefault(emptyList())
+
+    private fun parseStringMap(json: String?): Map<String, String> = runCatching {
+        val obj = org.json.JSONObject(json ?: "{}")
+        buildMap { obj.keys().forEach { key -> obj.optString(key).takeIf { it.isNotBlank() }?.let { put(key, it) } } }
+    }.getOrDefault(emptyMap())
 
     private inline fun update(block: SharedPreferences.Editor.() -> Unit) {
         prefs?.edit()?.apply(block)?.apply()

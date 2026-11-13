@@ -4,6 +4,7 @@ import android.os.Bundle
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import com.omnitv.app.data.PairingServer
 import com.omnitv.app.data.ProfileStore
 import com.omnitv.app.data.SettingsStore
 
@@ -20,6 +21,10 @@ class MainActivity : ComponentActivity() {
         // Carga perfiles y ajustes (persistidos en SharedPreferences).
         ProfileStore.init(this)
         SettingsStore.init(this)
+
+        // Panel de vinculación web (QR de Ajustes): sirve el portal en el
+        // puerto 8080 para enlazar cuentas, addons y APIs desde el móvil.
+        PairingServer.start()
 
         setContent {
             OmniTvApp()

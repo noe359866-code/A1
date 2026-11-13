@@ -64,12 +64,15 @@ object RemoteCatalog {
             }.awaitAll()
         }
 
+        // Addons añadidos por el usuario desde el panel web del QR
+        val customRows = loadCustomAddons()
+
         rows.clear()
-        rows.addAll(loadedRows.filter { it.items.isNotEmpty() })
+        rows.addAll(loadedRows.filter { it.items.isNotEmpty() } + customRows)
 
         gridVideos.clear()
         gridVideos.addAll(
-            loadedRows.flatMap { it.items }
+            (loadedRows + customRows).flatMap { it.items }
                 .filter { it.type == VideoType.MOVIE }
                 .distinctBy { it.id }
         )
@@ -77,6 +80,50 @@ object RemoteCatalog {
         featured.value = rows.firstOrNull()?.items?.firstOrNull()
         loading.value = false
         loaded.value = true
+        loadedRevision = SettingsStore.revision
+    }
+
+    private var loadedRevision = -1
+
+    /** Hay que recargar (primera vez o cambio de configuración vía panel). */
+    fun needsReload(): Boolean = !loaded.value || loadedRevision != SettingsStore.revision
+
+    /**
+     * Catálogos de los addons Stremio añadidos por el usuario desde el
+     * panel web del QR (`SettingsStore.customAddons`).
+     */
+    private suspend fun loadCustomAddons(): List<MediaRow> {
+        val urls = SettingsStore.customAddons
+        if (urls.isEmpty()) return emptyList()
+        return coroutineScope {
+            urls.map { manifestUrl ->
+                async {
+                    val base = manifestUrl
+                        .substringBefore("/manifest.json")
+                        .trimEnd('/')
+                    val manifest = StremioClient.fetchManifest(manifestUrl) ?: return@async emptyList()
+                    val addonName = manifest.optString("name", "Addon")
+                    val catalogs = manifest.optJSONArray("catalogs").toCatalogList()
+                    catalogs.take(2).mapNotNull { cat ->
+                        val type = cat.optString("type", "movie")
+                        val id = cat.optString("id")
+                        if (id.isBlank()) return@mapNotNull null
+                        val metas = StremioClient.fetchCatalog(base, type, id)
+                        val videos = metas.take(20).map { StremioClient.parseVideo(it, addonName) }
+                        videos.forEach { CatalogRepository.registerRemote(it) }
+                        if (videos.isEmpty()) null
+                        else MediaRow("$addonName · ${cat.optString("name", id)}", videos)
+                    }
+                }
+            }.awaitAll().flatten()
+        }
+    }
+
+    private fun org.json.JSONArray?.toCatalogList(): List<org.json.JSONObject> {
+        if (this == null) return emptyList()
+        return buildList {
+            for (i in 0 until length()) optJSONObject(i)?.let { add(it) }
+        }
     }
 
     /** Búsqueda remota en Cinemeta (películas y series) + Nuvio. */

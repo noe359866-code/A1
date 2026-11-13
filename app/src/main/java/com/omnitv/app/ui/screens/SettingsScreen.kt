@@ -18,16 +18,20 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.omnitv.app.R
+import com.omnitv.app.data.PairingServer
 import com.omnitv.app.data.ProfileStore
 import com.omnitv.app.data.SettingsStore
 import com.omnitv.app.ui.components.AvatarView
@@ -90,6 +94,66 @@ fun SettingsScreen(onSwitchProfile: () -> Unit) {
                     primary = false,
                     onClick = onSwitchProfile
                 )
+            }
+        }
+
+        Spacer(Modifier.height(20.dp))
+
+        /* ---------------- Vincular (QR) ---------------- */
+        SettingsCard(iconRes = R.drawable.ic_link, title = "Vincular cuenta · Addons · APIs") {
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 22.dp, vertical = 18.dp),
+                verticalAlignment = Alignment.Top
+            ) {
+                // QR con la URL debajo (como el ejemplo del panel)
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    QrCode(
+                        data = PairingServer.pairingUrl(),
+                        modifier = Modifier
+                            .size(176.dp)
+                            .clip(RoundedCornerShape(12.dp))
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    Text(
+                        PairingServer.panelUrl(),
+                        style = AppType.metadata,
+                        color = Accent,
+                        fontFamily = FontFamily.Monospace
+                    )
+                }
+
+                Spacer(Modifier.width(30.dp))
+
+                // Información e instrucciones
+                Column(Modifier.weight(1f)) {
+                    Text("Escanea el QR con tu móvil", style = AppType.sectionTitle, color = TextPrimary)
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        "Se abrirá el panel web para enlazar tu cuenta, añadir addons " +
+                            "(manifest.json de Stremio) y registrar APIs. Todo llega al " +
+                            "televisor al instante.",
+                        style = AppType.metadata,
+                        color = TextSecondary
+                    )
+                    Spacer(Modifier.height(14.dp))
+                    Text(
+                        "Código de emparejamiento: ${SettingsStore.pairingCode}",
+                        style = AppType.metadata,
+                        color = TextPrimary,
+                        fontFamily = FontFamily.Monospace
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    StatusLine("Servidor", if (PairingServer.running.value) "Activo en ${PairingServer.localIpv4()}:8080" else "Iniciando…")
+                    StatusLine("Cuenta enlazada", SettingsStore.linkedAccount.ifEmpty { "Sin enlazar" })
+                    StatusLine("Addons añadidos", "${SettingsStore.customAddons.size}")
+                    StatusLine("APIs añadidas", "${SettingsStore.apiKeys.size}")
+                    if (PairingServer.lastAction.value.isNotEmpty()) {
+                        Spacer(Modifier.height(10.dp))
+                        Text(PairingServer.lastAction.value, style = AppType.metadata, color = Accent)
+                    }
+                }
             }
         }
 
@@ -227,5 +291,57 @@ private fun ValueText(value: String) {
         Text(value, style = AppType.metadata, color = Accent)
         Spacer(Modifier.width(8.dp))
         Text("›", style = AppType.sectionTitle, color = TextSecondary)
+    }
+}
+
+@Composable
+private fun StatusLine(label: String, value: String) {
+    Row(Modifier.padding(bottom = 5.dp)) {
+        Text("$label: ", style = AppType.metadata, color = TextSecondary)
+        Text(value, style = AppType.metadata, color = TextPrimary)
+    }
+}
+
+/** QR generado con ZXing a partir del texto dado (URL de emparejamiento). */
+@Composable
+private fun QrCode(data: String, modifier: Modifier = Modifier) {
+    val bitmap = remember(data) {
+        runCatching {
+            val hints = mapOf(
+                com.google.zxing.EncodeHintType.MARGIN to 1,
+                com.google.zxing.EncodeHintType.ERROR_CORRECTION to
+                    com.google.zxing.qrcode.decoder.ErrorCorrectionLevel.M
+            )
+            val matrix = com.google.zxing.qrcode.QRCodeWriter().encode(
+                data,
+                com.google.zxing.BarcodeFormat.QR_CODE,
+                512,
+                512,
+                hints
+            )
+            val bmp = android.graphics.Bitmap.createBitmap(512, 512, android.graphics.Bitmap.Config.ARGB_8888)
+            for (x in 0 until 512) {
+                for (y in 0 until 512) {
+                    bmp.setPixel(x, y, if (matrix.get(x, y)) android.graphics.Color.BLACK else android.graphics.Color.WHITE)
+                }
+            }
+            bmp
+        }.getOrNull()
+    }
+
+    Box(
+        modifier.background(Color.White),
+        contentAlignment = Alignment.Center
+    ) {
+        if (bitmap != null) {
+            Image(
+                bitmap = bitmap.asImageBitmap(),
+                contentDescription = "Código QR de vinculación",
+                contentScale = ContentScale.Fit,
+                modifier = Modifier.fillMaxSize().padding(8.dp)
+            )
+        } else {
+            Text("QR", style = AppType.sectionTitle, color = Color.Black)
+        }
     }
 }

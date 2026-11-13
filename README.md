@@ -165,6 +165,24 @@ Al elegir una plataforma se carga su **catálogo real**:
   meta de Cinemeta. Filtros *Todas / Películas / Series*.
 - Perfiles infantiles: sección no disponible (catálogo curado local).
 
+## 🔗 Vinculación por QR (panel web embebido)
+
+La pestaña **Ajustes → «Vincular cuenta · Addons · APIs»** muestra un **QR**
+con la URL del panel **debajo** (formato `http://{ip-del-tv}:8080/`, como el
+ejemplo `https://192.124.0.10:8080/`) y el **código de emparejamiento**.
+
+- Al escanear el QR, el móvil abre el **portal web servido por la propia TV**
+  (`data/PairingServer.kt`, servidor HTTP embebido en el puerto 8080):
+  - **Enlazar cuenta** (email),
+  - **Añadir addons** (URLs de `manifest.json` de Stremio — se cargan como
+    filas nuevas del catálogo en caliente),
+  - **Añadir APIs** (`NOMBRE=clave`, guardadas para integraciones).
+- Todo se valida con el código de emparejamiento y se persiste en
+  `SettingsStore`; el Inicio se recarga automáticamente al recibir cambios.
+- El estado en Ajustes es en vivo: servidor, cuenta, nº de addons y APIs y
+  la última acción recibida desde el panel.
+- QR generado con **ZXing** (`com.google.zxing:core:3.5.3`).
+
 ## 🎬 «Por estudio» (como «Browse by studio» de sweetfox.app)
 
 Sección del Inicio **«Por estudio»** — inspirada en el *Browse by studio* de

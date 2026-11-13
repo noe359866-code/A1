@@ -13,6 +13,7 @@ import androidx.compose.ui.unit.dp
 import com.omnitv.app.data.CatalogRepository
 import com.omnitv.app.data.ProfileStore
 import com.omnitv.app.data.RemoteCatalog
+import com.omnitv.app.data.SettingsStore
 import com.omnitv.app.data.Studio
 import com.omnitv.app.data.StreamingProvider
 import com.omnitv.app.data.Video
@@ -41,9 +42,10 @@ fun HomeScreen(
 ) {
     val profile = ProfileStore.currentProfile
 
-    // Carga del catálogo real (Cinemeta + Nuvio), una sola vez
-    LaunchedEffect(Unit) {
-        if (!RemoteCatalog.loaded.value) RemoteCatalog.refresh()
+    // Carga del catálogo real (Cinemeta + Nuvio + addons del panel QR);
+    // se recarga si la configuración cambia desde el panel web
+    LaunchedEffect(SettingsStore.revision) {
+        if (RemoteCatalog.needsReload()) RemoteCatalog.refresh()
     }
 
     val localRows = CatalogRepository.rowsFor(profile)

@@ -81,6 +81,16 @@ object StremioClient {
             httpJson("$base/meta/$type/$id.json")?.optJSONObject("meta")
         }
 
+    /** Manifest de un addon arbitrario (URL completa o base del addon). */
+    suspend fun fetchManifest(urlOrBase: String): JSONObject? = withContext(Dispatchers.IO) {
+        val url = if (urlOrBase.endsWith(".json")) {
+            urlOrBase
+        } else {
+            "${urlOrBase.trimEnd('/')}/manifest.json"
+        }
+        httpJson(url)
+    }
+
     /* ------------------------------ Mapeo -------------------------------- */
 
     /** Convierte un `meta` de Stremio en el modelo [Video] de Omni TV. */
