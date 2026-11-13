@@ -89,6 +89,13 @@ object SettingsStore {
     var secretsEncrypted by mutableStateOf(false)
         private set
 
+    /**
+     * Resolver los nombres con el **DNS de Cloudflare** (DoH) cuando el DNS
+     * del sistema falla. Apagado = comportamiento clásico.
+     */
+    var cloudflareDns by mutableStateOf(true)
+        private set
+
     /** Se incrementa con cada cambio para refrescar listas observables. */
     var revision by mutableStateOf(0)
         private set
@@ -103,6 +110,8 @@ object SettingsStore {
         subtitlesDefault = p.getBoolean("subtitlesDefault", false)
         playbackSpeed = p.getFloat("playbackSpeed", 1f)
         preferredQuality = p.getString("preferredQuality", "Auto") ?: "Auto"
+        cloudflareDns = p.getBoolean("cloudflareDns", true)
+        Doh.enabled = cloudflareDns
         pairingCode = p.getString("pairingCode", null) ?: generatePairingCode().also { code ->
             p.edit().putString("pairingCode", code).apply()
         }
@@ -168,6 +177,13 @@ object SettingsStore {
     fun savePlaybackSpeed(value: Float) = update { putFloat("playbackSpeed", value) }.also { playbackSpeed = value }
 
     fun savePreferredQuality(value: String) = update { putString("preferredQuality", value) }.also { preferredQuality = value }
+
+    /** Activa o desactiva el DNS de Cloudflare para las descargas de la app. */
+    fun saveCloudflareDns(value: Boolean) = update { putBoolean("cloudflareDns", value) }.also {
+        cloudflareDns = value
+        Doh.enabled = value
+        revision++
+    }
 
     /** Enlaza una cuenta desde el panel web del QR. */
     fun saveLinkedAccount(email: String) = update { putString("linkedAccount", email) }.also {

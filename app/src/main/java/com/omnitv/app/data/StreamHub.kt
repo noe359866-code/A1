@@ -99,7 +99,16 @@ class ProjectStreamAddon(
         }
     }
 
-    private fun httpJson(url: String): JSONObject? = runCatching {
+    /**
+     * Descarga [url] como JSON. Primero por el DNS normal; si el nombre no
+     * resuelve, reintenta con el DNS de Cloudflare ([Doh]).
+     */
+    private fun httpJson(url: String): JSONObject? =
+        httpJsonDirect(url) ?: Doh.retry(url)?.let { body ->
+            runCatching { JSONObject(body) }.getOrNull()
+        }
+
+    private fun httpJsonDirect(url: String): JSONObject? = runCatching {
         val connection = URL(url).openConnection() as HttpURLConnection
         try {
             connection.connectTimeout = 6_000

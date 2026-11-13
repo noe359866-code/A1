@@ -119,6 +119,7 @@ Todo persistido en `SharedPreferences`.
 | Navigation Compose | 2.8.4 |
 | Coil (imágenes) | 2.6.0 |
 | ZXing (códigos QR) | 3.5.3 |
+| DNS de Cloudflare (DoH) | `cloudflare-dns.com` · sin dependencias nuevas (`HttpURLConnection`) |
 | minSdk / targetSdk / compileSdk | 22 / 34 / 35 |
 
 Sin dependencias de red propias: el cliente Stremio usa `HttpURLConnection` +
@@ -130,6 +131,9 @@ distribución comercial.
 **Red y datos guardados** (ver [Seguridad](#-seguridad-y-datos-guardados)):
 
 - `https://` siempre; `http://` **solo hacia la red local** (`NetPolicy`).
+- Si el DNS del router falla o filtra, los nombres se resuelven con el
+  **DNS de Cloudflare por HTTPS** (`Doh`): `https://cloudflare-dns.com/dns-query`
+  (1.1.1.1), con el certificado validado **contra el nombre original**.
 - El panel de vinculación **exige el código** antes de leer o escribir nada.
 - Las claves de API se cifran con el **Android Keystore** y quedan **fuera de
   las copias de seguridad**.
@@ -300,6 +304,7 @@ A1/
 │       │   │   │   ├── Providers.kt         # 17 plataformas (logos TMDB)
 │       │   │   │   ├── Studios.kt           # 24 estudios (logos TMDB)
 │       │   │   │   ├── NetPolicy.kt         # URLs aceptadas (https; http solo en la LAN)
+│       │   │   │   ├── Doh.kt               # DNS de Cloudflare por HTTPS (red de seguridad)
 │       │   │   │   ├── SecretBox.kt         # cifrado de secretos (Android Keystore AES-GCM)
 │       │   │   │   ├── PairingServer.kt     # servidor web :8080 (sockets)
 │       │   │   │   ├── PairingRouter.kt     # reglas del panel: sin código no hay datos
@@ -377,6 +382,31 @@ Lo que la app promete es lo que hace:
   volver a introducirlas.
 - El panel de vinculación y la política de red (`NetPolicy`) se describen en
   sus secciones. `http://` sin cifrar nunca sale de la red local.
+
+## 🌐 DNS de Cloudflare (DoH)
+
+En Android TV hay routers de operador, cajas y Wi-Fi de hotel donde el DNS
+falla, filtra o responde lento: los addons se quedan cargando sin decir por
+qué. Omni TV resuelve los nombres con el **DNS de Cloudflare por HTTPS**
+(DNS over HTTPS), que viaja cifrado y no depende del DNS del router.
+
+- **Endpoint**: `https://cloudflare-dns.com/dns-query` con
+  `Accept: application/dns-json` (el JSON documentado de 1.1.1.1), consultas
+  `A` y `AAAA`. Sin librerías nuevas: `HttpURLConnection` + `org.json`.
+- **Cuándo**: solo como **red de seguridad**. Cada cliente (Cinemeta/Nuvio,
+  addons de streams, cinejoy, sweetfox) intenta primero su conexión normal; si
+  el nombre no resuelve, reintenta resolviendo por Cloudflare.
+- **Solo `https://`**. Un `http://` nunca sale por el resolutor público:
+  `NetPolicy` solo lo permite en la red local, donde no hace falta.
+- **El certificado se valida contra el nombre original**, no contra la IP
+  (SNI + verificador del sistema). Saber la IP de Cloudflare no permite que
+  nadie se haga pasar por el servidor.
+- **Si DoH falla** (sin red, puerto bloqueado, respuesta rara), la app se queda
+  como estaba: sin datos. Nunca se pintan datos de un tercero.
+- **Caché** en memoria (64 nombres) con el TTL que anuncia el DNS, acotado
+  entre 30 s y 5 min. Los errores (`Status != 0`, CNAME, texto) se descartan.
+- **Interruptor**: Ajustes → **Red → «DNS de Cloudflare»** (activo por
+  defecto). Apagado = comportamiento clásico, solo el DNS del sistema.
 
 ## 🍎 Decisiones de diseño (estética Apple TV)
 

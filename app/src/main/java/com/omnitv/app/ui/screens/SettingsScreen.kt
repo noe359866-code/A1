@@ -222,6 +222,19 @@ fun SettingsScreen(onSwitchProfile: () -> Unit) {
 
         Spacer(Modifier.height(20.dp))
 
+        /* ---------------- Red ---------------- */
+        SettingsCard(iconRes = R.drawable.ic_server, title = "Red") {
+            SettingRow(
+                title = "DNS de Cloudflare",
+                subtitle = "Si el DNS de tu router falla o filtra, los nombres se resuelven " +
+                    "por DNS sobre HTTPS (cloudflare-dns.com, 1.1.1.1). El certificado se " +
+                    "sigue comprobando contra el nombre original; solo se usa https://",
+                trailing = { TvToggle(SettingsStore.cloudflareDns, onCheckedChange = { SettingsStore.saveCloudflareDns(it) }) }
+            )
+        }
+
+        Spacer(Modifier.height(20.dp))
+
         /* ---------------- Sistema ---------------- */
         SettingsCard(iconRes = R.drawable.ic_server, title = "Sistema") {
             SettingRow(

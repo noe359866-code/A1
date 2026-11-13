@@ -36,7 +36,15 @@ object SweetFoxClient {
 
     /* ------------------------------ HTTP -------------------------------- */
 
-    private fun httpText(url: String): String? = runCatching {
+    /**
+     * Descarga [url]. Primero por el DNS normal; si el nombre no resuelve
+     * (redes con DNS roto o filtrado), reintenta con el DNS de Cloudflare
+     * ([Doh]) validando el certificado del nombre original.
+     */
+    private fun httpText(url: String): String? =
+        httpTextDirect(url) ?: Doh.retry(url)
+
+    private fun httpTextDirect(url: String): String? = runCatching {
         val connection = URL(url).openConnection() as HttpURLConnection
         try {
             connection.connectTimeout = 10_000
