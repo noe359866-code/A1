@@ -50,7 +50,7 @@
 
 | Tecla | Inicio / listas | Reproductor |
 | --- | --- | --- |
-| **Centro / Enter** | Abrir elemento enfocado | Botón enfocado · mostrar controles |
+| **Centro / Enter** | Abrir elemento enfocado · abrir el teclado en el buscador | Botón enfocado · mostrar controles |
 | **◀ / ▶** | Moverse por las filas | Retroceder / avanzar **10 s** (con controles ocultos) · navegar controles |
 | **▲ / ▼** | Moverse entre filas | Mostrar controles · menús de opciones |
 | **Atrás** | Volver | Cerrar menú → ocultar controles → salir |
@@ -419,8 +419,19 @@ qué. Omni TV resuelve los nombres con el **DNS de Cloudflare por HTTPS**
   y los botones primarios.
 - **Botones píldora** con icono (▶ Reproducir / ⓘ Más información) idénticos en
   héroe, detalle y reproductor.
-- **Tipografía**: pesos altos, interletraje cerrado y jerarquía muy marcada
-  (46 / 34 / 21 / 16 / 14 sp).
+- **Tipografía de 10 pies**: pesos altos, interletraje cerrado y jerarquía muy
+  marcada (54 / 40 / 27 / 21 / 18 / 15 sp). El cuerpo son 21 sp, no los 16 de
+  móvil: a 2–3 m del sofá, 16 sp no se lee. El mínimo de la app son 15 sp.
+- **Foco siempre visible**: anillo blanco de 3 dp (no solo cambio de fondo) en
+  tarjetas, pestañas, chips, interruptores y botones, más escala de 1,08.
+- **El mando manda**: cada pantalla entra con el foco donde el usuario espera
+  («Reproducir» en la ficha, el campo en Buscar, el primer perfil, el héroe en
+  Inicio), y las filas sin acción propia no son focos alcanzables.
+- **Teclado en pantalla**: los dos campos de texto piden el IME con OK del
+  mando; sin eso, un televisor sin teclado físico no permite escribir nada.
+- **Zona segura**: 48 dp de margen (el overscan del 5 % de los paneles) para
+  botones, textos y rejillas; rejillas de 5 columnas y héroe proporcional al
+  alto de pantalla.
 
 ## 📄 Licencia
 
