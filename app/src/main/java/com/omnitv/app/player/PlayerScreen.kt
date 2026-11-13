@@ -15,7 +15,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
@@ -62,8 +61,10 @@ import coil.compose.AsyncImage
 import com.omnitv.app.R
 import com.omnitv.app.data.CatalogRepository
 import com.omnitv.app.data.ProfileStore
+import com.omnitv.app.data.SettingsStore
 import com.omnitv.app.data.StreamFormat
 import com.omnitv.app.data.Video
+import com.omnitv.app.ui.components.LoadingSpinner
 import com.omnitv.app.ui.components.MetaLine
 import com.omnitv.app.ui.components.PillButton
 import com.omnitv.app.ui.components.SeekBar
@@ -72,12 +73,13 @@ import kotlinx.coroutines.delay
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import kotlin.math.abs
 
 /* -------------------------------------------------------------------------- */
 /*  Estados del reproductor                                                   */
 /* -------------------------------------------------------------------------- */
 
-private enum class MenuKind { NONE, SERVER, QUALITY, AUDIO, SUBTITLES, ASPECT }
+private enum class MenuKind { NONE, SERVER, QUALITY, AUDIO, SUBTITLES, ASPECT, SPEED, SLEEP }
 
 private enum class AspectMode(val label: String, val ratio: Float, val resizeMode: Int) {
     FIT("Ajustar", 0f, AspectRatioFrameLayout.RESIZE_MODE_FIT),
@@ -94,18 +96,24 @@ private fun nowClock(): String =
     SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date())
 
 /**
- * Reproductor estilo Xuper TV sobre Media3 ExoPlayer:
+ * Reproductor estilo Xuper TV sobre Media3 ExoPlayer.
  *
- * - Franja EPG «AHORA / A CONTINUACIÓN» en la cabecera.
- * - Multi-servidor con conmutación manual y automática ante errores.
- * - Selectores de calidad, audio, subtítulos y relación de aspecto/zoom.
- * - Controles de vidrio grandes para mando de TV: ⏪10 s · ▶ · 10 s⏩.
- * - Atajos D-pad: ◀▶ retroceden/avanzan 10 s; centro muestra controles.
+ * - **Autoplay**: los vídeos empiezan solos (ajustable en Ajustes).
+ * - **Auto-next**: al terminar aparece «A continuación» con cuenta atrás
+ *   de 10 s y botones *Reproducir ahora* / *Cancelar*.
+ * - Franja EPG «AHORA / A CONTINUACIÓN», multi-servidor con conmutación
+ *   automática, calidad/audio/subtítulos/velocidad, zoom y temporizador.
+ * - Controles de vidrio para mando de TV y atajos ◀▶ (±10 s).
  */
 @Composable
-fun PlayerScreen(video: Video, onBack: () -> Unit) {
+fun PlayerScreen(
+    video: Video,
+    onBack: () -> Unit,
+    onPlayNext: (Video) -> Unit = {}
+) {
     val context = LocalContext.current
     val sources = video.playbackSources
+    val nextVideo = remember(video.id) { CatalogRepository.related(video.id).firstOrNull() }
 
     val trackSelector = remember { DefaultTrackSelector(context) }
     val player = remember {
@@ -121,13 +129,15 @@ fun PlayerScreen(video: Video, onBack: () -> Unit) {
                     /* handleAudioFocus = */ true
                 )
                 setMediaItem(ExoMediaItem.Builder().setUri(sources[0].url).build())
-                playWhenReady = true
+                playWhenReady = SettingsStore.autoplay
+                if (SettingsStore.mutedStart) volume = 0f
+                setPlaybackSpeed(SettingsStore.playbackSpeed)
                 prepare()
             }
     }
 
     // ---------------- Estado de la UI ----------------
-    var isPlaying by remember { mutableStateOf(true) }
+    var isPlaying by remember { mutableStateOf(SettingsStore.autoplay) }
     var isBuffering by remember { mutableStateOf(true) }
     var hasError by remember { mutableStateOf<String?>(null) }
     var controlsVisible by remember { mutableStateOf(true) }
@@ -147,10 +157,20 @@ fun PlayerScreen(video: Video, onBack: () -> Unit) {
     var textChoice by remember { mutableStateOf<TrackChoice?>(null) }
     var subtitlesOn by remember { mutableStateOf(false) }
     var aspectMode by remember { mutableStateOf(AspectMode.FIT) }
+    var speed by remember { mutableStateOf(SettingsStore.playbackSpeed) }
+    var preferenceApplied by remember { mutableStateOf(false) }
+
+    // Auto-next: panel «A continuación» + cuenta atrás
+    var showNextPanel by remember { mutableStateOf<Video?>(null) }
+    var nextCountdown by remember { mutableStateOf(0) }
+
+    // Temporizador de apagado
+    var sleepMinutes by remember { mutableStateOf(0) }
+    var sleepDeadline by remember { mutableStateOf<Long?>(null) }
+    var sleepLabel by remember { mutableStateOf("Temporizador") }
 
     val rootFocus = remember { FocusRequester() }
     val playFocus = remember { FocusRequester() }
-    val nextVideo = remember(video.id) { CatalogRepository.related(video.id).firstOrNull() }
 
     // ---------------- Acciones ----------------
 
@@ -189,10 +209,64 @@ fun PlayerScreen(video: Video, onBack: () -> Unit) {
                 if (playbackState == Player.STATE_READY && player.duration > 0) {
                     durationMs = player.duration
                 }
+                if (playbackState == Player.STATE_ENDED) {
+                    if (nextVideo != null && showNextPanel == null && hasError == null) {
+                        // Auto-next: muestra el panel «A continuación»
+                        showNextPanel = nextVideo
+                    } else if (nextVideo == null) {
+                        toast = "Fin de la reproducción"
+                    }
+                }
             }
 
             override fun onTracksChanged(currentTracks: Tracks) {
                 tracks = currentTracks
+                // Aplica la calidad preferida y los subtítulos por defecto
+                if (!preferenceApplied && currentTracks.groups.isNotEmpty()) {
+                    preferenceApplied = true
+                    val target = when (SettingsStore.preferredQuality) {
+                        "4K" -> 2160
+                        "1080p" -> 1080
+                        "720p" -> 720
+                        "480p" -> 480
+                        else -> 0
+                    }
+                    if (target > 0) {
+                        var best: TrackChoice? = null
+                        var bestDiff = Int.MAX_VALUE
+                        for (group in currentTracks.groups) {
+                            if (group.type != C.TRACK_TYPE_VIDEO) continue
+                            for (i in 0 until group.length) {
+                                if (!group.isTrackSupported(i)) continue
+                                val height = group.getTrackFormat(i).height
+                                if (height <= 0) continue
+                                val diff = abs(height - target)
+                                if (diff < bestDiff) {
+                                    bestDiff = diff
+                                    best = TrackChoice(group.mediaTrackGroup, i)
+                                }
+                            }
+                        }
+                        best?.let {
+                            videoChoice = it
+                            applyTrack(C.TRACK_TYPE_VIDEO, it)
+                        }
+                    }
+                    if (SettingsStore.subtitlesDefault) {
+                        run {
+                            for (group in currentTracks.groups) {
+                                if (group.type != C.TRACK_TYPE_TEXT) continue
+                                for (i in 0 until group.length) {
+                                    if (!group.isTrackSupported(i)) continue
+                                    subtitlesOn = true
+                                    textChoice = TrackChoice(group.mediaTrackGroup, i)
+                                    applyTrack(C.TRACK_TYPE_TEXT, textChoice, disable = false)
+                                    return@run
+                                }
+                            }
+                        }
+                    }
+                }
             }
 
             override fun onPlayerError(error: PlaybackException) {
@@ -233,21 +307,54 @@ fun PlayerScreen(video: Video, onBack: () -> Unit) {
         }
     }
 
-    // Ocultar controles a los 7 s reproduciendo (sin menús abiertos)
-    LaunchedEffect(controlsVisible, isPlaying, menu) {
-        if (controlsVisible && isPlaying && menu == MenuKind.NONE) {
+    // Ocultar controles a los 7 s reproduciendo (sin menús ni panel siguiente)
+    LaunchedEffect(controlsVisible, isPlaying, menu, showNextPanel) {
+        if (controlsVisible && isPlaying && menu == MenuKind.NONE && showNextPanel == null) {
             delay(7000)
             controlsVisible = false
             showInfo = false
         }
     }
 
-    // Aviso temporal (cambios de servidor)
+    // Aviso temporal (cambios de servidor, velocidad, temporizador…)
     LaunchedEffect(toast) {
         if (toast != null) {
             delay(2800)
             toast = null
         }
+    }
+
+    // Cuenta atrás del auto-next (10 s)
+    LaunchedEffect(showNextPanel) {
+        val next = showNextPanel
+        if (next != null && SettingsStore.autoNext) {
+            nextCountdown = 10
+            while (nextCountdown > 0) {
+                delay(1000)
+                nextCountdown -= 1
+            }
+            if (nextCountdown == 0) onPlayNext(next)
+        } else {
+            nextCountdown = 0
+        }
+    }
+
+    // Temporizador de apagado
+    LaunchedEffect(sleepDeadline) {
+        val deadline = sleepDeadline
+        if (deadline == null) {
+            sleepLabel = "Temporizador"
+            return@LaunchedEffect
+        }
+        while (System.currentTimeMillis() < deadline) {
+            val remaining = (deadline - System.currentTimeMillis()).coerceAtLeast(0) / 1000
+            sleepLabel = String.format(Locale.US, "⏱ %d:%02d", remaining / 60, remaining % 60)
+            delay(1000)
+        }
+        player.pause()
+        toast = "Temporizador finalizado · vídeo en pausa"
+        sleepMinutes = 0
+        sleepDeadline = null
     }
 
     // Gestión de foco: al mostrar controles → botón de play; al ocultar → raíz
@@ -260,6 +367,7 @@ fun PlayerScreen(video: Video, onBack: () -> Unit) {
 
     BackHandler {
         when {
+            showNextPanel != null -> showNextPanel = null
             menu != MenuKind.NONE -> menu = MenuKind.NONE
             controlsVisible -> {
                 controlsVisible = false
@@ -269,7 +377,7 @@ fun PlayerScreen(video: Video, onBack: () -> Unit) {
         }
     }
 
-    // ---------------- Opciones de pistas (Media3 TrackSelection) ----------------
+    // ---------------- Opciones de pistas y ajustes ----------------
 
     val qualityOptions = remember(tracks, videoChoice) {
         buildList {
@@ -362,6 +470,28 @@ fun PlayerScreen(video: Video, onBack: () -> Unit) {
         }
     }
 
+    val speedOptions = SettingsStore.SPEED_PRESETS.map { preset ->
+        PlayerOption(SettingsStore.speedLabel(preset), speed == preset) {
+            speed = preset
+            player.setPlaybackSpeed(preset)
+            SettingsStore.setPlaybackSpeed(preset)
+            menu = MenuKind.NONE
+            toast = "Velocidad ${SettingsStore.speedLabel(preset)}"
+        }
+    }
+
+    val sleepOptions = listOf(0, 15, 30, 60).map { minutes ->
+        PlayerOption(
+            label = if (minutes == 0) "Desactivado" else "$minutes min",
+            selected = sleepMinutes == minutes
+        ) {
+            sleepMinutes = minutes
+            sleepDeadline = if (minutes == 0) null else System.currentTimeMillis() + minutes * 60_000L
+            menu = MenuKind.NONE
+            toast = if (minutes == 0) "Temporizador desactivado" else "Temporizador: $minutes min"
+        }
+    }
+
     val qualityLabel = videoChoice?.let { choice ->
         val format = choice.group.getTrackFormat(choice.index)
         if (format.height > 0) "${format.height}p" else "Manual"
@@ -435,7 +565,7 @@ fun PlayerScreen(video: Video, onBack: () -> Unit) {
 
         // Botón central grande al pausar (como Xuper TV)
         AnimatedVisibility(
-            visible = !isPlaying && !isBuffering && hasError == null && controlsVisible,
+            visible = !isPlaying && !isBuffering && hasError == null && controlsVisible && showNextPanel == null,
             enter = fadeIn(),
             exit = fadeOut(),
             modifier = Modifier.align(Alignment.Center)
@@ -452,13 +582,13 @@ fun PlayerScreen(video: Video, onBack: () -> Unit) {
                 Modifier.align(Alignment.Center),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                com.omnitv.app.ui.components.LoadingSpinner()
+                LoadingSpinner()
                 Spacer(Modifier.height(14.dp))
                 Text("Cargando…", style = fontSize15(), color = Color(0xFF8E8E93))
             }
         }
 
-        // Aviso flotante (conmutación de servidor)
+        // Aviso flotante
         AnimatedVisibility(
             visible = toast != null,
             enter = fadeIn(),
@@ -552,6 +682,10 @@ fun PlayerScreen(video: Video, onBack: () -> Unit) {
                             InfoChip(video.quality)
                             Spacer(Modifier.width(8.dp))
                             InfoChip(if (video.streamFormat == StreamFormat.HLS) "HLS" else "MP4")
+                            if (speed != 1f) {
+                                Spacer(Modifier.width(8.dp))
+                                InfoChip(SettingsStore.speedLabel(speed))
+                            }
                         }
                         Spacer(Modifier.height(8.dp))
                         // Franja EPG estilo Xuper TV: qué se emite ahora y después
@@ -615,6 +749,69 @@ fun PlayerScreen(video: Video, onBack: () -> Unit) {
                     }
                 }
 
+                // Panel «A continuación» (auto-next)
+                showNextPanel?.let { next ->
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 44.dp, vertical = 10.dp),
+                        horizontalArrangement = Arrangement.End
+                    ) {
+                        GlassPanel(Modifier.width(540.dp)) {
+                            Column(Modifier.padding(20.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    AsyncImage(
+                                        model = next.cardUrl,
+                                        contentDescription = null,
+                                        contentScale = ContentScale.Crop,
+                                        modifier = Modifier
+                                            .width(132.dp)
+                                            .height(74.dp)
+                                            .clip(RoundedCornerShape(10.dp))
+                                    )
+                                    Spacer(Modifier.width(16.dp))
+                                    Column {
+                                        EpgChip("A CONTINUACIÓN", Color(0xFFE50914))
+                                        Spacer(Modifier.height(6.dp))
+                                        Text(
+                                            next.title,
+                                            style = fontSize17(),
+                                            color = Color.White,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                        Spacer(Modifier.height(4.dp))
+                                        Text(
+                                            if (SettingsStore.autoNext) "Empieza en $nextCountdown s"
+                                            else "Listo para reproducir",
+                                            style = fontSize13(),
+                                            color = Color(0xFF8E8E93)
+                                        )
+                                    }
+                                }
+                                Spacer(Modifier.height(16.dp))
+                                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                    PillButton(
+                                        text = "Reproducir ahora",
+                                        iconRes = R.drawable.ic_play,
+                                        primary = true,
+                                        onClick = {
+                                            showNextPanel = null
+                                            onPlayNext(next)
+                                        }
+                                    )
+                                    PillButton(
+                                        text = "Cancelar",
+                                        iconRes = R.drawable.ic_back,
+                                        primary = false,
+                                        onClick = { showNextPanel = null }
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
                 // Menú de opciones activo (derecha)
                 if (menu != MenuKind.NONE) {
                     Row(
@@ -629,6 +826,8 @@ fun PlayerScreen(video: Video, onBack: () -> Unit) {
                             MenuKind.AUDIO -> OptionMenu("Audio", audioOptions)
                             MenuKind.SUBTITLES -> OptionMenu("Subtítulos", subtitleOptions)
                             MenuKind.ASPECT -> OptionMenu("Relación de aspecto", aspectOptions)
+                            MenuKind.SPEED -> OptionMenu("Velocidad", speedOptions)
+                            MenuKind.SLEEP -> OptionMenu("Temporizador", sleepOptions)
                             MenuKind.NONE -> {}
                         }
                     }
@@ -688,6 +887,16 @@ fun PlayerScreen(video: Video, onBack: () -> Unit) {
                             contentDescription = "Avanzar 10 segundos",
                             onClick = { player.seekTo(player.currentPosition + 10_000) }
                         )
+                        if (nextVideo != null) {
+                            TransportButton(
+                                iconRes = R.drawable.ic_skip_next,
+                                contentDescription = "Siguiente título",
+                                onClick = {
+                                    showNextPanel = null
+                                    onPlayNext(nextVideo)
+                                }
+                            )
+                        }
 
                         Spacer(Modifier.weight(1f))
 
@@ -722,6 +931,18 @@ fun PlayerScreen(video: Video, onBack: () -> Unit) {
                             onClick = { menu = if (menu == MenuKind.ASPECT) MenuKind.NONE else MenuKind.ASPECT }
                         )
                         ControlPill(
+                            iconRes = R.drawable.ic_quality,
+                            label = SettingsStore.speedLabel(speed),
+                            active = menu == MenuKind.SPEED,
+                            onClick = { menu = if (menu == MenuKind.SPEED) MenuKind.NONE else MenuKind.SPEED }
+                        )
+                        ControlPill(
+                            iconRes = R.drawable.ic_server,
+                            label = sleepLabel,
+                            active = sleepDeadline != null || menu == MenuKind.SLEEP,
+                            onClick = { menu = if (menu == MenuKind.SLEEP) MenuKind.NONE else MenuKind.SLEEP }
+                        )
+                        ControlPill(
                             iconRes = R.drawable.ic_info,
                             label = "Info",
                             active = showInfo,
@@ -744,6 +965,10 @@ private fun fontSize22() = androidx.compose.ui.text.TextStyle(
 
 private fun fontSize20() = androidx.compose.ui.text.TextStyle(
     fontFamily = FontFamily.SansSerif, fontWeight = FontWeight.SemiBold, fontSize = 20.sp
+)
+
+private fun fontSize17() = androidx.compose.ui.text.TextStyle(
+    fontFamily = FontFamily.SansSerif, fontWeight = FontWeight.SemiBold, fontSize = 17.sp
 )
 
 private fun fontSize15() = androidx.compose.ui.text.TextStyle(

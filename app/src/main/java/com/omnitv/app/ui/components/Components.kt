@@ -591,7 +591,8 @@ fun SettingRow(
     title: String,
     subtitle: String? = null,
     trailing: @Composable () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onClick: (() -> Unit)? = null
 ) {
     var focused by remember { mutableStateOf(false) }
     Row(
@@ -600,7 +601,17 @@ fun SettingRow(
             .clip(RoundedCornerShape(14.dp))
             .background(if (focused) SurfaceElevated else Color.Transparent)
             .onFocusChanged { focused = it.isFocused }
-            .focusable()
+            .then(
+                if (onClick != null) {
+                    Modifier.clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null,
+                        onClick = onClick
+                    )
+                } else {
+                    Modifier.focusable()
+                }
+            )
             .padding(horizontal = 22.dp, vertical = 18.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {

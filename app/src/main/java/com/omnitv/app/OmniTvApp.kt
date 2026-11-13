@@ -167,7 +167,13 @@ fun OmniTvApp() {
                 if (video != null) {
                     PlayerScreen(
                         video = video,
-                        onBack = { navController.popBackStack() }
+                        onBack = { navController.popBackStack() },
+                        onPlayNext = { next ->
+                            // Auto-next: sustituye el reproductor actual por el siguiente
+                            navController.navigate(Routes.player(next.id)) {
+                                popUpTo(Routes.PLAYER) { inclusive = true }
+                            }
+                        }
                     )
                 } else {
                     LaunchedEffect(Unit) { navController.popBackStack() }

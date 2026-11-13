@@ -33,7 +33,8 @@
 4. **Detalle** — fondo a sangre con velo, título grande, metadatos (año · duración · ★ · calidad · clasificación), botones *Reproducir* / *Mi lista* y recomendaciones.
 5. **Reproductor** — estilo Xuper TV sobre Media3 ExoPlayer (ver sección propia).
    Al salir, el progreso se guarda en el perfil activo.
-6. **Ajustes** — perfil activo con *Cambiar de perfil*, interruptores tipo iOS y opciones de reproducción.
+6. **Ajustes** — tarjetas con iconos: perfil activo, **Autoplay / Auto-next**,
+   calidad preferida, velocidad, subtítulos por defecto y datos del sistema.
 7. **Gestionar / Editar perfil** — modo edición con lápiz sobre cada avatar; el editor
    cambia nombre, color e interruptor de perfil infantil, y permite eliminar.
 
@@ -61,6 +62,25 @@ El reproductor replica las funciones del «smart player» de Xuper TV
 | **Rewind / fast forward** | Botones ⏪ 10 s / 10 s ⏩ + atajos ◀▶ del mando |
 | **Control para mando de TV** | Botones grandes de vidrio, menús emergentes navegables con D-pad, botón central grande al pausar |
 | **Info del contenido** | Panel *Info* con sinopsis, metadatos, servidor activo, idioma y clasificación |
+
+### Autoplay · Auto-next · y más
+
+| Función | Descripción |
+| --- | --- |
+| **Autoplay** | Los vídeos empiezan a reproducirse solos al abrirlos (ajustable en *Ajustes → Reproducción*) |
+| **Auto-next** | Al terminar un vídeo aparece el panel **«A continuación»** con miniatura, **cuenta atrás de 10 s** y botones *Reproducir ahora* / *Cancelar*; el siguiente título sustituye al actual (sin ensuciar el historial). Botón **⏭ Siguiente** también en la barra de transporte |
+| **Velocidad de reproducción** | Menú 0,75× · 1× · 1,25× · 1,5× · 2×, con chip visible en la cabecera y valor recordado entre vídeos |
+| **Temporizador de apagado** | 15 / 30 / 60 min: el botón muestra la cuenta atrás ⏱ y al expirar pausa la reproducción |
+| **Calidad preferida** | En *Ajustes*: Auto / 4K / 1080p / 720p / 480p — se aplica automáticamente al iniciar cada vídeo |
+| **Subtítulos por defecto** | Activa la pista de subtítulos automáticamente si existe |
+
+### Ajustes rediseñados
+
+Tarjetas con iconos y filas con foco: **Perfil** (avatar + cambiar de perfil),
+**Reproducción** (Autoplay, Siguiente automático, Inicio silenciado),
+**Calidad y velocidad** (calidad preferida, velocidad y subtítulos por defecto,
+valores ciclables con «›») y **Sistema** (idioma, motor Media3, versión).
+Todo persistido en `SharedPreferences`.
 
 ## 👤 Perfiles (como Netflix)
 
@@ -109,9 +129,10 @@ A1/
 │       │   ├── MainActivity.kt          # ComponentActivity + keep-screen-on
 │       │   ├── OmniTvApp.kt             # NavHost + pestañas + rutas
 │       │   ├── data/
-│       │   │   ├── Models.kt            # Video, MediaRow, StreamFormat
+│       │   │   ├── Models.kt            # Video, MediaRow, StreamSource
 │       │   │   ├── Profile.kt           # perfiles + avatarRes (8 caras)
 │       │   │   ├── ProfileStore.kt      # persistencia de perfiles (SharedPreferences)
+│       │   │   ├── SettingsStore.kt     # autoplay, auto-next, velocidad, calidad…
 │       │   │   └── CatalogRepository.kt # catálogo demo (MP4 + HLS, por perfil)
 │       │   ├── player/
 │       │   │   ├── PlayerScreen.kt      # reproductor estilo Xuper TV (Media3)
