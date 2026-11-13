@@ -423,7 +423,17 @@ qué. Omni TV resuelve los nombres con el **DNS de Cloudflare por HTTPS**
   marcada (54 / 40 / 27 / 21 / 18 / 15 sp). El cuerpo son 21 sp, no los 16 de
   móvil: a 2–3 m del sofá, 16 sp no se lee. El mínimo de la app son 15 sp.
 - **Foco siempre visible**: anillo blanco de 3 dp (no solo cambio de fondo) en
-  tarjetas, pestañas, chips, interruptores y botones, más escala de 1,08.
+  tarjetas, pestañas, chips, interruptores y botones, más escala de 1,08 y
+  sombra al enfocar. Regla única: **foco = blanco, seleccionado = azul**; si el
+  relleno es claro (botón primario, pestaña activa) el anillo va oscuro.
+- **Sistema de diseño** (`ui/theme/Dimens.kt`): cuatro radios de esquina
+  (4 / 8 / 14 / 22 dp) más cápsula, una escala de espaciado y un solo grosor de
+  foco. Antes había dieciséis radios y cuatro grosores distintos elegidos a ojo.
+- **Un componente por patrón**: `TvChip` sustituye las cuatro copias de chip que
+  había (sugerencias, filtros de plataforma, filtros de estudio, temporadas) con
+  tres rellenos y dos colores distintos.
+- **Contraste**: el texto atenuado usa `TextMuted` (≈ 6:1 sobre el fondo); el
+  gris `TextTertiary` (2,5:1) se queda solo para adornos no textuales.
 - **El mando manda**: cada pantalla entra con el foco donde el usuario espera
   («Reproducir» en la ficha, el campo en Buscar, el primer perfil, el héroe en
   Inicio), y las filas sin acción propia no son focos alcanzables.
