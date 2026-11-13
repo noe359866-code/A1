@@ -14,6 +14,29 @@ object CatalogRepository {
     private const val IMG = "https://storage.googleapis.com/gtv-videos-bucket/sample/images"
     private const val VID = "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample"
 
+    /** Espejo del bucket de samples de Google (segundo servidor). */
+    private const val VID_ALT = "https://storage.googleapis.com/gtv-videos-bucket/sample"
+
+    /**
+     * Multi-servidor estilo Xuper TV: «Servidor 1» es el enlace principal y
+     * «Servidor 2» una fuente alternativa (espejo o flujo equivalente).
+     */
+    private fun withServers(video: Video): Video {
+        val servers = buildList {
+            add(StreamSource("Servidor 1", video.videoUrl, video.streamFormat))
+            val mirror = video.videoUrl.replace(VID, VID_ALT)
+            when {
+                mirror != video.videoUrl ->
+                    add(StreamSource("Servidor 2", mirror, video.streamFormat))
+                video.id == "apple-hls" ->
+                    add(StreamSource("Servidor 2", "https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8", StreamFormat.HLS))
+                video.id == "mux-hls" ->
+                    add(StreamSource("Servidor 2", "https://devstreaming-cdn.apple.com/videos/streaming/examples/img_bipbop_adv_example_ts/master.m3u8", StreamFormat.HLS))
+            }
+        }
+        return video.copy(sources = servers)
+    }
+
     val catalog: List<Video> = listOf(
         Video(
             id = "sintel",
@@ -243,7 +266,7 @@ object CatalogRepository {
             streamFormat = StreamFormat.HLS,
             badge = "HLS"
         )
-    )
+    ).map { withServers(it) }
 
     /** Contenido disponible para un perfil (los perfiles infantiles ven solo TP/7+). */
     fun catalogFor(profile: Profile?): List<Video> =

@@ -15,7 +15,7 @@
 | **Solo Android TV** | `AndroidManifest.xml` con `leanback` obligatorio, `touchscreen` opcional y `LEANBACK_LAUNCHER` + banner 320×180 para el launcher de TV |
 | **Diseño Apple TV** | Fondo casi negro `#0B0B0F`, acento azul `#0A84FF`, tarjetas con foco que escalan a 1.08, botones píldora, velos de degradado, tipografía de jerarquía marcada |
 | **Compose for TV** | `androidx.tv:tv-material` (`MaterialTheme`, `Card` con estados de foco D-pad) + Compose estándar con `focusRestorer` |
-| **Media3 ExoPlayer** | Reproductor a pantalla completa con controles propios (play/pausa, barra de progreso con búfer, ±10 s), soporte **MP4 y HLS** (módulo `media3-exoplayer-hls`), audio focus integrado |
+| **Media3 ExoPlayer** | Reproductor estilo **Xuper TV**: franja EPG *Ahora/A continuación*, **multi-servidor** con conmutación automática ante errores, selectores de **calidad / audio / subtítulos**, **relación de aspecto y zoom** (16:9, 4:3, 21:9…), controles ±10 s, barra con búfer y auto-ocultado |
 | **Navegación por mando** | Pestañas superiores tipo tvOS (Inicio · Películas · Buscar · Ajustes), ficha de detalle y reproductor con `navigation-compose` |
 | **Perfiles como Netflix** | «¿Quién está viendo?», avatares con caras ilustradas estilo Netflix, modo infantil, *Continuar viendo* y *Mi lista* por perfil, gestión completa (crear/editar/eliminar) y cambio rápido desde la barra superior |
 
@@ -31,8 +31,8 @@
 2. **Películas** — rejilla con todo el catálogo (filtrado en perfiles infantiles).
 3. **Buscar** — campo de búsqueda con sugerencias de género y rejilla de resultados.
 4. **Detalle** — fondo a sangre con velo, título grande, metadatos (año · duración · ★ · calidad · clasificación), botones *Reproducir* / *Mi lista* y recomendaciones.
-5. **Reproductor** — Media3 ExoPlayer con overlay propio estilo Apple. Al salir,
-   el progreso se guarda en el perfil activo.
+5. **Reproductor** — estilo Xuper TV sobre Media3 ExoPlayer (ver sección propia).
+   Al salir, el progreso se guarda en el perfil activo.
 6. **Ajustes** — perfil activo con *Cambiar de perfil*, interruptores tipo iOS y opciones de reproducción.
 7. **Gestionar / Editar perfil** — modo edición con lápiz sobre cada avatar; el editor
    cambia nombre, color e interruptor de perfil infantil, y permite eliminar.
@@ -41,10 +41,26 @@
 
 | Tecla | Inicio / listas | Reproductor |
 | --- | --- | --- |
-| **Centro / Enter** | Abrir elemento enfocado | Mostrar controles · reproducir/pausar |
-| **◀ / ▶** | Moverse por las filas | Retroceder / avanzar **10 s** |
-| **▲ / ▼** | Moverse entre filas | Mostrar controles |
-| **Atrás** | Volver | Salir del reproductor |
+| **Centro / Enter** | Abrir elemento enfocado | Botón enfocado · mostrar controles |
+| **◀ / ▶** | Moverse por las filas | Retroceder / avanzar **10 s** (con controles ocultos) · navegar controles |
+| **▲ / ▼** | Moverse entre filas | Mostrar controles · menús de opciones |
+| **Atrás** | Volver | Cerrar menú → ocultar controles → salir |
+
+## 🎬 Reproductor estilo Xuper TV
+
+El reproductor replica las funciones del «smart player» de Xuper TV
+(investigación completa y fuentes en **[docs/XUPER-TV-RESEARCH.md](docs/XUPER-TV-RESEARCH.md)**):
+
+| Función Xuper TV | En Omni TV |
+| --- | --- |
+| **EPG en tiempo real** | Franja *AHORA · A CONTINUACIÓN* bajo el título, con el siguiente programa |
+| **Multi-servidor** | Cada título tiene *Servidor 1 / Servidor 2*; menú para conmutar y **cambio automático** si el enlace falla (conservando la posición) |
+| **Streaming adaptativo** | ABR nativo (HLS) + menú **Calidad**: Automática o pista concreta (1080p · 720p…, con kbps) vía `DefaultTrackSelector` |
+| **Audio y subtítulos** | Menús de **pista de audio** e **idioma de subtítulos** (activar/desactivar) vía TrackSelection de Media3 |
+| **Relación de aspecto y zoom** | Modos *Ajustar · Llenar · Zoom · 16:9 · 4:3 · 21:9* |
+| **Rewind / fast forward** | Botones ⏪ 10 s / 10 s ⏩ + atajos ◀▶ del mando |
+| **Control para mando de TV** | Botones grandes de vidrio, menús emergentes navegables con D-pad, botón central grande al pausar |
+| **Info del contenido** | Panel *Info* con sinopsis, metadatos, servidor activo, idioma y clasificación |
 
 ## 👤 Perfiles (como Netflix)
 
@@ -98,7 +114,8 @@ A1/
 │       │   │   ├── ProfileStore.kt      # persistencia de perfiles (SharedPreferences)
 │       │   │   └── CatalogRepository.kt # catálogo demo (MP4 + HLS, por perfil)
 │       │   ├── player/
-│       │   │   └── PlayerScreen.kt      # Media3 ExoPlayer + controles Apple
+│       │   │   ├── PlayerScreen.kt      # reproductor estilo Xuper TV (Media3)
+│       │   │   └── PlayerUi.kt          # vidrio, píldoras, menús, EPG chip
 │       │   └── ui/
 │       │       ├── theme/               # Color, AppType (tipografía), Theme
 │       │       ├── components/          # Cards, PillButton, HeroBanner, SeekBar…
@@ -108,6 +125,7 @@ A1/
 │           ├── drawable/                # tv_banner, iconos y 8 caras de avatar
 │           ├── mipmap*/                 # icono adaptativo (lupa con 6 puntos)
 │           └── values/                  # strings, colors, themes
+├── docs/XUPER-TV-RESEARCH.md            # investigación del reproductor Xuper TV
 ├── gradle/libs.versions.toml            # catálogo de versiones
 └── gradlew / gradle/wrapper/            # Gradle 8.9
 ```

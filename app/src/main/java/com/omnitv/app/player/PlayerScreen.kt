@@ -1,9 +1,11 @@
 package com.omnitv.app.player
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusable
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -15,6 +17,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -24,6 +27,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
@@ -33,61 +37,96 @@ import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem as ExoMediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
+import androidx.media3.common.TrackGroup
+import androidx.media3.common.TrackSelectionOverride
+import androidx.media3.common.Tracks
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
+import androidx.tv.material.Text
+import coil.compose.AsyncImage
 import com.omnitv.app.R
+import com.omnitv.app.data.CatalogRepository
 import com.omnitv.app.data.ProfileStore
+import com.omnitv.app.data.StreamFormat
 import com.omnitv.app.data.Video
-import com.omnitv.app.ui.components.CircleIconButton
-import com.omnitv.app.ui.components.LoadingSpinner
+import com.omnitv.app.ui.components.MetaLine
 import com.omnitv.app.ui.components.PillButton
 import com.omnitv.app.ui.components.SeekBar
 import com.omnitv.app.ui.components.formatTime
-import com.omnitv.app.ui.theme.AppType
-import com.omnitv.app.ui.theme.Background
-import com.omnitv.app.ui.theme.TextPrimary
-import com.omnitv.app.ui.theme.TextSecondary
-import androidx.tv.material.Text
 import kotlinx.coroutines.delay
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+
+/* -------------------------------------------------------------------------- */
+/*  Estados del reproductor                                                   */
+/* -------------------------------------------------------------------------- */
+
+private enum class MenuKind { NONE, SERVER, QUALITY, AUDIO, SUBTITLES, ASPECT }
+
+private enum class AspectMode(val label: String, val ratio: Float, val resizeMode: Int) {
+    FIT("Ajustar", 0f, AspectRatioFrameLayout.RESIZE_MODE_FIT),
+    FILL("Llenar", 0f, AspectRatioFrameLayout.RESIZE_MODE_FILL),
+    ZOOM("Zoom", 0f, AspectRatioFrameLayout.RESIZE_MODE_ZOOM),
+    R16_9("16:9", 16f / 9f, AspectRatioFrameLayout.RESIZE_MODE_ZOOM),
+    R4_3("4:3", 4f / 3f, AspectRatioFrameLayout.RESIZE_MODE_ZOOM),
+    R21_9("21:9", 21f / 9f, AspectRatioFrameLayout.RESIZE_MODE_ZOOM)
+}
+
+private data class TrackChoice(val group: TrackGroup, val index: Int)
+
+private fun nowClock(): String =
+    SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date())
 
 /**
- * Reproductor a pantalla completa con Media3 ExoPlayer.
+ * Reproductor estilo Xuper TV sobre Media3 ExoPlayer:
  *
- * Controles con el mando (D-pad):
- *  - Centro/Enter: mostrar controles · reproducir/pausar
- *  - Izquierda / Derecha: retroceder / avanzar 10 s
- *  - Arriba / Abajo: mostrar controles
- *  - Atrás: salir
+ * - Franja EPG «AHORA / A CONTINUACIÓN» en la cabecera.
+ * - Multi-servidor con conmutación manual y automática ante errores.
+ * - Selectores de calidad, audio, subtítulos y relación de aspecto/zoom.
+ * - Controles de vidrio grandes para mando de TV: ⏪10 s · ▶ · 10 s⏩.
+ * - Atajos D-pad: ◀▶ retroceden/avanzan 10 s; centro muestra controles.
  */
 @Composable
 fun PlayerScreen(video: Video, onBack: () -> Unit) {
     val context = LocalContext.current
+    val sources = video.playbackSources
 
+    val trackSelector = remember { DefaultTrackSelector(context) }
     val player = remember {
-        ExoPlayer.Builder(context).build().apply {
-            setAudioAttributes(
-                AudioAttributes.Builder()
-                    .setContentType(C.AUDIO_CONTENT_TYPE_MOVIE)
-                    .setUsage(C.USAGE_MEDIA)
-                    .build(),
-                /* handleAudioFocus = */ true
-            )
-            setMediaItem(ExoMediaItem.Builder().setUri(video.videoUrl).build())
-            playWhenReady = true
-            prepare()
-        }
+        ExoPlayer.Builder(context)
+            .setTrackSelector(trackSelector)
+            .build()
+            .apply {
+                setAudioAttributes(
+                    AudioAttributes.Builder()
+                        .setContentType(C.AUDIO_CONTENT_TYPE_MOVIE)
+                        .setUsage(C.USAGE_MEDIA)
+                        .build(),
+                    /* handleAudioFocus = */ true
+                )
+                setMediaItem(ExoMediaItem.Builder().setUri(sources[0].url).build())
+                playWhenReady = true
+                prepare()
+            }
     }
 
+    // ---------------- Estado de la UI ----------------
     var isPlaying by remember { mutableStateOf(true) }
     var isBuffering by remember { mutableStateOf(true) }
     var hasError by remember { mutableStateOf<String?>(null) }
@@ -95,10 +134,50 @@ fun PlayerScreen(video: Video, onBack: () -> Unit) {
     var positionMs by remember { mutableStateOf(0L) }
     var durationMs by remember { mutableStateOf(0L) }
     var bufferedMs by remember { mutableStateOf(0L) }
+    var clock by remember { mutableStateOf(nowClock()) }
 
-    val focusRequester = remember { FocusRequester() }
+    var serverIndex by remember { mutableStateOf(0) }
+    var menu by remember { mutableStateOf(MenuKind.NONE) }
+    var showInfo by remember { mutableStateOf(false) }
+    var toast by remember { mutableStateOf<String?>(null) }
 
-    // Estado del reproductor → UI
+    var tracks by remember { mutableStateOf(player.currentTracks) }
+    var videoChoice by remember { mutableStateOf<TrackChoice?>(null) }
+    var audioChoice by remember { mutableStateOf<TrackChoice?>(null) }
+    var textChoice by remember { mutableStateOf<TrackChoice?>(null) }
+    var subtitlesOn by remember { mutableStateOf(false) }
+    var aspectMode by remember { mutableStateOf(AspectMode.FIT) }
+
+    val rootFocus = remember { FocusRequester() }
+    val playFocus = remember { FocusRequester() }
+    val nextVideo = remember(video.id) { CatalogRepository.related(video.id).firstOrNull() }
+
+    // ---------------- Acciones ----------------
+
+    fun applyTrack(type: Int, choice: TrackChoice?, disable: Boolean = false) {
+        val builder = trackSelector.buildUponParameters()
+        builder.clearOverridesOfType(type)
+        if (type == C.TRACK_TYPE_TEXT) {
+            builder.setTrackTypeDisabled(C.TRACK_TYPE_TEXT, disable)
+        }
+        if (choice != null) {
+            builder.setOverrideForType(TrackSelectionOverride(choice.group, choice.index))
+        }
+        trackSelector.setParameters(builder.build())
+    }
+
+    val switchServer: (Int) -> Unit = { index ->
+        val position = player.currentPosition
+        serverIndex = index
+        player.setMediaItem(ExoMediaItem.Builder().setUri(sources[index].url).build(), position)
+        player.prepare()
+        player.playWhenReady = true
+        hasError = null
+        toast = "Reproduciendo desde ${sources[index].label}"
+    }
+
+    // ---------------- Ciclo de vida del reproductor ----------------
+
     DisposableEffect(player) {
         val listener = object : Player.Listener {
             override fun onIsPlayingChanged(playing: Boolean) {
@@ -112,8 +191,19 @@ fun PlayerScreen(video: Video, onBack: () -> Unit) {
                 }
             }
 
+            override fun onTracksChanged(currentTracks: Tracks) {
+                tracks = currentTracks
+            }
+
             override fun onPlayerError(error: PlaybackException) {
-                hasError = error.errorCodeName
+                // Multi-servidor: si falla, se conmuta automáticamente al siguiente
+                val next = serverIndex + 1
+                if (next < sources.size) {
+                    toast = "Error · cambiando a ${sources[next].label}…"
+                    switchServer(next)
+                } else {
+                    hasError = error.errorCodeName
+                }
             }
         }
         player.addListener(listener)
@@ -125,64 +215,202 @@ fun PlayerScreen(video: Video, onBack: () -> Unit) {
             } else {
                 0f
             }
-            if (watched > 0f) {
+            if (watched > 0f && hasError == null) {
                 ProfileStore.setProgress(video.id, watched)
             }
             player.release()
         }
     }
 
-    // Sondeo de posición (basta con 2 Hz para la barra de progreso)
+    // Sondeo de posición + reloj
     LaunchedEffect(player) {
         while (true) {
             positionMs = player.currentPosition.coerceAtLeast(0)
             bufferedMs = player.bufferedPosition.coerceAtLeast(0)
             if (player.duration > 0) durationMs = player.duration
+            clock = nowClock()
             delay(500)
         }
     }
 
-    // Ocultar controles a los 5 s mientras se reproduce
-    LaunchedEffect(controlsVisible, isPlaying) {
-        if (controlsVisible && isPlaying) {
-            delay(5000)
+    // Ocultar controles a los 7 s reproduciendo (sin menús abiertos)
+    LaunchedEffect(controlsVisible, isPlaying, menu) {
+        if (controlsVisible && isPlaying && menu == MenuKind.NONE) {
+            delay(7000)
             controlsVisible = false
+            showInfo = false
         }
     }
 
-    LaunchedEffect(Unit) {
-        focusRequester.requestFocus()
+    // Aviso temporal (cambios de servidor)
+    LaunchedEffect(toast) {
+        if (toast != null) {
+            delay(2800)
+            toast = null
+        }
     }
 
-    BackHandler(onBack = onBack)
+    // Gestión de foco: al mostrar controles → botón de play; al ocultar → raíz
+    LaunchedEffect(controlsVisible, menu) {
+        when {
+            !controlsVisible -> rootFocus.requestFocus()
+            menu == MenuKind.NONE -> playFocus.requestFocus()
+        }
+    }
+
+    BackHandler {
+        when {
+            menu != MenuKind.NONE -> menu = MenuKind.NONE
+            controlsVisible -> {
+                controlsVisible = false
+                showInfo = false
+            }
+            else -> onBack()
+        }
+    }
+
+    // ---------------- Opciones de pistas (Media3 TrackSelection) ----------------
+
+    val qualityOptions = remember(tracks, videoChoice) {
+        buildList {
+            add(PlayerOption("Automática", videoChoice == null) {
+                videoChoice = null
+                applyTrack(C.TRACK_TYPE_VIDEO, null)
+                menu = MenuKind.NONE
+            })
+            for (group in tracks.groups) {
+                if (group.type != C.TRACK_TYPE_VIDEO) continue
+                for (i in 0 until group.length) {
+                    if (!group.isTrackSupported(i)) continue
+                    val format = group.getTrackFormat(i)
+                    val label = buildString {
+                        append(if (format.height > 0) "${format.height}p" else (format.label ?: "Pista ${i + 1}"))
+                        if (format.bitrate > 0) append(" · ${format.bitrate / 1000} kbps")
+                    }
+                    add(PlayerOption(label, videoChoice == TrackChoice(group.mediaTrackGroup, i)) {
+                        videoChoice = TrackChoice(group.mediaTrackGroup, i)
+                        applyTrack(C.TRACK_TYPE_VIDEO, videoChoice)
+                        menu = MenuKind.NONE
+                    })
+                }
+            }
+        }
+    }
+
+    val audioOptions = remember(tracks, audioChoice) {
+        buildList {
+            add(PlayerOption("Automático", audioChoice == null) {
+                audioChoice = null
+                applyTrack(C.TRACK_TYPE_AUDIO, null)
+                menu = MenuKind.NONE
+            })
+            for (group in tracks.groups) {
+                if (group.type != C.TRACK_TYPE_AUDIO) continue
+                for (i in 0 until group.length) {
+                    if (!group.isTrackSupported(i)) continue
+                    val format = group.getTrackFormat(i)
+                    val label = format.label ?: format.language ?: "Pista ${i + 1}"
+                    add(PlayerOption(label, audioChoice == TrackChoice(group.mediaTrackGroup, i)) {
+                        audioChoice = TrackChoice(group.mediaTrackGroup, i)
+                        applyTrack(C.TRACK_TYPE_AUDIO, audioChoice)
+                        menu = MenuKind.NONE
+                    })
+                }
+            }
+        }
+    }
+
+    val subtitleOptions = remember(tracks, textChoice, subtitlesOn) {
+        buildList {
+            add(PlayerOption("Desactivados", !subtitlesOn) {
+                subtitlesOn = false
+                textChoice = null
+                applyTrack(C.TRACK_TYPE_TEXT, null, disable = true)
+                menu = MenuKind.NONE
+            })
+            for (group in tracks.groups) {
+                if (group.type != C.TRACK_TYPE_TEXT) continue
+                for (i in 0 until group.length) {
+                    if (!group.isTrackSupported(i)) continue
+                    val format = group.getTrackFormat(i)
+                    val label = format.label ?: format.language ?: "Subtítulos ${i + 1}"
+                    add(PlayerOption(label, subtitlesOn && textChoice == TrackChoice(group.mediaTrackGroup, i)) {
+                        subtitlesOn = true
+                        textChoice = TrackChoice(group.mediaTrackGroup, i)
+                        applyTrack(C.TRACK_TYPE_TEXT, textChoice, disable = false)
+                        menu = MenuKind.NONE
+                    })
+                }
+            }
+        }
+    }
+
+    val serverOptions = sources.mapIndexed { index, source ->
+        PlayerOption(
+            label = "${source.label} · ${if (source.format == StreamFormat.HLS) "HLS" else "MP4"}",
+            selected = index == serverIndex
+        ) {
+            menu = MenuKind.NONE
+            if (index != serverIndex) switchServer(index)
+        }
+    }
+
+    val aspectOptions = AspectMode.entries.map { mode ->
+        PlayerOption(mode.label, aspectMode == mode) {
+            aspectMode = mode
+            menu = MenuKind.NONE
+        }
+    }
+
+    val qualityLabel = videoChoice?.let { choice ->
+        val format = choice.group.getTrackFormat(choice.index)
+        if (format.height > 0) "${format.height}p" else "Manual"
+    } ?: "Auto"
+
+    // ---------------- Interfaz ----------------
 
     Box(
         Modifier
             .fillMaxSize()
             .background(Color.Black)
-            .focusRequester(focusRequester)
+            .focusRequester(rootFocus)
             .focusable()
             .onPreviewKeyEvent { event ->
                 if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                 when (event.key) {
                     Key.DirectionCenter, Key.Enter, Key.NumPadEnter, Key.Spacebar -> {
-                        controlsVisible = true
-                        if (isPlaying) player.pause() else player.play()
-                        true
+                        if (!controlsVisible) {
+                            controlsVisible = true
+                            true
+                        } else {
+                            false
+                        }
                     }
                     Key.DirectionLeft, Key.MediaRewind -> {
-                        controlsVisible = true
-                        player.seekTo((player.currentPosition - 10_000).coerceAtLeast(0))
-                        true
+                        if (!controlsVisible) {
+                            player.seekTo((player.currentPosition - 10_000).coerceAtLeast(0))
+                            controlsVisible = true
+                            true
+                        } else {
+                            false
+                        }
                     }
                     Key.DirectionRight, Key.MediaFastForward -> {
-                        controlsVisible = true
-                        player.seekTo(player.currentPosition + 10_000)
-                        true
+                        if (!controlsVisible) {
+                            player.seekTo(player.currentPosition + 10_000)
+                            controlsVisible = true
+                            true
+                        } else {
+                            false
+                        }
                     }
-                    Key.DirectionUp, Key.DirectionDown -> {
-                        controlsVisible = true
-                        true
+                    Key.DirectionUp -> {
+                        if (!controlsVisible) {
+                            controlsVisible = true
+                            true
+                        } else {
+                            false
+                        }
                     }
                     else -> false
                 }
@@ -193,149 +421,335 @@ fun PlayerScreen(video: Video, onBack: () -> Unit) {
                 PlayerView(ctx).apply {
                     this.player = player
                     useController = false
-                    resizeMode = AspectRatioFrameLayout.RESIZE_MODE_FIT
                     setKeepContentOnPlayerReset(true)
                 }
             },
-            update = { it.player = player },
+            update = { view ->
+                view.player = player
+                view.resizeMode = aspectMode.resizeMode
+                // 0f = relación natural del vídeo
+                view.setAspectRatio(if (aspectMode.ratio > 0f) aspectMode.ratio else 0f)
+            },
             modifier = Modifier.fillMaxSize()
         )
 
-        if (isBuffering && hasError == null) {
-            LoadingSpinner(Modifier.align(Alignment.Center))
+        // Botón central grande al pausar (como Xuper TV)
+        AnimatedVisibility(
+            visible = !isPlaying && !isBuffering && hasError == null && controlsVisible,
+            enter = fadeIn(),
+            exit = fadeOut(),
+            modifier = Modifier.align(Alignment.Center)
+        ) {
+            CenterPlayButton(
+                iconRes = R.drawable.ic_play,
+                onClick = { player.play() }
+            )
         }
 
-        hasError?.let { code ->
+        // Cargando…
+        if (isBuffering && hasError == null) {
             Column(
                 Modifier.align(Alignment.Center),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                Text("No se pudo reproducir el vídeo", style = AppType.sectionTitle, color = TextPrimary)
-                Spacer(Modifier.height(8.dp))
-                Text(code, style = AppType.metadata, color = TextSecondary)
-                Spacer(Modifier.height(24.dp))
-                PillButton(text = "Volver", iconRes = R.drawable.ic_back, primary = true, onClick = onBack)
+                com.omnitv.app.ui.components.LoadingSpinner()
+                Spacer(Modifier.height(14.dp))
+                Text("Cargando…", style = fontSize15(), color = Color(0xFF8E8E93))
             }
         }
 
-        if (controlsVisible && hasError == null) {
-            ControlsOverlay(
-                video = video,
-                isPlaying = isPlaying,
-                positionMs = positionMs,
-                durationMs = durationMs,
-                bufferedMs = bufferedMs,
-                onPlayPause = { if (isPlaying) player.pause() else player.play() },
-                onBack = onBack
-            )
-        }
-    }
-}
-
-@Composable
-private fun ControlsOverlay(
-    video: Video,
-    isPlaying: Boolean,
-    positionMs: Long,
-    durationMs: Long,
-    bufferedMs: Long,
-    onPlayPause: () -> Unit,
-    onBack: () -> Unit
-) {
-    Column(Modifier.fillMaxSize()) {
-        // Barra superior: volver + título
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .background(
-                    Brush.verticalGradient(
-                        0f to Color.Black.copy(alpha = 0.72f),
-                        1f to Color.Transparent
-                    )
-                )
-                .padding(horizontal = 44.dp, vertical = 28.dp),
-            verticalAlignment = Alignment.CenterVertically
+        // Aviso flotante (conmutación de servidor)
+        AnimatedVisibility(
+            visible = toast != null,
+            enter = fadeIn(),
+            exit = fadeOut(),
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .padding(top = 28.dp)
         ) {
-            CircleIconButton(
-                iconRes = R.drawable.ic_back,
-                contentDescription = "Volver",
-                size = 48.dp,
-                onClick = onBack
-            )
-            Spacer(Modifier.width(18.dp))
-            Column {
-                Text(
-                    video.title,
-                    style = AppType.sectionTitle,
-                    color = TextPrimary,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Spacer(Modifier.height(2.dp))
-                Text(
-                    "${video.quality} · ${video.genres.joinToString(" · ")}",
-                    style = AppType.metadata,
-                    color = TextSecondary
-                )
-            }
+            InfoChip(text = toast ?: "")
         }
 
-        Spacer(Modifier.weight(1f))
-
-        // Barra inferior: progreso + controles
-        Column(
-            Modifier
-                .fillMaxWidth()
-                .background(
-                    Brush.verticalGradient(
-                        0f to Color.Transparent,
-                        1f to Color.Black.copy(alpha = 0.82f)
-                    )
-                )
-                .padding(horizontal = 44.dp, vertical = 30.dp)
-        ) {
-            SeekBar(
-                positionMs = positionMs,
-                durationMs = durationMs,
-                bufferedMs = bufferedMs,
-                modifier = Modifier.fillMaxWidth()
-            )
-            Spacer(Modifier.height(10.dp))
-            Row(
-                Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically
+        // Error de reproducción
+        if (hasError != null) {
+            GlassPanel(
+                modifier = Modifier
+                    .align(Alignment.Center)
+                    .width(520.dp)
             ) {
-                Text(formatTime(positionMs), style = AppType.playerTime, color = TextSecondary)
-                Spacer(Modifier.weight(1f))
-                Text(
-                    if (durationMs > 0) "-${formatTime(durationMs - positionMs)}" else "--:--",
-                    style = AppType.playerTime,
-                    color = TextSecondary
-                )
-            }
-            Spacer(Modifier.height(18.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                CircleIconButton(
-                    iconRes = if (isPlaying) R.drawable.ic_pause else R.drawable.ic_play,
-                    contentDescription = if (isPlaying) "Pausar" else "Reproducir",
-                    size = 60.dp,
-                    background = Color.White.copy(alpha = 0.92f),
-                    iconTint = Background,
-                    onClick = onPlayPause
-                )
-                Spacer(Modifier.width(20.dp))
-                Column {
-                    Text(video.title, style = AppType.cardTitle, color = TextPrimary)
-                    Spacer(Modifier.height(3.dp))
-                    Text(
-                        "Centro: reproducir/pausar · ◀▶: ±10 s",
-                        style = AppType.metadata,
-                        color = TextSecondary
-                    )
+                Column(
+                    Modifier.padding(28.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text("No se pudo reproducir el vídeo", style = fontSize20(), color = Color.White)
+                    Spacer(Modifier.height(8.dp))
+                    Text(hasError ?: "", style = fontSize13(), color = Color(0xFF8E8E93))
+                    Spacer(Modifier.height(22.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                        PillButton(
+                            text = "Reintentar",
+                            iconRes = R.drawable.ic_server,
+                            primary = true,
+                            onClick = {
+                                hasError = null
+                                player.setMediaItem(
+                                    ExoMediaItem.Builder().setUri(sources[serverIndex].url).build(),
+                                    positionMs
+                                )
+                                player.prepare()
+                                player.playWhenReady = true
+                            }
+                        )
+                        PillButton(
+                            text = "Volver",
+                            iconRes = R.drawable.ic_back,
+                            primary = false,
+                            onClick = onBack
+                        )
+                    }
                 }
+            }
+        }
+
+        // ---------------- Superposición de controles ----------------
+        AnimatedVisibility(
+            visible = controlsVisible && hasError == null,
+            enter = fadeIn(),
+            exit = fadeOut(),
+            modifier = Modifier.fillMaxSize()
+        ) {
+            Column(Modifier.fillMaxSize()) {
+                // Cabecera: volver, título, franja EPG y reloj
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .background(
+                            Brush.verticalGradient(
+                                0f to Color.Black.copy(alpha = 0.78f),
+                                1f to Color.Transparent
+                            )
+                        )
+                        .padding(horizontal = 44.dp, vertical = 26.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    TransportButton(
+                        iconRes = R.drawable.ic_back,
+                        contentDescription = "Volver",
+                        size = 48.dp,
+                        onClick = onBack
+                    )
+                    Spacer(Modifier.width(18.dp))
+                    Column {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                video.title,
+                                style = fontSize22(),
+                                color = Color.White,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            Spacer(Modifier.width(12.dp))
+                            InfoChip(video.quality)
+                            Spacer(Modifier.width(8.dp))
+                            InfoChip(if (video.streamFormat == StreamFormat.HLS) "HLS" else "MP4")
+                        }
+                        Spacer(Modifier.height(8.dp))
+                        // Franja EPG estilo Xuper TV: qué se emite ahora y después
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            EpgChip("AHORA", Color(0xFFE50914))
+                            Spacer(Modifier.width(8.dp))
+                            Text(video.title, style = fontSize13(), color = Color(0xFFE5E5EA))
+                            nextVideo?.let {
+                                Spacer(Modifier.width(16.dp))
+                                EpgChip("A CONTINUACIÓN", Color(0xFF636366))
+                                Spacer(Modifier.width(8.dp))
+                                Text(it.title, style = fontSize13(), color = Color(0xFF8E8E93))
+                            }
+                        }
+                    }
+                    Spacer(Modifier.weight(1f))
+                    Text(clock, style = fontSize20(), color = Color.White)
+                }
+
                 Spacer(Modifier.weight(1f))
-                Text(video.streamFormat.name, style = AppType.metadata, color = TextSecondary)
+
+                // Panel de información del título
+                if (showInfo) {
+                    GlassPanel(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 44.dp, vertical = 10.dp)
+                    ) {
+                        Row(Modifier.padding(20.dp)) {
+                            AsyncImage(
+                                model = video.cardUrl,
+                                contentDescription = null,
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier
+                                    .width(200.dp)
+                                    .height(112.dp)
+                                    .clip(RoundedCornerShape(10.dp))
+                            )
+                            Spacer(Modifier.width(20.dp))
+                            Column {
+                                Text(video.title, style = fontSize20(), color = Color.White)
+                                Spacer(Modifier.height(6.dp))
+                                MetaLine(video)
+                                Spacer(Modifier.height(8.dp))
+                                Text(
+                                    video.description,
+                                    style = fontSize13(),
+                                    color = Color(0xFF8E8E93),
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                                Spacer(Modifier.height(8.dp))
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    InfoChip(sources[serverIndex].label)
+                                    InfoChip(video.language)
+                                    InfoChip(video.certification)
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Menú de opciones activo (derecha)
+                if (menu != MenuKind.NONE) {
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 44.dp, vertical = 10.dp),
+                        horizontalArrangement = Arrangement.End
+                    ) {
+                        when (menu) {
+                            MenuKind.SERVER -> OptionMenu("Servidor", serverOptions)
+                            MenuKind.QUALITY -> OptionMenu("Calidad", qualityOptions)
+                            MenuKind.AUDIO -> OptionMenu("Audio", audioOptions)
+                            MenuKind.SUBTITLES -> OptionMenu("Subtítulos", subtitleOptions)
+                            MenuKind.ASPECT -> OptionMenu("Relación de aspecto", aspectOptions)
+                            MenuKind.NONE -> {}
+                        }
+                    }
+                }
+
+                // Barra inferior de controles
+                Column(
+                    Modifier
+                        .fillMaxWidth()
+                        .background(
+                            Brush.verticalGradient(
+                                0f to Color.Transparent,
+                                1f to Color.Black.copy(alpha = 0.88f)
+                            )
+                        )
+                        .padding(horizontal = 44.dp, vertical = 26.dp)
+                ) {
+                    // Tiempos + barra de progreso
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(formatTime(positionMs), style = fontSize13(), color = Color(0xFF8E8E93))
+                        Spacer(Modifier.width(16.dp))
+                        SeekBar(
+                            positionMs = positionMs,
+                            durationMs = durationMs,
+                            bufferedMs = bufferedMs,
+                            modifier = Modifier.weight(1f)
+                        )
+                        Spacer(Modifier.width(16.dp))
+                        Text(
+                            if (durationMs > 0) "-${formatTime(durationMs - positionMs)}" else "--:--",
+                            style = fontSize13(),
+                            color = Color(0xFF8E8E93)
+                        )
+                    }
+
+                    Spacer(Modifier.height(18.dp))
+
+                    // Transporte + ajustes del reproductor
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        TransportButton(
+                            iconRes = R.drawable.ic_rewind,
+                            contentDescription = "Retroceder 10 segundos",
+                            onClick = {
+                                player.seekTo((player.currentPosition - 10_000).coerceAtLeast(0))
+                            }
+                        )
+                        TransportButton(
+                            iconRes = if (isPlaying) R.drawable.ic_pause else R.drawable.ic_play,
+                            contentDescription = if (isPlaying) "Pausar" else "Reproducir",
+                            size = 64.dp,
+                            primary = true,
+                            onClick = { if (isPlaying) player.pause() else player.play() },
+                            modifier = Modifier.focusRequester(playFocus)
+                        )
+                        TransportButton(
+                            iconRes = R.drawable.ic_forward,
+                            contentDescription = "Avanzar 10 segundos",
+                            onClick = { player.seekTo(player.currentPosition + 10_000) }
+                        )
+
+                        Spacer(Modifier.weight(1f))
+
+                        ControlPill(
+                            iconRes = R.drawable.ic_server,
+                            label = sources[serverIndex].label,
+                            active = menu == MenuKind.SERVER,
+                            onClick = { menu = if (menu == MenuKind.SERVER) MenuKind.NONE else MenuKind.SERVER }
+                        )
+                        ControlPill(
+                            iconRes = R.drawable.ic_quality,
+                            label = qualityLabel,
+                            active = menu == MenuKind.QUALITY,
+                            onClick = { menu = if (menu == MenuKind.QUALITY) MenuKind.NONE else MenuKind.QUALITY }
+                        )
+                        ControlPill(
+                            iconRes = R.drawable.ic_audio,
+                            label = "Audio",
+                            active = menu == MenuKind.AUDIO,
+                            onClick = { menu = if (menu == MenuKind.AUDIO) MenuKind.NONE else MenuKind.AUDIO }
+                        )
+                        ControlPill(
+                            iconRes = R.drawable.ic_subtitles,
+                            label = "Subtítulos",
+                            active = subtitlesOn || menu == MenuKind.SUBTITLES,
+                            onClick = { menu = if (menu == MenuKind.SUBTITLES) MenuKind.NONE else MenuKind.SUBTITLES }
+                        )
+                        ControlPill(
+                            iconRes = R.drawable.ic_aspect,
+                            label = aspectMode.label,
+                            active = menu == MenuKind.ASPECT,
+                            onClick = { menu = if (menu == MenuKind.ASPECT) MenuKind.NONE else MenuKind.ASPECT }
+                        )
+                        ControlPill(
+                            iconRes = R.drawable.ic_info,
+                            label = "Info",
+                            active = showInfo,
+                            onClick = { showInfo = !showInfo }
+                        )
+                    }
+                }
             }
         }
     }
 }
+
+/* -------------------------------------------------------------------------- */
+/*  Estilos tipográficos locales del reproductor                              */
+/* -------------------------------------------------------------------------- */
+
+private fun fontSize22() = androidx.compose.ui.text.TextStyle(
+    fontFamily = FontFamily.SansSerif, fontWeight = FontWeight.SemiBold, fontSize = 22.sp
+)
+
+private fun fontSize20() = androidx.compose.ui.text.TextStyle(
+    fontFamily = FontFamily.SansSerif, fontWeight = FontWeight.SemiBold, fontSize = 20.sp
+)
+
+private fun fontSize15() = androidx.compose.ui.text.TextStyle(
+    fontFamily = FontFamily.SansSerif, fontWeight = FontWeight.Medium, fontSize = 15.sp
+)
+
+private fun fontSize13() = androidx.compose.ui.text.TextStyle(
+    fontFamily = FontFamily.SansSerif, fontWeight = FontWeight.Medium, fontSize = 13.sp
+)
