@@ -424,13 +424,16 @@ object CatalogRepository {
         val availableIds = available.map { it.id }.toSet()
         val rows = mutableListOf<MediaRow>()
 
+        // «Mi lista» y «Continuar viendo» resuelven también títulos remotos
+        // (Cinemeta/Nuvio/cinejoy/sweetfox) a través del caché de find()
+        val kidsOnly = profile?.isKids == true
         val myList = profile?.myList.orEmpty()
-            .mapNotNull { id -> available.find { it.id == id } }
+            .mapNotNull { id -> find(id) }
+            .filter { !kidsOnly || it.certification == "TP" || it.certification == "7+" }
         if (myList.isNotEmpty()) {
             rows += MediaRow("Mi lista", myList)
         }
 
-        val kidsOnly = profile?.isKids == true
         val continueItems = profile?.progress.orEmpty()
             .mapNotNull { (id, _) -> find(id) }
             .filter { !kidsOnly || it.certification == "TP" || it.certification == "7+" }

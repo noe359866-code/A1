@@ -228,7 +228,8 @@ fun OmniTvApp() {
                                 quality = "HD", genres = emptyList(), videoUrl = "",
                                 isRemote = true,
                                 source = if (videoId.startsWith("tt")) StremioClient.CINEMETA_NAME else StremioClient.NUVIO_NAME,
-                                remoteType = if (videoId.startsWith("tt")) "movie" else "series"
+                                // Tipo desconocido: fetchDetail prueba movie y series
+                                remoteType = null
                             )
                         )
                         if (video == null) navController.popBackStack()

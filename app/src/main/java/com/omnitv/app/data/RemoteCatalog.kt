@@ -150,14 +150,26 @@ object RemoteCatalog {
      * El caché conserva tanto el id canónico como el id de navegación.
      */
     suspend fun fetchDetail(video: Video): Video? {
-        val type = video.remoteType ?: return null
         val base = if (video.id.startsWith("tmdb:")) {
             StremioClient.NUVIO
         } else {
             StremioClient.baseFor(video.source)
         }
-        val meta = StremioClient.fetchMeta(base, type, video.id) ?: return null
-        var full = StremioClient.parseVideo(meta, video.source)
+        // Tipo remoto: el declarado; si se desconoce o no responde, se prueban
+        // ambos (movie ↔ series) — evita fichas vacías al reabrir desde
+        // «Mi lista» / «Continuar viendo» tras reiniciar la app
+        val candidates = video.remoteType?.let { listOf(it) } ?: listOf("movie", "series")
+        var type = candidates.first()
+        var meta: org.json.JSONObject? = null
+        for (candidate in candidates) {
+            meta = StremioClient.fetchMeta(base, candidate, video.id)
+            if (meta != null) {
+                type = candidate
+                break
+            }
+        }
+        val fullMeta = meta ?: return null
+        var full = StremioClient.parseVideo(fullMeta, video.source)
 
         // Episodios reales desde Cinemeta (su meta trae videos[] por temporada)
         if (full.episodes.isEmpty() && full.id.startsWith("tt")) {

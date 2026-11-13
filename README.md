@@ -116,6 +116,7 @@ Todo persistido en `SharedPreferences`.
 | Media3 ExoPlayer (+ HLS, ui) | 1.4.1 |
 | Navigation Compose | 2.8.4 |
 | Coil (imágenes) | 2.6.0 |
+| ZXing (códigos QR) | 3.5.3 |
 | minSdk / targetSdk / compileSdk | 22 / 34 / 35 |
 
 Sin dependencias de red propias: el cliente Stremio usa `HttpURLConnection` +
@@ -223,19 +224,27 @@ A1/
 │       │   ├── MainActivity.kt          # ComponentActivity + keep-screen-on
 │       │   ├── OmniTvApp.kt             # NavHost + pestañas + rutas
 │       │   ├── data/
-│       │   │   ├── Models.kt            # Video, MediaRow, StreamSource
+│       │   │   ├── Models.kt            # Video, Episode, MediaRow, StreamSource
 │       │   │   ├── Profile.kt           # perfiles + avatarRes (8 caras)
 │       │   │   ├── ProfileStore.kt      # persistencia de perfiles (SharedPreferences)
-│       │   │   ├── SettingsStore.kt     # autoplay, auto-next, velocidad, calidad…
-│       │   │   └── CatalogRepository.kt # catálogo demo (MP4 + HLS, por perfil)
+│       │   │   ├── SettingsStore.kt     # ajustes + vinculación (cuenta/addons/APIs)
+│       │   │   ├── CatalogRepository.kt # catálogo demo + caché remoto + episodios
+│       │   │   ├── StremioClient.kt     # protocolo de addons Stremio (Cinemeta/Nuvio)
+│       │   │   ├── RemoteCatalog.kt     # filas remotas, plataformas, estudios, búsqueda
+│       │   │   ├── CinejoyClient.kt     # catálogo por plataforma (cinejoy.pk)
+│       │   │   ├── SweetFoxClient.kt    # catálogo por estudio (sweetfox.app)
+│       │   │   ├── Providers.kt         # 17 plataformas (logos TMDB)
+│       │   │   ├── Studios.kt           # 24 estudios (logos TMDB)
+│       │   │   └── PairingServer.kt     # servidor web :8080 + portal de vinculación
 │       │   ├── player/
 │       │   │   ├── PlayerScreen.kt      # reproductor estilo Xuper TV (Media3)
 │       │   │   └── PlayerUi.kt          # vidrio, píldoras, menús, EPG chip
 │       │   └── ui/
 │       │       ├── theme/               # Color, AppType (tipografía), Theme
-│       │       ├── components/          # Cards, PillButton, HeroBanner, SeekBar…
-│       │       │                        # ProfileComponents: avatares y fichas de perfil
-│       │       └── screens/             # Perfiles, Home, Detail, Movies, Search…
+│       │       ├── components/          # Cards, PillButton, HeroBanner, OnlyOnSection…
+│       │       │                        # ProfileComponents, StudioSection
+│       │       └── screens/             # Perfiles, Home, Detail, Plataformas,
+│       │                                # StudioCatalog, Search, Settings…
 │       └── res/
 │           ├── drawable/                # tv_banner, iconos y 8 caras de avatar
 │           ├── mipmap*/                 # icono adaptativo (lupa con 6 puntos)
