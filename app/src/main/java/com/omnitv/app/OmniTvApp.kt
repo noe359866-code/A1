@@ -134,7 +134,9 @@ fun OmniTvApp() {
                 TvScaffold(appTabs, currentRoute, navController::selectTab, trailing = profileBadge) {
                     HomeScreen(
                         onOpenDetail = { navController.navigate(Routes.detail(it.id.substringBefore('~'))) },
-                        onPlay = { navController.navigate(Routes.player(it.id)) }
+                        onPlay = { navController.navigate(Routes.player(it.id)) },
+                        onSeeAll = { navController.navigate(Routes.platform(it.id)) },
+                        onOpenPlatforms = { navController.navigate(Routes.PLATFORMS) }
                     )
                 }
             }

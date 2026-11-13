@@ -13,8 +13,10 @@ import androidx.compose.ui.unit.dp
 import com.omnitv.app.data.CatalogRepository
 import com.omnitv.app.data.ProfileStore
 import com.omnitv.app.data.RemoteCatalog
+import com.omnitv.app.data.StreamingProvider
 import com.omnitv.app.data.Video
 import com.omnitv.app.ui.components.HeroBanner
+import com.omnitv.app.ui.components.OnlyOnSection
 import com.omnitv.app.ui.components.SectionRow
 import com.omnitv.app.ui.theme.Background
 
@@ -30,7 +32,9 @@ import com.omnitv.app.ui.theme.Background
 @Composable
 fun HomeScreen(
     onOpenDetail: (Video) -> Unit,
-    onPlay: (Video) -> Unit
+    onPlay: (Video) -> Unit,
+    onSeeAll: (StreamingProvider) -> Unit,
+    onOpenPlatforms: () -> Unit
 ) {
     val profile = ProfileStore.currentProfile
 
@@ -62,7 +66,20 @@ fun HomeScreen(
                 onInfo = { onOpenDetail(featured) }
             )
         }
-        items(rows, key = { it.title }) { row ->
+        items(rows.take(2), key = { it.title }) { row ->
+            SectionRow(row = row, onOpenDetail = onOpenDetail)
+        }
+        // «Solo en {plataforma}» — como el «Only on Netflix» de flystream.net
+        if (!kidsOnly) {
+            item(key = "onlyOn") {
+                OnlyOnSection(
+                    onOpenDetail = onOpenDetail,
+                    onSeeAll = onSeeAll,
+                    onOpenPlatforms = onOpenPlatforms
+                )
+            }
+        }
+        items(rows.drop(2), key = { it.title }) { row ->
             SectionRow(row = row, onOpenDetail = onOpenDetail)
         }
     }

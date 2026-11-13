@@ -179,7 +179,7 @@ fun PlatformCatalogScreen(
     var filter by remember(provider.id) { mutableStateOf("Todas") }
 
     LaunchedEffect(provider.id) {
-        videos = RemoteCatalog.fetchProvider(provider)
+        videos = RemoteCatalog.fetchProviderCached(provider)
         loading = false
     }
 

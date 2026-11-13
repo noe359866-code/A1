@@ -165,6 +165,16 @@ Al elegir una plataforma se carga su **catálogo real**:
   meta de Cinemeta. Filtros *Todas / Películas / Series*.
 - Perfiles infantiles: sección no disponible (catálogo curado local).
 
+## 🎯 «Solo en {plataforma}» (como «Only on» de flystream.net)
+
+Sección del Inicio inspirada en el *Only on Netflix* de
+[flystream.net](https://flystream.net/): título dinámico **«Solo en Netflix /
+HBO Max / Disney+…»** con una **tira de logos que actúa de selector**
+(Netflix, Prime Video, HBO Max, Disney+, Apple TV+, Paramount+, Hulu + chip
+**«Más ›»** que abre la pestaña Plataformas). Al elegir un logo se carga su
+catálogo real (cinejoy.pk + Nuvio, con caché por plataforma) en una fila de
+tarjetas con cierre **«Ver todo»** → catálogo completo de esa plataforma.
+
 ## 📁 Estructura del proyecto
 
 ```

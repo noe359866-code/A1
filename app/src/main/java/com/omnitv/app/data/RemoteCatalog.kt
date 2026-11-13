@@ -154,4 +154,11 @@ object RemoteCatalog {
             .distinctBy { it.id }
             .also { list -> list.forEach { CatalogRepository.registerRemote(it) } }
     }
+
+    /** Caché de catálogos por plataforma (para «Solo en» y «Plataformas»). */
+    private val providerCache = java.util.concurrent.ConcurrentHashMap<Int, List<Video>>()
+
+    /** [fetchProvider] con caché por id de plataforma. */
+    suspend fun fetchProviderCached(provider: StreamingProvider): List<Video> =
+        providerCache[provider.id] ?: fetchProvider(provider).also { providerCache[provider.id] = it }
 }
