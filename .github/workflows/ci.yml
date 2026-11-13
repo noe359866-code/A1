@@ -51,11 +51,35 @@ jobs:
           SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
           if [ -x "$SDKMANAGER" ]; then yes | "$SDKMANAGER" --licenses > /dev/null; fi
 
+      # `pipefail` es imprescindible: sin él, el código de salida sería el de `tee`
+      # y un fallo de Gradle pasaría por bueno.
       - name: Tests unitarios
-        run: ./gradlew --no-daemon :app:testDebugUnitTest 2>&1 | tee build-tests.log
+        run: |
+          set -o pipefail
+          ./gradlew --no-daemon :app:testDebugUnitTest 2>&1 | tee build-tests.log
 
       - name: Compilar la app (debug)
-        run: ./gradlew --no-daemon :app:assembleDebug 2>&1 | tee build-app.log
+        run: |
+          set -o pipefail
+          ./gradlew --no-daemon :app:assembleDebug 2>&1 | tee build-app.log
+
+      # Deja constancia en el resumen del job de cuántos tests se ejecutaron.
+      - name: Recuento de tests
+        if: always()
+        run: |
+          python3 - <<'PY'
+          import glob, re
+          total = failed = 0
+          for xml in glob.glob('app/build/test-results/**/TEST-*.xml', recursive=True):
+              data = open(xml, encoding='utf-8', errors='replace').read()
+              total += len(re.findall(r'<testcase\b', data))
+              failed += len(re.findall(r'<(?:failure|error)\b', data))
+          print(f'::notice::Tests ejecutados: {total} · fallos: {failed}')
+          if failed:
+              print('::error::Hay tests que fallan')
+          elif total == 0:
+              print('::error::No se ejecutó ningún test')
+          PY
 
       # Si algo falla, lo importante aparece como anotación en el resumen del
       # job (los informes completos se suben como artefacto).
