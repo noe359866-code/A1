@@ -11,6 +11,43 @@ package com.omnitv.app.data
  */
 object CatalogRepository {
 
+    /** Caché de títulos remotos (Cinemeta/Nuvio) por id, para `find()`. */
+    private val remoteCache = java.util.concurrent.ConcurrentHashMap<String, Video>()
+
+    /** Registra un título remoto en el caché (se sobrescribe con la ficha completa). */
+    fun registerRemote(video: Video) {
+        remoteCache[video.id] = video
+    }
+
+    /** URLs demo para reproducir cuando el catálogo real no trae streams. */
+    private val demoStreams = listOf(
+        "$VID/BigBuckBunny.mp4",
+        "$VID/ElephantsDream.mp4",
+        "$VID/ForBiggerBlazes.mp4",
+        "$VID/ForBiggerEscapes.mp4",
+        "$VID/ForBiggerFun.mp4",
+        "$VID/Sintel.mp4",
+        "$VID/TearsOfSteel.mp4"
+    )
+
+    private fun demoStreamFor(id: String): String =
+        demoStreams[(id.hashCode().mod(demoStreams.size))]
+
+    /**
+     * Los addons de catálogo (Cinemeta/Nuvio) no incluyen streams: para
+     * títulos remotos se inyecta un flujo demo claramente etiquetado, de
+     * modo que la app siga siendo reproducible en la demostración.
+     */
+    fun withDemoFallback(video: Video): Video {
+        if (video.videoUrl.isNotEmpty()) return video
+        val demo = demoStreamFor(video.id)
+        return video.copy(
+            videoUrl = demo,
+            sources = listOf(StreamSource("Servidor demo 1", demo, StreamFormat.MP4)),
+            badge = "DEMO"
+        )
+    }
+
     private const val IMG = "https://storage.googleapis.com/gtv-videos-bucket/sample/images"
     private const val VID = "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample"
 
@@ -422,21 +459,41 @@ object CatalogRepository {
      * Busca un título por id. Los episodios se referencian como
      * `«idDelTítulo~idDelEpisodio»` y se devuelven como un [Video] transitorio
      * (así el reproductor funciona sin cambios y el auto-next encadena
-     * episodios).
+     * episodios). Resuelve tanto el catálogo local como el remoto.
      */
     fun find(id: String): Video? {
         if ('~' in id) {
             val parentId = id.substringBefore('~')
             val episodeId = id.substringAfter('~')
             val parent = find(parentId) ?: return null
-            val episode = parent.episodes.firstOrNull { it.id == episodeId } ?: return null
+            val episode = parent.episodes.firstOrNull {
+                it.id == episodeId || it.streamId == episodeId
+            } ?: return null
             return episodeVideo(parent, episode)
         }
-        return catalog.firstOrNull { it.id == id }
+        return catalog.firstOrNull { it.id == id } ?: remoteCache[id]
     }
 
     /** Convierte un episodio en un [Video] transitorio reproducible. */
     fun episodeVideo(parent: Video, episode: Episode): Video {
+        // Episodio remoto sin stream → flujo demo (los addons de catálogo
+        // no incluyen enlaces de reproducción)
+        if (episode.videoUrl.isEmpty()) {
+            val demo = demoStreamFor("${parent.id}~${episode.id}")
+            return parent.copy(
+                id = "${parent.id}~${episode.id}",
+                title = "${parent.title} · ${episode.title}",
+                description = episode.description,
+                cardUrl = episode.thumbnailUrl,
+                durationMinutes = episode.durationMinutes,
+                videoUrl = demo,
+                streamFormat = StreamFormat.MP4,
+                sources = listOf(StreamSource("Servidor demo 1", demo, StreamFormat.MP4)),
+                badge = "DEMO",
+                progress = 0f,
+                episodes = emptyList()
+            )
+        }
         val mirror = episode.videoUrl.replace(VID, VID_ALT)
         val servers = buildList {
             add(StreamSource("Servidor 1", episode.videoUrl, StreamFormat.MP4))
@@ -457,19 +514,20 @@ object CatalogRepository {
         )
     }
 
-    /** Títulos relacionados: comparten al menos un género. */
+    /** Títulos relacionados: comparten al menos un género (local + remoto). */
     fun related(id: String, limit: Int = 6): List<Video> {
         // Dentro de una serie/anime: el «siguiente» son los episodios restantes
         if ('~' in id) {
             val parentId = id.substringBefore('~')
             val episodeId = id.substringAfter('~')
             val parent = find(parentId) ?: return emptyList()
-            val index = parent.episodes.indexOfFirst { it.id == episodeId }
+            val index = parent.episodes.indexOfFirst { it.id == episodeId || it.streamId == episodeId }
             return parent.episodes.drop(index + 1).take(limit).map { episodeVideo(parent, it) }
         }
         val current = find(id) ?: return emptyList()
-        return catalog
+        return (catalog + remoteCache.values)
             .filter { it.id != id && it.genres.any { g -> g in current.genres } }
+            .distinctBy { it.id }
             .take(limit)
     }
 }

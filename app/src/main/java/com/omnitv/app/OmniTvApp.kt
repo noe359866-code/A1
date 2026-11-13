@@ -1,9 +1,15 @@
 package com.omnitv.app
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
@@ -12,8 +18,15 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import androidx.tv.material.Text
 import com.omnitv.app.data.CatalogRepository
 import com.omnitv.app.data.ProfileStore
+import com.omnitv.app.data.RemoteCatalog
+import com.omnitv.app.data.StremioClient
+import com.omnitv.app.data.Video
+import com.omnitv.app.ui.theme.AppType
+import com.omnitv.app.ui.theme.Background
+import com.omnitv.app.ui.theme.TextSecondary
 import com.omnitv.app.player.PlayerScreen
 import com.omnitv.app.ui.components.ProfileBadge
 import com.omnitv.app.ui.components.TabItem
@@ -146,16 +159,33 @@ fun OmniTvApp() {
                 arguments = listOf(navArgument("videoId") { type = NavType.StringType })
             ) { entry ->
                 val videoId = entry.arguments?.getString("videoId").orEmpty()
-                val video = CatalogRepository.find(videoId)
-                if (video != null) {
+                var video by remember { mutableStateOf(CatalogRepository.find(videoId)) }
+                // Título del catálogo real aún sin cachear: se pide la ficha remota
+                if (video == null) {
+                    Box(Modifier.fillMaxSize().background(Background), contentAlignment = Alignment.Center) {
+                        Text("Cargando…", style = AppType.metadata, color = TextSecondary)
+                    }
+                    LaunchedEffect(videoId) {
+                        video = RemoteCatalog.fetchDetail(
+                            Video(
+                                id = videoId, title = "", description = "",
+                                backdropUrl = "", cardUrl = "", year = 0,
+                                durationMinutes = 0, rating = 0.0, certification = "",
+                                quality = "HD", genres = emptyList(), videoUrl = "",
+                                isRemote = true,
+                                source = if (videoId.startsWith("tt")) StremioClient.CINEMETA_NAME else StremioClient.NUVIO_NAME,
+                                remoteType = if (videoId.startsWith("tt")) "movie" else "series"
+                            )
+                        )
+                        if (video == null) navController.popBackStack()
+                    }
+                } else {
                     DetailScreen(
-                        video = video,
+                        video = video!!,
                         onBack = { navController.popBackStack() },
                         onPlay = { navController.navigate(Routes.player(it.id)) },
                         onOpenDetail = { navController.navigate(Routes.detail(it.id.substringBefore('~'))) }
                     )
-                } else {
-                    LaunchedEffect(Unit) { navController.popBackStack() }
                 }
             }
             composable(
@@ -165,8 +195,9 @@ fun OmniTvApp() {
                 val videoId = entry.arguments?.getString("videoId").orEmpty()
                 val video = CatalogRepository.find(videoId)
                 if (video != null) {
+                    // Los títulos del catálogo real no traen streams → flujo demo
                     PlayerScreen(
-                        video = video,
+                        video = CatalogRepository.withDemoFallback(video),
                         onBack = { navController.popBackStack() },
                         onPlayNext = { next ->
                             // Auto-next: sustituye el reproductor actual por el siguiente

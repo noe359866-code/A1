@@ -23,6 +23,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -41,6 +42,7 @@ import androidx.compose.foundation.Image
 import com.omnitv.app.R
 import com.omnitv.app.data.CatalogRepository
 import com.omnitv.app.data.ProfileStore
+import com.omnitv.app.data.RemoteCatalog
 import com.omnitv.app.data.Video
 import com.omnitv.app.ui.components.PosterCard
 import com.omnitv.app.ui.theme.Accent
@@ -53,14 +55,30 @@ import com.omnitv.app.ui.theme.TextSecondary
 import androidx.tv.material.Text
 
 /**
- * Buscador sobre todo el catálogo. El campo recibe el foco del mando y
- * muestra sugerencias de géneros cuando la consulta está vacía.
+ * Buscador sobre todo el catálogo: resultados **locales + remotos**
+ * (Cinemeta y Nuvio). El campo recibe el foco del mando y muestra
+ * sugerencias de géneros cuando la consulta está vacía.
  */
 @Composable
 fun SearchScreen(onOpenDetail: (Video) -> Unit) {
     var query by rememberSaveable { mutableStateOf("") }
     val kidsOnly = ProfileStore.currentProfile?.isKids == true
-    val results = remember(query, kidsOnly) { CatalogRepository.search(query, kidsOnly) }
+    val localResults = remember(query, kidsOnly) { CatalogRepository.search(query, kidsOnly) }
+
+    // Búsqueda remota (catálogo real) con rebote
+    var remoteResults by remember { mutableStateOf<List<Video>>(emptyList()) }
+    var searching by remember { mutableStateOf(false) }
+    LaunchedEffect(query) {
+        val q = query.trim()
+        if (q.length >= 2 && !kidsOnly) {
+            searching = true
+            remoteResults = RemoteCatalog.search(q)
+            searching = false
+        } else {
+            remoteResults = emptyList()
+        }
+    }
+    val results = (localResults + remoteResults).distinctBy { it.id }
     val suggestions = listOf("Animación", "Ciencia ficción", "Motor", "Demo", "Fantasía")
 
     Column(
@@ -91,7 +109,13 @@ fun SearchScreen(onOpenDetail: (Video) -> Unit) {
             query.isBlank() -> EmptyState(
                 iconRes = R.drawable.ic_search,
                 title = "Busca en todo el catálogo",
-                subtitle = "Escribe un título, género o descripción"
+                subtitle = "Cinemeta · Nuvio · contenido demo · escribe un título o género"
+            )
+            searching -> Text(
+                "Buscando en Cinemeta y Nuvio…",
+                style = AppType.metadata,
+                color = TextSecondary,
+                modifier = Modifier.padding(bottom = 18.dp)
             )
             results.isEmpty() -> EmptyState(
                 iconRes = R.drawable.ic_search,

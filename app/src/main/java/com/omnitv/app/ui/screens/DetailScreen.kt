@@ -25,6 +25,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -57,6 +58,7 @@ import com.omnitv.app.R
 import com.omnitv.app.data.CatalogRepository
 import com.omnitv.app.data.Episode
 import com.omnitv.app.data.ProfileStore
+import com.omnitv.app.data.RemoteCatalog
 import com.omnitv.app.data.Video
 import com.omnitv.app.data.VideoType
 import com.omnitv.app.ui.components.CircleIconButton
@@ -77,10 +79,14 @@ import com.omnitv.app.ui.theme.TextTertiary
  * Ficha de detalle estilo Netflix, transparente:
  *
  * - El **tráiler se reproduce de fondo** en bucle y silenciado (como los
- *   previews de Netflix), con botón para activar el sonido.
+ *   previews de Netflix), con botón para activar el sonido. En títulos del
+ *   catálogo real (sin stream de vídeo) el fondo es el arte del propio
+ *   título (backdrop de Cinemeta/Nuvio).
  * - Toda la interfaz (título, metadatos, botones, episodios) flota encima
- *   sobre velos de degradado que mantienen la legibilidad.
- * - Series y anime muestran su lista de **episodios** reproducibles.
+ *   sobre velos de degradado.
+ * - Series y anime muestran su lista de **episodios** con selector de
+ *   temporada; las fichas remotas se enriquecen con la meta del addon
+ *   (episodios, reparto) al abrirse.
  */
 @Composable
 fun DetailScreen(
@@ -90,34 +96,48 @@ fun DetailScreen(
     onOpenDetail: (Video) -> Unit
 ) {
     val context = LocalContext.current
-    val related = remember(video.id) { CatalogRepository.related(video.id) }
+
+    // Ficha completa: se enriquece con la meta remota (episodios, reparto)
+    var full by remember(video.id) { mutableStateOf(video) }
+    LaunchedEffect(video.id) {
+        if (video.isRemote && video.episodes.isEmpty()) {
+            RemoteCatalog.fetchDetail(video)?.let { full = it }
+        }
+    }
+
+    val related = remember(full.id, full.episodes.size) { CatalogRepository.related(full.id) }
     var muted by remember { mutableStateOf(true) }
+    var selectedSeason by remember { mutableStateOf(1) }
 
     // Título a reproducir: primer episodio en series/anime, el vídeo en películas
-    val playTarget = remember(video.id) {
-        val firstEpisode = video.episodes.firstOrNull()
-        if (firstEpisode != null) CatalogRepository.episodeVideo(video, firstEpisode) else video
+    val playTarget = remember(full.id, full.episodes.size) {
+        val firstEpisode = full.episodes.firstOrNull()
+        if (firstEpisode != null) CatalogRepository.episodeVideo(full, firstEpisode) else full
     }
 
     // ---------------- Tráiler de fondo (Media3, en bucle, silenciado) ----------------
-    val trailerPlayer = remember {
-        ExoPlayer.Builder(context).build().apply {
-            setAudioAttributes(
-                AudioAttributes.Builder()
-                    .setContentType(C.AUDIO_CONTENT_TYPE_MOVIE)
-                    .setUsage(C.USAGE_MEDIA)
-                    .build(),
-                /* handleAudioFocus = */ false // el tráiler no roba el foco de audio
-            )
-            setMediaItem(ExoMediaItem.Builder().setUri(video.videoUrl).build())
-            volume = 0f
-            repeatMode = Player.REPEAT_MODE_ALL
-            playWhenReady = true
-            prepare()
+    val trailerPlayer = remember(full.videoUrl) {
+        if (full.videoUrl.isEmpty()) {
+            null // catálogo real: sin stream de vídeo → fondo con el arte del título
+        } else {
+            ExoPlayer.Builder(context).build().apply {
+                setAudioAttributes(
+                    AudioAttributes.Builder()
+                        .setContentType(C.AUDIO_CONTENT_TYPE_MOVIE)
+                        .setUsage(C.USAGE_MEDIA)
+                        .build(),
+                    /* handleAudioFocus = */ false // el tráiler no roba el foco de audio
+                )
+                setMediaItem(ExoMediaItem.Builder().setUri(full.videoUrl).build())
+                volume = 0f
+                repeatMode = Player.REPEAT_MODE_ALL
+                playWhenReady = true
+                prepare()
+            }
         }
     }
-    DisposableEffect(Unit) {
-        onDispose { trailerPlayer.release() }
+    DisposableEffect(trailerPlayer) {
+        onDispose { trailerPlayer?.release() }
     }
 
     Box(
@@ -125,18 +145,27 @@ fun DetailScreen(
             .fillMaxSize()
             .background(Background)
     ) {
-        // 1 · Tráiler a pantalla completa
-        AndroidView(
-            factory = { ctx ->
-                PlayerView(ctx).apply {
-                    this.player = trailerPlayer
-                    useController = false
-                    resizeMode = AspectRatioFrameLayout.RESIZE_MODE_ZOOM
-                }
-            },
-            update = { it.player = trailerPlayer },
-            modifier = Modifier.fillMaxSize()
-        )
+        // 1 · Tráiler (o arte del título) a pantalla completa
+        if (trailerPlayer != null) {
+            AndroidView(
+                factory = { ctx ->
+                    PlayerView(ctx).apply {
+                        this.player = trailerPlayer
+                        useController = false
+                        resizeMode = AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+                    }
+                },
+                update = { it.player = trailerPlayer },
+                modifier = Modifier.fillMaxSize()
+            )
+        } else {
+            AsyncImage(
+                model = full.backdropUrl.ifEmpty { full.cardUrl },
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize()
+            )
+        }
 
         // 2 · Velos de degradado para legibilidad (la interfaz es transparente)
         Box(
@@ -178,13 +207,13 @@ fun DetailScreen(
             ) {
                 // Chip de tipo + badge
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    TypeChip(video.type)
-                    video.badge?.let { AccentChip(it) }
+                    TypeChip(full.type)
+                    full.badge?.let { AccentChip(it) }
                 }
 
                 Spacer(Modifier.height(16.dp))
                 Text(
-                    video.title,
+                    full.title,
                     style = AppType.hero,
                     color = TextPrimary,
                     maxLines = 2,
@@ -195,7 +224,7 @@ fun DetailScreen(
                 // Metadatos: match % estilo Netflix + año + duración/episodios + calidad
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        "${video.matchPercent} % para ti",
+                        "${full.matchPercent} % para ti",
                         style = androidx.compose.ui.text.TextStyle(
                             fontFamily = FontFamily.SansSerif,
                             fontWeight = FontWeight.Bold,
@@ -204,22 +233,24 @@ fun DetailScreen(
                         color = AccentGreen
                     )
                     Dot()
-                    Text("${video.year}", style = AppType.metadata, color = TextSecondary)
+                    Text("${full.year}", style = AppType.metadata, color = TextSecondary)
                     Dot()
                     Text(
-                        video.episodesLabel ?: video.durationLabel,
+                        full.episodesLabel ?: full.durationLabel,
                         style = AppType.metadata,
                         color = TextSecondary
                     )
                     Dot()
-                    Text(video.quality, style = AppType.metadata, color = TextSecondary)
-                    Dot()
-                    Text(video.certification, style = AppType.metadata, color = TextSecondary)
+                    Text(full.quality, style = AppType.metadata, color = TextSecondary)
+                    if (full.certification.isNotEmpty()) {
+                        Dot()
+                        Text(full.certification, style = AppType.metadata, color = TextSecondary)
+                    }
                 }
 
                 Spacer(Modifier.height(20.dp))
                 Text(
-                    video.description,
+                    full.description,
                     style = AppType.body,
                     color = TextPrimary.copy(alpha = 0.92f),
                     maxLines = 3,
@@ -228,7 +259,7 @@ fun DetailScreen(
                 )
 
                 Spacer(Modifier.height(26.dp))
-                // Botones: Reproducir · Mi lista · sonido del tráiler
+                // Botones: Reproducir · Mi lista · sonido del tráiler (si lo hay)
                 Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
                     PillButton(
                         text = "Reproducir",
@@ -236,21 +267,34 @@ fun DetailScreen(
                         primary = true,
                         onClick = { onPlay(playTarget) }
                     )
-                    val inMyList = ProfileStore.currentProfile?.myList?.contains(video.id) == true
+                    val inMyList = ProfileStore.currentProfile?.myList?.contains(full.id) == true
                     PillButton(
                         text = if (inMyList) "En Mi lista" else "Mi lista",
                         iconRes = if (inMyList) R.drawable.ic_check else R.drawable.ic_add,
                         primary = false,
-                        onClick = { ProfileStore.toggleMyList(video.id) }
+                        onClick = { ProfileStore.toggleMyList(full.id) }
                     )
-                    PillButton(
-                        text = if (muted) "Sonido del tráiler" else "Silenciar",
-                        iconRes = if (muted) R.drawable.ic_volume_off else R.drawable.ic_audio,
-                        primary = false,
-                        onClick = {
-                            muted = !muted
-                            trailerPlayer.volume = if (muted) 0f else 1f
-                        }
+                    if (trailerPlayer != null) {
+                        PillButton(
+                            text = if (muted) "Sonido del tráiler" else "Silenciar",
+                            iconRes = if (muted) R.drawable.ic_volume_off else R.drawable.ic_audio,
+                            primary = false,
+                            onClick = {
+                                muted = !muted
+                                trailerPlayer.volume = if (muted) 0f else 1f
+                            }
+                        )
+                    }
+                }
+
+                // Aviso honesto para títulos del catálogo real
+                if (full.isRemote) {
+                    Spacer(Modifier.height(14.dp))
+                    Text(
+                        "Catálogo real de ${full.source} · los addons de catálogo no incluyen " +
+                            "enlaces de reproducción: se reproducirá una demostración",
+                        style = AppType.metadata,
+                        color = TextTertiary
                     )
                 }
             }
@@ -259,20 +303,39 @@ fun DetailScreen(
 
             Column(Modifier.padding(horizontal = 48.dp)) {
                 // ---------------- Episodios (series y anime) ----------------
-                if (video.episodes.isNotEmpty()) {
+                if (full.episodes.isNotEmpty()) {
+                    val seasons = full.episodes.map { it.season }.distinct().sorted()
+                    val currentSeason = if (selectedSeason in seasons) selectedSeason else seasons.first()
+                    val seasonEpisodes = full.episodes.filter { it.season == currentSeason }
+
                     Text("Episodios", style = AppType.sectionTitle, color = TextPrimary)
                     Spacer(Modifier.height(6.dp))
                     Text(
-                        video.episodesLabel ?: "Temporada 1",
+                        if (seasons.size > 1) "Temporada $currentSeason · ${seasonEpisodes.size} episodios"
+                        else full.episodesLabel ?: "Temporada 1",
                         style = AppType.metadata,
                         color = TextSecondary
                     )
+
+                    if (seasons.size > 1) {
+                        Spacer(Modifier.height(14.dp))
+                        LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            items(seasons) { season ->
+                                SeasonChip(
+                                    label = "Temporada $season",
+                                    selected = season == currentSeason,
+                                    onClick = { selectedSeason = season }
+                                )
+                            }
+                        }
+                    }
+
                     Spacer(Modifier.height(18.dp))
                     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                        video.episodes.forEach { episode ->
+                        seasonEpisodes.forEach { episode ->
                             EpisodeRow(
                                 episode = episode,
-                                onClick = { onPlay(CatalogRepository.episodeVideo(video, episode)) }
+                                onClick = { onPlay(CatalogRepository.episodeVideo(full, episode)) }
                             )
                         }
                     }
@@ -280,32 +343,38 @@ fun DetailScreen(
                 }
 
                 // ---------------- Reparto ----------------
-                if (video.cast.isNotEmpty()) {
+                if (full.cast.isNotEmpty()) {
                     SectionLabel("Reparto")
                     LazyRow(
                         contentPadding = PaddingValues(end = 48.dp),
                         horizontalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
-                        items(video.cast) { name -> InfoChip(name) }
+                        items(full.cast) { name -> InfoChip(name) }
                     }
                     Spacer(Modifier.height(28.dp))
                 }
 
                 // ---------------- Géneros ----------------
-                SectionLabel("Géneros")
-                LazyRow(
-                    contentPadding = PaddingValues(end = 48.dp),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    items(video.genres) { genre -> InfoChip(genre) }
+                if (full.genres.isNotEmpty()) {
+                    SectionLabel("Géneros")
+                    LazyRow(
+                        contentPadding = PaddingValues(end = 48.dp),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        items(full.genres) { genre -> InfoChip(genre) }
+                    }
+                    Spacer(Modifier.height(28.dp))
                 }
-                Spacer(Modifier.height(28.dp))
 
                 // ---------------- Información ----------------
                 SectionLabel("Información")
-                InfoRow("Idioma", video.language)
-                InfoRow("Calidad", video.quality)
-                InfoRow("Formato", video.streamFormat.name)
+                if (full.isRemote) {
+                    InfoRow("Fuente", "${full.source} (${full.remoteType ?: full.type.name.lowercase()})")
+                }
+                if (full.language.isNotEmpty()) {
+                    InfoRow("Idioma / país", full.language)
+                }
+                InfoRow("Calidad", full.quality)
 
                 // ---------------- Más como esto ----------------
                 if (related.isNotEmpty()) {
@@ -335,14 +404,18 @@ fun DetailScreen(
                 .padding(28.dp)
         )
 
-        // Indicador de tráiler (arriba a la derecha)
+        // Estado del fondo (arriba a la derecha)
         Row(
             Modifier
                 .align(Alignment.TopEnd)
                 .padding(32.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            AccentChip(if (muted) "TRÁILER · SILENCIADO" else "TRÁILER")
+            if (full.isRemote) {
+                AccentChip("CATÁLOGO · ${full.source.uppercase()}")
+            } else {
+                AccentChip(if (muted) "TRÁILER · SILENCIADO" else "TRÁILER")
+            }
         }
     }
 }
@@ -392,6 +465,39 @@ private fun InfoChip(text: String) {
 }
 
 @Composable
+private fun SeasonChip(label: String, selected: Boolean, onClick: () -> Unit) {
+    var focused by remember { mutableStateOf(false) }
+    Box(
+        Modifier
+            .clip(RoundedCornerShape(9.dp))
+            .background(
+                when {
+                    focused -> Accent
+                    selected -> GlassFillStrong
+                    else -> GlassFill
+                }
+            )
+            .then(
+                if (focused) Modifier.border(1.5.dp, Color.White.copy(alpha = 0.6f), RoundedCornerShape(9.dp))
+                else Modifier
+            )
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onClick
+            )
+            .onFocusChanged { focused = it.isFocused }
+            .padding(horizontal = 16.dp, vertical = 9.dp)
+    ) {
+        Text(
+            label,
+            style = AppType.metadata,
+            color = if (focused || selected) TextPrimary else TextSecondary
+        )
+    }
+}
+
+@Composable
 private fun SectionLabel(text: String) {
     Text(text, style = AppType.sectionTitle, color = TextPrimary)
     Spacer(Modifier.height(14.dp))
@@ -400,7 +506,7 @@ private fun SectionLabel(text: String) {
 @Composable
 private fun InfoRow(label: String, value: String) {
     Row(Modifier.padding(bottom = 10.dp)) {
-        Text("$label: ", style = AppType.metadata, color = TextSecondary, modifier = Modifier.width(110.dp))
+        Text("$label: ", style = AppType.metadata, color = TextSecondary, modifier = Modifier.width(130.dp))
         Text(value, style = AppType.metadata, color = TextPrimary)
     }
 }

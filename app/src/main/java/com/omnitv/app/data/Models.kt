@@ -31,9 +31,13 @@ data class Episode(
     val durationMinutes: Int,
     val description: String,
     val thumbnailUrl: String,
-    val videoUrl: String
+    val videoUrl: String,
+    val season: Int = 1,
+    /** Id del vídeo en Stremio (`tt123:1:2`) para addons de streams. */
+    val streamId: String? = null,
+    val aired: String? = null
 ) {
-    val durationLabel: String get() = "$durationMinutes min"
+    val durationLabel: String get() = if (durationMinutes > 0) "$durationMinutes min" else ""
 }
 
 /**
@@ -63,7 +67,13 @@ data class Video(
     /** Película, serie o anime. */
     val type: VideoType = VideoType.MOVIE,
     /** Episodios (series y anime). */
-    val episodes: List<Episode> = emptyList()
+    val episodes: List<Episode> = emptyList(),
+    /** Viene del catálogo real (Cinemeta/Nuvio) en lugar del demo local. */
+    val isRemote: Boolean = false,
+    /** Nombre del addon de origen ("Cinemeta" / "Nuvio"). */
+    val source: String = "",
+    /** Tipo Stremio remoto ("movie"/"series") para pedir la ficha completa. */
+    val remoteType: String? = null
 ) {
     val durationLabel: String
         get() = if (durationMinutes >= 60) {

@@ -13,10 +13,12 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.omnitv.app.data.CatalogRepository
 import com.omnitv.app.data.ProfileStore
+import com.omnitv.app.data.RemoteCatalog
 import com.omnitv.app.data.Video
 import com.omnitv.app.ui.components.PosterCard
 import com.omnitv.app.ui.theme.AppType
@@ -26,11 +28,23 @@ import com.omnitv.app.ui.theme.TextSecondary
 import androidx.tv.material.Text
 
 /**
- * Rejilla con todo el catálogo (pestaña "Películas").
+ * Rejilla con todo el catálogo (pestaña "Películas"): catálogo real
+ * (Cinemeta + Nuvio) + títulos demo locales.
  */
 @Composable
 fun MoviesScreen(onOpenDetail: (Video) -> Unit) {
-    val catalog = CatalogRepository.catalogFor(ProfileStore.currentProfile)
+    val profile = ProfileStore.currentProfile
+    LaunchedEffect(Unit) {
+        if (!RemoteCatalog.loaded.value) RemoteCatalog.refresh()
+    }
+
+    val local = CatalogRepository.catalogFor(profile)
+    val kidsOnly = profile?.isKids == true
+    val catalog = if (kidsOnly) {
+        local
+    } else {
+        (RemoteCatalog.gridVideos + local).distinctBy { it.id }
+    }
 
     Column(
         Modifier
@@ -42,7 +56,11 @@ fun MoviesScreen(onOpenDetail: (Video) -> Unit) {
         Text("Películas", style = AppType.screenTitle, color = TextPrimary)
         Spacer(Modifier.height(6.dp))
         Text(
-            "${catalog.size} títulos en el catálogo",
+            if (RemoteCatalog.loading.value && catalog.size <= local.size) {
+                "Cargando catálogo (Cinemeta · Nuvio)…"
+            } else {
+                "${catalog.size} títulos en el catálogo"
+            },
             style = AppType.metadata,
             color = TextSecondary
         )

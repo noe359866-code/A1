@@ -118,10 +118,33 @@ Todo persistido en `SharedPreferences`.
 | Coil (imágenes) | 2.6.0 |
 | minSdk / targetSdk / compileSdk | 22 / 34 / 35 |
 
-Sin dependencias de red propias: el catálogo de demostración vive en
+Sin dependencias de red propias: el cliente Stremio usa `HttpURLConnection` +
+`org.json` del propio Android. El catálogo de demostración vive en
 `CatalogRepository` y usa **streams públicos de prueba** (bucket de samples de
 Google, HLS de prueba de Apple *bipbop* y Mux) — aptos para desarrollar, no para
 distribución comercial.
+
+## 🌐 Catálogo real (addons de Stremio)
+
+La app consume **catálogos reales** con el protocolo de addons de Stremio
+(`catalog` / `meta`):
+
+| Addon | URL | Contenido |
+|---|---|---|
+| **Cinemeta** | `https://v3-cinemeta.strem.io` | Populares, Mejor valoradas y series (ids IMDb `tt…`) |
+| **Nuvio** | `https://catalog.nuvio.tv` | Tendencias, Netflix/Disney+, documentales y familia (TMDB) |
+
+- Portada con filas reales (Películas populares, Series populares, Tendencias,
+  Mejor valoradas, En Netflix, Series Disney+, Documentales, En familia),
+  junto a las filas del perfil (*Mi lista*, *Continuar viendo*) y el contenido demo.
+- **Búsqueda remota** en ambos addons (`extra: search`) combinada con la local.
+- Fichas remotas enriquecidas con `meta/{type}/{id}`: reparto, géneros y
+  **episodios** (`videos[]` con temporada/episodio/miniatura) con **selector de
+  temporadas**.
+- Los addons de catálogo **no incluyen streams**: esos títulos se reproducen
+  con un flujo *demo* etiquetado (chip `DEMO`) hasta conectar un addon de
+  streams (p. ej. Torrentio). Los perfiles infantiles solo ven el catálogo
+  local curado (los addons no dan clasificación por edades).
 
 ## 📁 Estructura del proyecto
 
