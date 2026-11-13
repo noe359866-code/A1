@@ -175,17 +175,17 @@ fun SettingsScreen(onSwitchProfile: () -> Unit) {
             SettingRow(
                 title = "Autoplay",
                 subtitle = "Los vídeos empiezan a reproducirse solos al abrirlos",
-                trailing = { TvToggle(SettingsStore.autoplay, onCheckedChange = { SettingsStore.setAutoplay(it) }) }
+                trailing = { TvToggle(SettingsStore.autoplay, onCheckedChange = { SettingsStore.setAutoplayEnabled(it) }) }
             )
             SettingRow(
                 title = "Siguiente automático",
                 subtitle = "Al terminar, reproduce el siguiente título con cuenta atrás de 10 s",
-                trailing = { TvToggle(SettingsStore.autoNext, onCheckedChange = { SettingsStore.setAutoNext(it) }) }
+                trailing = { TvToggle(SettingsStore.autoNext, onCheckedChange = { SettingsStore.setAutoNextEnabled(it) }) }
             )
             SettingRow(
                 title = "Iniciar silenciado",
                 subtitle = "Los vídeos empiezan sin audio",
-                trailing = { TvToggle(SettingsStore.mutedStart, onCheckedChange = { SettingsStore.setMutedStart(it) }) }
+                trailing = { TvToggle(SettingsStore.mutedStart, onCheckedChange = { SettingsStore.setMutedStartEnabled(it) }) }
             )
         }
 
@@ -200,7 +200,7 @@ fun SettingsScreen(onSwitchProfile: () -> Unit) {
                 onClick = {
                     val presets = SettingsStore.QUALITY_PRESETS
                     val next = presets[(presets.indexOf(SettingsStore.preferredQuality) + 1) % presets.size]
-                    SettingsStore.setPreferredQuality(next)
+                    SettingsStore.savePreferredQuality(next)
                 }
             )
             SettingRow(
@@ -210,13 +210,13 @@ fun SettingsScreen(onSwitchProfile: () -> Unit) {
                 onClick = {
                     val presets = SettingsStore.SPEED_PRESETS
                     val next = presets[(presets.indexOf(SettingsStore.playbackSpeed) + 1) % presets.size]
-                    SettingsStore.setPlaybackSpeed(next)
+                    SettingsStore.savePlaybackSpeed(next)
                 }
             )
             SettingRow(
                 title = "Subtítulos por defecto",
                 subtitle = "Activa los subtítulos automáticamente si hay pistas",
-                trailing = { TvToggle(SettingsStore.subtitlesDefault, onCheckedChange = { SettingsStore.setSubtitlesDefault(it) }) }
+                trailing = { TvToggle(SettingsStore.subtitlesDefault, onCheckedChange = { SettingsStore.setSubtitlesByDefault(it) }) }
             )
         }
 

@@ -476,7 +476,7 @@ fun PlayerScreen(
         PlayerOption(SettingsStore.speedLabel(preset), speed == preset) {
             speed = preset
             player.setPlaybackSpeed(preset)
-            SettingsStore.setPlaybackSpeed(preset)
+            SettingsStore.savePlaybackSpeed(preset)
             menu = MenuKind.NONE
             toast = "Velocidad ${SettingsStore.speedLabel(preset)}"
         }

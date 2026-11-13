@@ -27,6 +27,10 @@ object SettingsStore {
     private const val KEY_API_PLAIN = "apiKeys"
     private var prefs: SharedPreferences? = null
 
+    // Los `var` publican un setter privado con la misma firma JVM que un
+    // `fun setXxx(...)`; por eso los métodos que guardan se llaman setXxxEnabled,
+    // savePlaybackSpeed, etc. (un `fun setAutoplay` no compila junto al `var`).
+
     /** Los vídeos empiezan a reproducirse solos al abrirlos. */
     var autoplay by mutableStateOf(true)
         private set
@@ -153,17 +157,17 @@ object SettingsStore {
         secretsEncrypted = SecretBox.available && (keys.isEmpty() || sealed != null)
     }
 
-    fun setAutoplay(value: Boolean) = update { putBoolean("autoplay", value) }.also { autoplay = value }
+    fun setAutoplayEnabled(value: Boolean) = update { putBoolean("autoplay", value) }.also { autoplay = value }
 
-    fun setAutoNext(value: Boolean) = update { putBoolean("autoNext", value) }.also { autoNext = value }
+    fun setAutoNextEnabled(value: Boolean) = update { putBoolean("autoNext", value) }.also { autoNext = value }
 
-    fun setMutedStart(value: Boolean) = update { putBoolean("mutedStart", value) }.also { mutedStart = value }
+    fun setMutedStartEnabled(value: Boolean) = update { putBoolean("mutedStart", value) }.also { mutedStart = value }
 
-    fun setSubtitlesDefault(value: Boolean) = update { putBoolean("subtitlesDefault", value) }.also { subtitlesDefault = value }
+    fun setSubtitlesByDefault(value: Boolean) = update { putBoolean("subtitlesDefault", value) }.also { subtitlesDefault = value }
 
-    fun setPlaybackSpeed(value: Float) = update { putFloat("playbackSpeed", value) }.also { playbackSpeed = value }
+    fun savePlaybackSpeed(value: Float) = update { putFloat("playbackSpeed", value) }.also { playbackSpeed = value }
 
-    fun setPreferredQuality(value: String) = update { putString("preferredQuality", value) }.also { preferredQuality = value }
+    fun savePreferredQuality(value: String) = update { putString("preferredQuality", value) }.also { preferredQuality = value }
 
     /** Enlaza una cuenta desde el panel web del QR. */
     fun setLinkedAccount(email: String) = update { putString("linkedAccount", email) }.also {
