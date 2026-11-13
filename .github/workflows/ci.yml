@@ -63,6 +63,23 @@ jobs:
           set -o pipefail
           ./gradlew --no-daemon :app:assembleDebug 2>&1 | tee build-app.log
 
+      # Los avisos del compilador (w:) quedan como anotación del job.
+      - name: Avisos del compilador
+        if: always()
+        run: |
+          python3 - <<'PY'
+          import re
+          try:
+              lines = open('build-app.log', encoding='utf-8', errors='replace').read().splitlines()
+          except FileNotFoundError:
+              raise SystemExit(0)
+          warnings = [l for l in lines if l.startswith('w: ')]
+          for line in warnings[:15]:
+              print('::warning::' + line[3:900])
+          if warnings:
+              print(f'::notice::Avisos del compilador: {len(warnings)}')
+          PY
+
       # Deja constancia en el resumen del job de cuántos tests se ejecutaron.
       - name: Recuento de tests
         if: always()
