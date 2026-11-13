@@ -170,7 +170,7 @@ object SettingsStore {
     fun savePreferredQuality(value: String) = update { putString("preferredQuality", value) }.also { preferredQuality = value }
 
     /** Enlaza una cuenta desde el panel web del QR. */
-    fun setLinkedAccount(email: String) = update { putString("linkedAccount", email) }.also {
+    fun saveLinkedAccount(email: String) = update { putString("linkedAccount", email) }.also {
         linkedAccount = email
         revision++
     }
@@ -179,7 +179,7 @@ object SettingsStore {
      * Guarda los addons (URLs de manifest.json) añadidos desde el panel.
      * Solo se aceptan las URLs que cumplen [NetPolicy] (https, o http en la red local).
      */
-    fun setCustomAddons(urls: List<String>) {
+    fun saveCustomAddons(urls: List<String>) {
         val cleaned = urls.map { it.trim() }.filter { NetPolicy.isAllowed(it) }.distinct()
         update { putString("customAddons", org.json.JSONArray(cleaned).toString()) }.also {
             customAddons = cleaned
@@ -191,7 +191,7 @@ object SettingsStore {
      * Guarda los addons/proyectos de streams añadidos desde el panel.
      * Solo se aceptan las URLs que cumplen [NetPolicy] (https, o http en la red local).
      */
-    fun setStreamAddons(urls: List<String>) {
+    fun saveStreamAddons(urls: List<String>) {
         val cleaned = urls.map { it.trim() }.filter { NetPolicy.isAllowed(it) }.distinct()
         update { putString("streamAddons", org.json.JSONArray(cleaned).toString()) }.also {
             streamAddons = cleaned
@@ -200,7 +200,7 @@ object SettingsStore {
     }
 
     /** Guarda las APIs añadidas desde el panel (nombre → clave). */
-    fun setApiKeys(keys: Map<String, String>) {
+    fun saveApiKeys(keys: Map<String, String>) {
         val cleaned = keys.filterKeys { it.isNotBlank() }.filterValues { it.isNotBlank() }
         persistApiKeys(cleaned)
         apiKeys = cleaned

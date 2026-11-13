@@ -93,14 +93,14 @@ object PairingServer {
         )
 
         override fun setAccount(email: String) {
-            SettingsStore.setLinkedAccount(email)
+            SettingsStore.saveLinkedAccount(email)
         }
 
-        override fun setAddons(urls: List<String>) = SettingsStore.setCustomAddons(urls)
+        override fun setAddons(urls: List<String>) = SettingsStore.saveCustomAddons(urls)
 
-        override fun setStreamAddons(urls: List<String>) = SettingsStore.setStreamAddons(urls)
+        override fun setStreamAddons(urls: List<String>) = SettingsStore.saveStreamAddons(urls)
 
-        override fun setApiKeys(keys: Map<String, String>) = SettingsStore.setApiKeys(keys)
+        override fun setApiKeys(keys: Map<String, String>) = SettingsStore.saveApiKeys(keys)
     }
 
     /* ------------------------------------------------------------------ */
