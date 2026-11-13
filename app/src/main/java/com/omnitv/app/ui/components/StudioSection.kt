@@ -30,7 +30,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
-import androidx.tv.material.Text
+import androidx.compose.material.Text
 import coil.compose.AsyncImage
 import com.omnitv.app.data.Studio
 import com.omnitv.app.data.Studios

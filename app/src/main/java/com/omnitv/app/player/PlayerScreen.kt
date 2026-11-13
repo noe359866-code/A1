@@ -46,6 +46,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
+import androidx.media3.common.Format
 import androidx.media3.common.MediaItem as ExoMediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
@@ -56,7 +57,7 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
-import androidx.tv.material.Text
+import androidx.compose.material.Text
 import coil.compose.AsyncImage
 import com.omnitv.app.R
 import com.omnitv.app.data.CatalogRepository
@@ -90,7 +91,7 @@ private enum class AspectMode(val label: String, val ratio: Float, val resizeMod
     R21_9("21:9", 21f / 9f, AspectRatioFrameLayout.RESIZE_MODE_ZOOM)
 }
 
-private data class TrackChoice(val group: TrackGroup, val index: Int)
+private data class TrackChoice(val group: TrackGroup, val index: Int, val format: Format)
 
 private fun nowClock(): String =
     SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date())
@@ -243,7 +244,7 @@ fun PlayerScreen(
                                 val diff = abs(height - target)
                                 if (diff < bestDiff) {
                                     bestDiff = diff
-                                    best = TrackChoice(group.mediaTrackGroup, i)
+                                    best = TrackChoice(group.mediaTrackGroup, i, group.getTrackFormat(i))
                                 }
                             }
                         }
@@ -259,7 +260,7 @@ fun PlayerScreen(
                                 for (i in 0 until group.length) {
                                     if (!group.isTrackSupported(i)) continue
                                     subtitlesOn = true
-                                    textChoice = TrackChoice(group.mediaTrackGroup, i)
+                                    textChoice = TrackChoice(group.mediaTrackGroup, i, group.getTrackFormat(i))
                                     applyTrack(C.TRACK_TYPE_TEXT, textChoice, disable = false)
                                     return@run
                                 }
@@ -395,8 +396,8 @@ fun PlayerScreen(
                         append(if (format.height > 0) "${format.height}p" else (format.label ?: "Pista ${i + 1}"))
                         if (format.bitrate > 0) append(" · ${format.bitrate / 1000} kbps")
                     }
-                    add(PlayerOption(label, videoChoice == TrackChoice(group.mediaTrackGroup, i)) {
-                        videoChoice = TrackChoice(group.mediaTrackGroup, i)
+                    add(PlayerOption(label, videoChoice == TrackChoice(group.mediaTrackGroup, i, format)) {
+                        videoChoice = TrackChoice(group.mediaTrackGroup, i, format)
                         applyTrack(C.TRACK_TYPE_VIDEO, videoChoice)
                         menu = MenuKind.NONE
                     })
@@ -418,8 +419,8 @@ fun PlayerScreen(
                     if (!group.isTrackSupported(i)) continue
                     val format = group.getTrackFormat(i)
                     val label = format.label ?: format.language ?: "Pista ${i + 1}"
-                    add(PlayerOption(label, audioChoice == TrackChoice(group.mediaTrackGroup, i)) {
-                        audioChoice = TrackChoice(group.mediaTrackGroup, i)
+                    add(PlayerOption(label, audioChoice == TrackChoice(group.mediaTrackGroup, i, format)) {
+                        audioChoice = TrackChoice(group.mediaTrackGroup, i, format)
                         applyTrack(C.TRACK_TYPE_AUDIO, audioChoice)
                         menu = MenuKind.NONE
                     })
@@ -442,9 +443,9 @@ fun PlayerScreen(
                     if (!group.isTrackSupported(i)) continue
                     val format = group.getTrackFormat(i)
                     val label = format.label ?: format.language ?: "Subtítulos ${i + 1}"
-                    add(PlayerOption(label, subtitlesOn && textChoice == TrackChoice(group.mediaTrackGroup, i)) {
+                    add(PlayerOption(label, subtitlesOn && textChoice == TrackChoice(group.mediaTrackGroup, i, format)) {
                         subtitlesOn = true
-                        textChoice = TrackChoice(group.mediaTrackGroup, i)
+                        textChoice = TrackChoice(group.mediaTrackGroup, i, format)
                         applyTrack(C.TRACK_TYPE_TEXT, textChoice, disable = false)
                         menu = MenuKind.NONE
                     })
@@ -493,8 +494,8 @@ fun PlayerScreen(
     }
 
     val qualityLabel = videoChoice?.let { choice ->
-        val format = choice.group.getTrackFormat(choice.index)
-        if (format.height > 0) "${format.height}p" else "Manual"
+        val height = choice.format.height
+        if (height > 0) "${height}p" else "Manual"
     } ?: "Auto"
 
     // ---------------- Interfaz ----------------
@@ -558,7 +559,7 @@ fun PlayerScreen(
                 view.player = player
                 view.resizeMode = aspectMode.resizeMode
                 // 0f = relación natural del vídeo
-                view.setAspectRatio(if (aspectMode.ratio > 0f) aspectMode.ratio else 0f)
+                view.setAspectRatio(if (aspectMode.ratio > 0f) aspectMode.ratio else 0f) // 0f = natural
             },
             modifier = Modifier.fillMaxSize()
         )

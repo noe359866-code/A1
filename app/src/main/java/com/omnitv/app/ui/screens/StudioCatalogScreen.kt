@@ -36,7 +36,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.tv.material.Text
+import androidx.compose.material.Text
 import coil.compose.AsyncImage
 import com.omnitv.app.R
 import com.omnitv.app.data.RemoteCatalog

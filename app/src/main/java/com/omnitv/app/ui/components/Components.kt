@@ -54,7 +54,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.Canvas
 import androidx.tv.material.Card
 import androidx.tv.material.CardDefaults
-import androidx.tv.material.Text
+import androidx.compose.material.Text
 import coil.compose.AsyncImage
 import com.omnitv.app.R
 import com.omnitv.app.data.MediaRow

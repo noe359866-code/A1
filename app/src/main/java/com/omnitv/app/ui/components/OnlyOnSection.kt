@@ -37,7 +37,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.tv.material.Text
+import androidx.compose.material.Text
 import coil.compose.AsyncImage
 import com.omnitv.app.data.RemoteCatalog
 import com.omnitv.app.data.StreamingProvider

@@ -21,7 +21,7 @@ import com.omnitv.app.ui.components.ProfileTile
 import com.omnitv.app.ui.theme.AppType
 import com.omnitv.app.ui.theme.Background
 import com.omnitv.app.ui.theme.TextPrimary
-import androidx.tv.material.Text
+import androidx.compose.material.Text
 
 /**
  * Puerta de entrada de la app, igual que Netflix:

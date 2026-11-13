@@ -61,6 +61,9 @@ dependencies {
 
     // Compose for TV (Material para televisores: Card con foco, MaterialTheme…)
     implementation(libs.androidx.tv.material)
+    // tv-material es Material 2 y no incluye Text: viene de compose-material
+    // (la versión la fija el BOM de Compose).
+    implementation(libs.compose.material)
 
     // Navegación
     implementation(libs.androidx.navigation.compose)

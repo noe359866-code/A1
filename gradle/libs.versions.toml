@@ -37,6 +37,9 @@ coil-compose = { group = "io.coil-kt", name = "coil-compose", version.ref = "coi
 
 zxing-core = { group = "com.google.zxing", name = "core", version.ref = "zxing" }
 
+# Text de compose-material (tv-material es Material 2 y no incluye Text)
+compose-material = { group = "androidx.compose.material", name = "material" }
+
 junit = { group = "junit", name = "junit", version.ref = "junit" }
 json = { group = "org.json", name = "json", version.ref = "json" }
 

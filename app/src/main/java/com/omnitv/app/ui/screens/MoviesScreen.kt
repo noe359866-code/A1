@@ -25,7 +25,7 @@ import com.omnitv.app.ui.theme.AppType
 import com.omnitv.app.ui.theme.Background
 import com.omnitv.app.ui.theme.TextPrimary
 import com.omnitv.app.ui.theme.TextSecondary
-import androidx.tv.material.Text
+import androidx.compose.material.Text
 
 /**
  * Rejilla con todo el catálogo (pestaña "Películas"): catálogo real
