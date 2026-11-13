@@ -245,24 +245,66 @@ object CatalogRepository {
         )
     )
 
-    val featured: Video = catalog.first { it.id == "sintel" }
+    /** Contenido disponible para un perfil (los perfiles infantiles ven solo TP/7+). */
+    fun catalogFor(profile: Profile?): List<Video> =
+        if (profile?.isKids == true) {
+            catalog.filter { it.certification == "TP" || it.certification == "7+" }
+        } else {
+            catalog
+        }
 
-    val rows: List<MediaRow> = listOf(
-        MediaRow("Continuar viendo", byIds("sintel", "big-buck-bunny", "blazes", "bullrun")),
-        MediaRow("Estrenos destacados", byIds("tears-of-steel", "sintel", "big-buck-bunny", "escapes", "joyrides", "gti")),
-        MediaRow("Top 10 hoy", byIds("big-buck-bunny", "sintel", "fun", "meltdowns", "elephants-dream", "grand", "subaru", "bullrun", "blazes", "escapes")),
-        MediaRow("Cortometrajes premiados", byIds("sintel", "big-buck-bunny", "elephants-dream", "tears-of-steel")),
-        MediaRow("Transmisiones en directo · HLS", byIds("apple-hls", "mux-hls"))
-    )
+    fun featuredFor(profile: Profile?): Video =
+        if (profile?.isKids == true) {
+            catalog.first { it.id == "big-buck-bunny" }
+        } else {
+            catalog.first { it.id == "sintel" }
+        }
+
+    /**
+     * Filas de la pantalla de inicio para un perfil:
+     * "Mi lista" y "Continuar viendo" son propias de cada perfil;
+     * el resto se filtra para perfiles infantiles.
+     */
+    fun rowsFor(profile: Profile?): List<MediaRow> {
+        val available = catalogFor(profile)
+        val availableIds = available.map { it.id }.toSet()
+        val rows = mutableListOf<MediaRow>()
+
+        val myList = profile?.myList.orEmpty()
+            .mapNotNull { id -> available.find { it.id == id } }
+        if (myList.isNotEmpty()) {
+            rows += MediaRow("Mi lista", myList)
+        }
+
+        val continueItems = profile?.progress.orEmpty()
+            .filterKeys { it in availableIds }
+            .mapNotNull { (id, _) -> available.find { it.id == id } }
+        if (continueItems.isNotEmpty()) {
+            rows += MediaRow("Continuar viendo", continueItems)
+        }
+
+        rows += listOf(
+            MediaRow("Estrenos destacados", byIds("tears-of-steel", "sintel", "big-buck-bunny", "escapes", "joyrides", "gti")),
+            MediaRow("Top 10 hoy", byIds("big-buck-bunny", "sintel", "fun", "meltdowns", "elephants-dream", "grand", "subaru", "bullrun", "blazes", "escapes")),
+            MediaRow("Cortometrajes premiados", byIds("sintel", "big-buck-bunny", "elephants-dream", "tears-of-steel")),
+            MediaRow("Transmisiones en directo · HLS", byIds("apple-hls", "mux-hls"))
+        ).mapNotNull { row ->
+            val items = row.items.filter { it.id in availableIds }
+            if (items.isEmpty()) null else row.copy(items = items)
+        }
+
+        return rows
+    }
 
     private fun byIds(vararg ids: String): List<Video> = ids.mapNotNull { find(it) }
 
     fun find(id: String): Video? = catalog.firstOrNull { it.id == id }
 
-    fun search(query: String): List<Video> {
+    fun search(query: String, kidsOnly: Boolean = false): List<Video> {
         val q = query.trim().lowercase()
         if (q.isEmpty()) return emptyList()
-        return catalog.filter { v ->
+        val source = if (kidsOnly) catalogFor(Profile(id = "", name = "", isKids = true)) else catalog
+        return source.filter { v ->
             v.title.lowercase().contains(q) ||
                 v.description.lowercase().contains(q) ||
                 v.genres.any { it.lowercase().contains(q) }

@@ -40,6 +40,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.Image
 import com.omnitv.app.R
 import com.omnitv.app.data.CatalogRepository
+import com.omnitv.app.data.ProfileStore
 import com.omnitv.app.data.Video
 import com.omnitv.app.ui.components.PosterCard
 import com.omnitv.app.ui.theme.Accent
@@ -58,7 +59,8 @@ import androidx.tv.material.Text
 @Composable
 fun SearchScreen(onOpenDetail: (Video) -> Unit) {
     var query by rememberSaveable { mutableStateOf("") }
-    val results = remember(query) { CatalogRepository.search(query) }
+    val kidsOnly = ProfileStore.currentProfile?.isKids == true
+    val results = remember(query, kidsOnly) { CatalogRepository.search(query, kidsOnly) }
     val suggestions = listOf("Animación", "Ciencia ficción", "Motor", "Demo", "Fantasía")
 
     Column(

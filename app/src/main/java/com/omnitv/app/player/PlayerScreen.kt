@@ -46,6 +46,7 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
 import com.omnitv.app.R
+import com.omnitv.app.data.ProfileStore
 import com.omnitv.app.data.Video
 import com.omnitv.app.ui.components.CircleIconButton
 import com.omnitv.app.ui.components.LoadingSpinner
@@ -118,6 +119,15 @@ fun PlayerScreen(video: Video, onBack: () -> Unit) {
         player.addListener(listener)
         onDispose {
             player.removeListener(listener)
+            // Guarda el progreso en el perfil actual (para "Continuar viendo")
+            val watched = if (player.duration > 0) {
+                player.currentPosition.toFloat() / player.duration
+            } else {
+                0f
+            }
+            if (watched > 0f) {
+                ProfileStore.setProgress(video.id, watched)
+            }
             player.release()
         }
     }

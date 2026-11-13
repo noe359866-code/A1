@@ -20,8 +20,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import com.omnitv.app.ui.components.AvatarCircle
+import com.omnitv.app.ui.components.PillButton
 import com.omnitv.app.ui.components.SettingRow
 import com.omnitv.app.ui.components.TvToggle
+import com.omnitv.app.data.ProfileStore
 import com.omnitv.app.ui.theme.AppType
 import com.omnitv.app.ui.theme.Background
 import com.omnitv.app.ui.theme.TextPrimary
@@ -30,12 +33,14 @@ import androidx.tv.material.Text
 
 /**
  * Ajustes de la app (solo demostración: los valores no se persisten).
+ * Incluye el perfil activo con acceso al selector de perfiles.
  */
 @Composable
-fun SettingsScreen() {
+fun SettingsScreen(onSwitchProfile: () -> Unit) {
     var autoplay by remember { mutableStateOf(true) }
     var mutedStart by remember { mutableStateOf(false) }
     var previews by remember { mutableStateOf(true) }
+    val profile = ProfileStore.currentProfile
 
     Column(
         Modifier
@@ -48,6 +53,30 @@ fun SettingsScreen() {
         Text("Ajustes", style = AppType.screenTitle, color = TextPrimary)
         Spacer(Modifier.height(28.dp))
 
+        SectionLabel("Perfil")
+        SettingRow(
+            title = profile?.name ?: "Sin perfil",
+            subtitle = if (profile?.isKids == true) "Perfil infantil" else "Perfil estándar",
+            trailing = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (profile != null) {
+                        AvatarCircle(
+                            colorIndex = profile.colorIndex,
+                            initial = profile.initial,
+                            size = 42.dp
+                        )
+                        Spacer(Modifier.width(16.dp))
+                    }
+                    PillButton(
+                        text = "Cambiar de perfil",
+                        primary = false,
+                        onClick = onSwitchProfile
+                    )
+                }
+            }
+        )
+
+        Spacer(Modifier.height(24.dp))
         SectionLabel("Reproducción")
         SettingRow(
             title = "Reproducción automática",

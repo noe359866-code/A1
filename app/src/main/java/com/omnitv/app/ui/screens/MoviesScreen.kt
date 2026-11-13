@@ -16,6 +16,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.omnitv.app.data.CatalogRepository
+import com.omnitv.app.data.ProfileStore
 import com.omnitv.app.data.Video
 import com.omnitv.app.ui.components.PosterCard
 import com.omnitv.app.ui.theme.AppType
@@ -29,7 +30,7 @@ import androidx.tv.material.Text
  */
 @Composable
 fun MoviesScreen(onOpenDetail: (Video) -> Unit) {
-    val catalog = CatalogRepository.catalog
+    val catalog = CatalogRepository.catalogFor(ProfileStore.currentProfile)
 
     Column(
         Modifier

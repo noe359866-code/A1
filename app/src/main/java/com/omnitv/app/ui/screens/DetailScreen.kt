@@ -29,6 +29,7 @@ import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.omnitv.app.R
 import com.omnitv.app.data.CatalogRepository
+import com.omnitv.app.data.ProfileStore
 import com.omnitv.app.data.Video
 import com.omnitv.app.ui.components.CircleIconButton
 import com.omnitv.app.ui.components.MetaLine
@@ -116,11 +117,12 @@ fun DetailScreen(
                     primary = true,
                     onClick = onPlay
                 )
+                val inMyList = ProfileStore.currentProfile?.myList?.contains(video.id) == true
                 PillButton(
-                    text = "Mi lista",
-                    iconRes = R.drawable.ic_add,
+                    text = if (inMyList) "En Mi lista" else "Mi lista",
+                    iconRes = if (inMyList) R.drawable.ic_check else R.drawable.ic_add,
                     primary = false,
-                    onClick = { /* demo: sin persistencia */ }
+                    onClick = { ProfileStore.toggleMyList(video.id) }
                 )
             }
 

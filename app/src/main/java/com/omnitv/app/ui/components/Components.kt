@@ -68,6 +68,7 @@ import com.omnitv.app.ui.theme.TextPrimary
 import com.omnitv.app.ui.theme.TextSecondary
 import com.omnitv.app.ui.theme.TextTertiary
 import com.omnitv.app.ui.theme.Accent
+import com.omnitv.app.ui.theme.Danger
 import java.util.Locale
 
 /* -------------------------------------------------------------------------- */
@@ -102,7 +103,8 @@ fun TopTabBar(
     tabs: List<TabItem>,
     currentRoute: String?,
     onSelect: (TabItem) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    trailing: @Composable () -> Unit = {}
 ) {
     Row(
         modifier = modifier
@@ -118,6 +120,8 @@ fun TopTabBar(
                 onClick = { onSelect(tab) }
             )
         }
+        Spacer(Modifier.weight(1f))
+        trailing()
     }
 }
 
@@ -163,6 +167,7 @@ fun TvScaffold(
     tabs: List<TabItem>,
     currentRoute: String?,
     onTabSelected: (TabItem) -> Unit,
+    trailing: @Composable () -> Unit = {},
     content: @Composable () -> Unit
 ) {
     Column(
@@ -170,7 +175,7 @@ fun TvScaffold(
             .fillMaxSize()
             .background(Background)
     ) {
-        TopTabBar(tabs, currentRoute, onTabSelected)
+        TopTabBar(tabs, currentRoute, onTabSelected, trailing = trailing)
         Box(Modifier.weight(1f)) {
             content()
         }
@@ -186,6 +191,7 @@ fun PillButton(
     text: String,
     iconRes: Int? = null,
     primary: Boolean = true,
+    danger: Boolean = false,
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -193,12 +199,18 @@ fun PillButton(
     val scale by animateFloatAsState(if (focused) 1.05f else 1f, tween(150), label = "pillScale")
 
     val background = when {
+        danger && focused -> Danger
+        danger -> Danger.copy(alpha = 0.22f)
         primary && focused -> Color.White
         primary -> Color(0xFFF2F2F7)
         focused -> GlassFillStrong
         else -> GlassFill
     }
-    val contentColor = if (primary) Background else TextPrimary
+    val contentColor = when {
+        danger && !focused -> Danger
+        primary -> Background
+        else -> TextPrimary
+    }
 
     Row(
         modifier = modifier

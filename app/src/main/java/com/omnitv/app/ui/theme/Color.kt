@@ -15,3 +15,4 @@ val TextTertiary = Color(0xFF48484A)  // systemGray3
 val FocusBorder = Color(0xFFFFFFFF)
 val GlassFill = Color(0x28787880)     // fill terciario translúcido
 val GlassFillStrong = Color(0x4D787880)
+val Danger = Color(0xFFFF453A)        // systemRed dark (acciones destructivas)
