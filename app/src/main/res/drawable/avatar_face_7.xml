@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Avatar 7 · violeta — guiño -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="200dp"
+    android:height="200dp"
+    android:viewportWidth="200"
+    android:viewportHeight="200">
+
+    <path
+        android:fillColor="#FF7C5CFF"
+        android:pathData="M44,10 h112 a34,34 0 0 1 34,34 v112 a34,34 0 0 1 -34,34 h-112 a34,34 0 0 1 -34,-34 v-112 a34,34 0 0 1 34,-34 z" />
+
+    <!-- Ojo abierto -->
+    <path android:fillColor="#FF221712" android:pathData="M72,84 m-10,0 a10,10 0 1,0 20,0 a10,10 0 1,0 -20,0" />
+
+    <!-- Ojo guiñando -->
+    <path
+        android:pathData="M112,88 Q128,68 144,88"
+        android:strokeColor="#FF221712"
+        android:strokeWidth="9"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000" />
+
+    <!-- Sonrisa -->
+    <path
+        android:pathData="M64,124 Q100,154 136,124"
+        android:strokeColor="#FF221712"
+        android:strokeWidth="10"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000" />
+</vector>

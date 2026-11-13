@@ -50,11 +50,11 @@ object ProfileStore {
         prefs?.edit()?.putString(KEY_CURRENT, id)?.apply()
     }
 
-    fun add(name: String, colorIndex: Int, isKids: Boolean) {
+    fun add(name: String, avatarIndex: Int, isKids: Boolean) {
         profiles = profiles + Profile(
             id = UUID.randomUUID().toString(),
             name = name.ifBlank { "Perfil" },
-            colorIndex = colorIndex,
+            avatarIndex = avatarIndex,
             isKids = isKids
         )
         persist()
@@ -118,7 +118,7 @@ object ProfileStore {
                 JSONObject()
                     .put("id", profile.id)
                     .put("name", profile.name)
-                    .put("colorIndex", profile.colorIndex)
+                    .put("avatarIndex", profile.avatarIndex)
                     .put("isKids", profile.isKids)
                     .put("progress", progress)
                     .put("myList", JSONArray(profile.myList.toList()))
@@ -145,7 +145,7 @@ object ProfileStore {
                     Profile(
                         id = obj.getString("id"),
                         name = obj.getString("name"),
-                        colorIndex = obj.optInt("colorIndex", 0),
+                        avatarIndex = obj.optInt("avatarIndex", 0),
                         isKids = obj.optBoolean("isKids", false),
                         progress = progress,
                         myList = myList
@@ -159,7 +159,7 @@ object ProfileStore {
         Profile(
             id = "sofia",
             name = "Sofía",
-            colorIndex = 6,
+            avatarIndex = 6,
             progress = mapOf(
                 "sintel" to 0.35f,
                 "big-buck-bunny" to 0.72f,
@@ -170,7 +170,7 @@ object ProfileStore {
         Profile(
             id = "marco",
             name = "Marco",
-            colorIndex = 5,
+            avatarIndex = 5,
             progress = mapOf(
                 "bullrun" to 0.40f,
                 "gti" to 0.22f
@@ -179,7 +179,7 @@ object ProfileStore {
         Profile(
             id = "peques",
             name = "Peques",
-            colorIndex = 3,
+            avatarIndex = 3,
             isKids = true,
             progress = mapOf(
                 "big-buck-bunny" to 0.55f,

@@ -17,13 +17,14 @@
 | **Compose for TV** | `androidx.tv:tv-material` (`MaterialTheme`, `Card` con estados de foco D-pad) + Compose estándar con `focusRestorer` |
 | **Media3 ExoPlayer** | Reproductor a pantalla completa con controles propios (play/pausa, barra de progreso con búfer, ±10 s), soporte **MP4 y HLS** (módulo `media3-exoplayer-hls`), audio focus integrado |
 | **Navegación por mando** | Pestañas superiores tipo tvOS (Inicio · Películas · Buscar · Ajustes), ficha de detalle y reproductor con `navigation-compose` |
-| **Perfiles como Netflix** | «¿Quién está viendo?», avatares de color, modo infantil, *Continuar viendo* y *Mi lista* por perfil, gestión completa (crear/editar/eliminar) y cambio rápido desde la barra superior |
+| **Perfiles como Netflix** | «¿Quién está viendo?», avatares con caras ilustradas estilo Netflix, modo infantil, *Continuar viendo* y *Mi lista* por perfil, gestión completa (crear/editar/eliminar) y cambio rápido desde la barra superior |
 
 ## 📺 Pantallas
 
-0. **¿Quién está viendo?** — puerta de entrada estilo Netflix: avatares circulares
-   de color con inicial, chip *KIDS* en perfiles infantiles y acceso a
-   *Gestionar perfiles* / *Añadir perfil*.
+0. **¿Quién está viendo?** — puerta de entrada estilo Netflix: tiles cuadrados
+   redondeados con **avatares de caras ilustradas** (sonrisa clásica, gran sonrisa,
+   ojos cerrados, lengua, pícara, sorprendida, guiño y sonrisa con dientes),
+   chip *KIDS* en perfiles infantiles y acceso a *Gestionar perfiles* / *Añadir perfil*.
 1. **Inicio** — banner héroe cinematográfico (tipo *Watch Now*) + filas horizontales:
    *Mi lista* y *Continuar viendo* (con barra de progreso, **propias de cada perfil**),
    *Estrenos destacados*, *Top 10 hoy*, *Cortometrajes premiados* y *Transmisiones en directo · HLS*.
@@ -52,9 +53,12 @@
   elimina al ver ≥ 95 % del título) y *Mi lista* (alta/baja desde la ficha).
 - **Perfiles infantiles**: solo ven contenido clasificado TP/7+, en inicio,
   películas y buscador.
-- **Gestión**: crear, editar (nombre, color de avatar, modo infantil) y eliminar
+- **Gestión**: crear, editar (nombre, avatar ilustrado, modo infantil) y eliminar
   (no se puede borrar el último perfil). Persistido en `SharedPreferences`
   (JSON con `org.json`, sin dependencias).
+- **Avatares**: 8 caras vectoriales originales (los assets reales de Netflix son
+  material con copyright) inspiradas en sus avatares clásicos, en tiles
+  cuadrados redondeados idénticos al selector de Netflix.
 - **Cambio rápido**: avatar en la esquina superior derecha de la barra de
   pestañas → vuelve al selector; también desde *Ajustes → Cambiar de perfil*.
 - Perfiles de demostración: **Sofía**, **Marco** y **Peques** (infantil).
@@ -90,7 +94,7 @@ A1/
 │       │   ├── OmniTvApp.kt             # NavHost + pestañas + rutas
 │       │   ├── data/
 │       │   │   ├── Models.kt            # Video, MediaRow, StreamFormat
-│       │   │   ├── Profile.kt           # perfiles + paleta de avatares
+│       │   │   ├── Profile.kt           # perfiles + avatarRes (8 caras)
 │       │   │   ├── ProfileStore.kt      # persistencia de perfiles (SharedPreferences)
 │       │   │   └── CatalogRepository.kt # catálogo demo (MP4 + HLS, por perfil)
 │       │   ├── player/
@@ -101,7 +105,7 @@ A1/
 │       │       │                        # ProfileComponents: avatares y fichas de perfil
 │       │       └── screens/             # Perfiles, Home, Detail, Movies, Search…
 │       └── res/
-│           ├── drawable/                # tv_banner, iconos vectoriales
+│           ├── drawable/                # tv_banner, iconos y 8 caras de avatar
 │           ├── mipmap*/                 # icono adaptativo (lupa con 6 puntos)
 │           └── values/                  # strings, colors, themes
 ├── gradle/libs.versions.toml            # catálogo de versiones

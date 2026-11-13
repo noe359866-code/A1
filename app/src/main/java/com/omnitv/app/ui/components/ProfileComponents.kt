@@ -8,19 +8,15 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.focusable
 import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.runtime.Composable
@@ -33,22 +29,21 @@ import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.tv.material.Text
 import com.omnitv.app.R
 import com.omnitv.app.data.Profile
-import com.omnitv.app.data.avatarColor
+import com.omnitv.app.data.avatarRes
 import com.omnitv.app.ui.theme.Accent
 import com.omnitv.app.ui.theme.AppType
 import com.omnitv.app.ui.theme.GlassFill
@@ -58,45 +53,34 @@ import com.omnitv.app.ui.theme.TextPrimary
 import com.omnitv.app.ui.theme.TextSecondary
 
 /* -------------------------------------------------------------------------- */
-/*  Avatar circular estilo Netflix                                            */
+/*  Avatar ilustrado estilo Netflix (tile cuadrado redondeado)                */
 /* -------------------------------------------------------------------------- */
 
+/** Radio de esquina proporcional al tamaño, como los tiles de Netflix. */
+private fun avatarShape(size: Dp): RoundedCornerShape = RoundedCornerShape(size * 0.22f)
+
 @Composable
-fun AvatarCircle(
-    colorIndex: Int,
-    initial: String,
+fun AvatarView(
+    avatarIndex: Int,
     size: Dp,
     modifier: Modifier = Modifier,
     ringColor: Color? = null
 ) {
-    val color = avatarColor(colorIndex)
+    val shape = avatarShape(size)
     Box(
         modifier = modifier
             .size(size)
-            .clip(CircleShape)
-            .background(
-                Brush.verticalGradient(
-                    0f to color,
-                    1f to color.copy(alpha = 0.72f)
-                )
-            )
+            .clip(shape)
             .then(
-                if (ringColor != null) {
-                    Modifier.border(3.dp, ringColor, CircleShape)
-                } else {
-                    Modifier
-                }
-            ),
-        contentAlignment = Alignment.Center
+                if (ringColor != null) Modifier.border(3.dp, ringColor, shape)
+                else Modifier
+            )
     ) {
-        Text(
-            initial,
-            style = TextStyle(
-                fontFamily = FontFamily.SansSerif,
-                fontWeight = FontWeight.Bold,
-                fontSize = (size.value * 0.38f).sp
-            ),
-            color = Color.White
+        Image(
+            painter = painterResource(avatarRes(avatarIndex)),
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier.fillMaxSize()
         )
     }
 }
@@ -114,7 +98,7 @@ fun KidsChip(modifier: Modifier = Modifier) {
 }
 
 /* -------------------------------------------------------------------------- */
-/*  Ficha de perfil (selector)                                                */
+/*  Ficha de perfil (selector «¿Quién está viendo?»)                          */
 /* -------------------------------------------------------------------------- */
 
 @Composable
@@ -134,9 +118,8 @@ fun ProfileTile(
             .padding(8.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        AvatarCircle(
-            colorIndex = profile.colorIndex,
-            initial = profile.initial,
+        AvatarView(
+            avatarIndex = profile.avatarIndex,
             size = 118.dp,
             ringColor = if (focused) Color.White else null
         )
@@ -169,6 +152,7 @@ fun ManageProfileTile(
 ) {
     var focused by remember { mutableStateOf(false) }
     val scale by animateFloatAsState(if (focused) 1.08f else 1f, tween(160), label = "manageScale")
+    val shape = avatarShape(118.dp)
 
     Column(
         modifier = modifier
@@ -179,9 +163,8 @@ fun ManageProfileTile(
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Box(contentAlignment = Alignment.Center) {
-            AvatarCircle(
-                colorIndex = profile.colorIndex,
-                initial = profile.initial,
+            AvatarView(
+                avatarIndex = profile.avatarIndex,
                 size = 118.dp,
                 ringColor = if (focused) Color.White else null
             )
@@ -189,7 +172,7 @@ fun ManageProfileTile(
             Box(
                 Modifier
                     .size(118.dp)
-                    .clip(CircleShape)
+                    .clip(shape)
                     .background(Color.Black.copy(alpha = 0.45f)),
                 contentAlignment = Alignment.Center
             ) {
@@ -221,6 +204,7 @@ fun ManageProfileTile(
 fun AddProfileTile(onClick: () -> Unit, modifier: Modifier = Modifier) {
     var focused by remember { mutableStateOf(false) }
     val scale by animateFloatAsState(if (focused) 1.10f else 1f, tween(160), label = "addScale")
+    val shape = avatarShape(118.dp)
 
     Column(
         modifier = modifier
@@ -233,11 +217,11 @@ fun AddProfileTile(onClick: () -> Unit, modifier: Modifier = Modifier) {
         Box(
             Modifier
                 .size(118.dp)
-                .clip(CircleShape)
+                .clip(shape)
                 .background(if (focused) GlassFillStrong else GlassFill)
                 .then(
-                    if (focused) Modifier.border(3.dp, Color.White, CircleShape)
-                    else Modifier.border(1.5.dp, TextSecondary.copy(alpha = 0.4f), CircleShape)
+                    if (focused) Modifier.border(3.dp, Color.White, shape)
+                    else Modifier.border(1.5.dp, TextSecondary.copy(alpha = 0.4f), shape)
                 ),
             contentAlignment = Alignment.Center
         ) {
@@ -271,29 +255,31 @@ fun AddProfileTile(onClick: () -> Unit, modifier: Modifier = Modifier) {
 fun ProfileBadge(profile: Profile?, onClick: () -> Unit, modifier: Modifier = Modifier) {
     var focused by remember { mutableStateOf(false) }
     val scale by animateFloatAsState(if (focused) 1.12f else 1f, tween(150), label = "badgeScale")
+    val shape = avatarShape(42.dp)
 
     Box(
         modifier = modifier
             .graphicsLayer { scaleX = scale; scaleY = scale }
-            .clip(CircleShape)
+            .clip(shape)
             .then(
-                if (focused) Modifier.border(2.dp, Color.White, CircleShape)
+                if (focused) Modifier.border(2.dp, Color.White, shape)
                 else Modifier
             )
             .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onClick)
             .onFocusChanged { focused = it.isFocused }
     ) {
         if (profile != null) {
-            AvatarCircle(
-                colorIndex = profile.colorIndex,
-                initial = profile.initial,
-                size = 42.dp
+            Image(
+                painter = painterResource(avatarRes(profile.avatarIndex)),
+                contentDescription = "Perfil ${profile.name}",
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.size(42.dp)
             )
         } else {
             Box(
                 Modifier
                     .size(42.dp)
-                    .clip(CircleShape)
+                    .clip(shape)
                     .background(GlassFillStrong),
                 contentAlignment = Alignment.Center
             ) {
@@ -304,27 +290,34 @@ fun ProfileBadge(profile: Profile?, onClick: () -> Unit, modifier: Modifier = Mo
 }
 
 /* -------------------------------------------------------------------------- */
-/*  Selector de color para el editor de perfiles                              */
+/*  Selector de avatar para el editor de perfiles                              */
 /* -------------------------------------------------------------------------- */
 
 @Composable
-fun ColorDot(color: Color, selected: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
+fun AvatarOption(resId: Int, selected: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
     var focused by remember { mutableStateOf(false) }
-    val scale by animateFloatAsState(if (focused) 1.15f else 1f, tween(140), label = "dotScale")
+    val scale by animateFloatAsState(if (focused) 1.15f else 1f, tween(140), label = "optionScale")
+    val shape = RoundedCornerShape(14.dp)
 
     Box(
         modifier = modifier
             .graphicsLayer { scaleX = scale; scaleY = scale }
-            .size(48.dp)
-            .clip(CircleShape)
-            .background(color)
+            .size(64.dp)
+            .clip(shape)
             .then(
-                if (selected || focused) Modifier.border(3.dp, Color.White, CircleShape)
+                if (selected || focused) Modifier.border(3.dp, Color.White, shape)
                 else Modifier
             )
             .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onClick)
             .onFocusChanged { focused = it.isFocused }
-    )
+    ) {
+        Image(
+            painter = painterResource(resId),
+            contentDescription = null,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier.fillMaxSize()
+        )
+    }
 }
 
 /* -------------------------------------------------------------------------- */

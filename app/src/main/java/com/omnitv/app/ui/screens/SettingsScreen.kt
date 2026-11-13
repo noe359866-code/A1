@@ -20,7 +20,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import com.omnitv.app.ui.components.AvatarCircle
+import com.omnitv.app.ui.components.AvatarView
 import com.omnitv.app.ui.components.PillButton
 import com.omnitv.app.ui.components.SettingRow
 import com.omnitv.app.ui.components.TvToggle
@@ -60,9 +60,8 @@ fun SettingsScreen(onSwitchProfile: () -> Unit) {
             trailing = {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     if (profile != null) {
-                        AvatarCircle(
-                            colorIndex = profile.colorIndex,
-                            initial = profile.initial,
+                        AvatarView(
+                            avatarIndex = profile.avatarIndex,
                             size = 42.dp
                         )
                         Spacer(Modifier.width(16.dp))
