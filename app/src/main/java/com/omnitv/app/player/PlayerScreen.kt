@@ -1,7 +1,7 @@
-import androidx.annotation.OptIn
-import androidx.media3.common.util.UnstableApi
 package com.omnitv.app.player
 
+import androidx.annotation.OptIn
+import androidx.media3.common.util.UnstableApi
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn

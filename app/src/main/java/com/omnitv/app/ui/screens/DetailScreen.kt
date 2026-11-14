@@ -1,7 +1,7 @@
-import androidx.annotation.OptIn
-import androidx.media3.common.util.UnstableApi
 package com.omnitv.app.ui.screens
 
+import androidx.annotation.OptIn
+import androidx.media3.common.util.UnstableApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
