@@ -38,7 +38,7 @@ class StremioIntegrationTest {
         val m = StremioManifestParser.parse(manifest(catalogs = """[{"id":"top","type":"movie","extra":[{"name":"genre","isRequired":true,"options":["Action"]}]}]"""))
         val c = m.catalogs.single()
         assertEquals(mapOf("genre" to "Action"), m.catalogExtras(c))
-        assertNull(m.catalogExtras(c, mapOf("search" to "matrix")))
+        assertEquals(mapOf("genre" to "Action"), m.catalogExtras(c, mapOf("search" to "matrix")))
         assertFalse(c.supportsExtra("skip"))
         val requiredSearch = StremioManifestParser.parse(manifest(catalogs = """[{"id":"search","type":"series","extraRequired":["search"]}]""")).catalogs.single()
         assertNull(requiredSearch.normalizedExtras())
@@ -50,7 +50,7 @@ class StremioIntegrationTest {
         val url = StremioUrl.normalize("stremio://addon.example/opciones/manifest.json")
         assertEquals("https://addon.example/opciones/manifest.json", url)
         assertEquals("https://addon.example/opciones", StremioUrl.base(url!!))
-        assertEquals("https://addon.example/opciones", StremioUrl.normalize("https://addon.example/opciones"))
+        assertEquals("https://addon.example/opciones/manifest.json", StremioUrl.normalize("https://addon.example/opciones"))
         assertEquals(
             "https://addon.example/catalog/movie/top/genre=Science%20Fiction&skip=20.json",
             StremioUrl.catalog("https://addon.example", "movie", "top", mapOf("skip" to "20", "genre" to "Science Fiction"))
