@@ -222,3 +222,6 @@ MIT — Omni TV es software original. Logos de plataformas/estudios vía CDN pú
 ---
 
 <p align="center"><em>Omni TV — Diseñado para la distancia del sofá.</em></p>
+
+## Release v1.2.0 — 2026-11-14
+Fusion arena/a6b4f067-a1 → main: plugins Streamflix + fix 403 Cronet + reproductor premium. APK: https://github.com/noe359866-code/A1/releases/tag/v1.2.0
