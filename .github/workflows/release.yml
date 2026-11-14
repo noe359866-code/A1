@@ -37,21 +37,27 @@ jobs:
           SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
           if [ -x "$SDKMANAGER" ]; then yes | "$SDKMANAGER" --licenses > /dev/null; fi
 
-      - name: Generar keystore de respaldo si no hay firma configurada
-        run: |
-          if [ -z "$OMNITV_STORE_FILE" ]; then
-            echo "Usando firma debug para el APK de Release (sideload)"
-            mkdir -p ~/.android
-            if [ ! -f ~/.android/debug.keystore ]; then
-              keytool -genkey -v -keystore ~/.android/debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=OmniTV, OU=Dev, O=OmniTV, L=NI, S=Managua, C=NI" 2>&1 | tail -n 5
-            fi
-            ls -lh ~/.android/debug.keystore
-          fi
-
       - name: Build APK release
         run: |
           set -o pipefail
           ./gradlew --no-daemon :app:assembleRelease 2>&1 | tee build-release.log
+
+      - name: Mostrar errores si falla
+        if: failure()
+        run: |
+          echo "=== build-release.log (ultimas 300 lineas) ==="
+          tail -n 300 build-release.log || true
+          echo "=== Fin log ==="
+          # Extraer lineas de error como anotaciones
+          grep -E "^(e: |FAILURE|Execution failed|What went wrong)" build-release.log | head -n 30 | while read l; do echo "::error::$l"; done || true
+
+      - name: Subir log como artefacto (debug)
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: build-release-log
+          path: build-release.log
+          if-no-files-found: ignore
 
       - name: Renombrar APK
         run: |
