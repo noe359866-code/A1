@@ -50,10 +50,10 @@
 
 | Tecla | Inicio / listas | Reproductor |
 | --- | --- | --- |
-| **Centro / Enter** | Abrir elemento enfocado · abrir el teclado en el buscador | Botón enfocado · mostrar controles |
+| **Centro / Enter** | Abrir elemento enfocado · **escribir la tecla enfocada** (buscador) | Botón enfocado · mostrar controles |
 | **◀ / ▶** | Moverse por las filas | Retroceder / avanzar **10 s** (con controles ocultos) · navegar controles |
 | **▲ / ▼** | Moverse entre filas | Mostrar controles · menús de opciones |
-| **Atrás** | Volver | Cerrar menú → ocultar controles → salir |
+| **Atrás** | Volver · **cerrar el teclado** si está abierto | Cerrar menú → ocultar controles → salir |
 
 ## 🎬 Reproductor estilo Xuper TV
 
@@ -408,6 +408,39 @@ qué. Omni TV resuelve los nombres con el **DNS de Cloudflare por HTTPS**
 - **Interruptor**: Ajustes → **Red → «DNS de Cloudflare»** (activo por
   defecto). Apagado = comportamiento clásico, solo el DNS del sistema.
 
+## ⌨️ Buscar con el mando (teclado propio)
+
+Con un mando y sin teclado físico, buscar era el punto más frágil de la app: el
+campo recibía el foco, se pulsaba OK y **no pasaba nada** —el IME de Android TV
+no se abre de forma fiable desde Compose, y varía según el fabricante—. Se
+resolvió con un teclado de la propia app.
+
+- **Cuatro filas de caracteres** (37 teclas): `1234567890` · `QWERTYUIOP` ·
+  `ASDFGHJKLÑ` · `ZXCVBNM`, más ESPACIO / BORRAR / LISTO en una quinta fila.
+  Mayúsculas y con Ñ, para escribir nombres propios sin pelear con el mando.
+  Sin teclas de tildes: se resuelven en la búsqueda (ver abajo), y cada tecla
+  que sobra son varias pulsaciones de D-pad de menos.
+- **Se abre solo** al entrar en Buscar (el foco va al campo y de ahí a la
+  primera tecla), con **animación de entrada** desde abajo. Se cierra con
+  LISTO o con **Atrás**, y en ambos casos el foco vuelve al campo.
+- **Se superpone** a la mitad inferior en vez de empujar el contenido: con 342 dp
+  de alto no cabe debajo del buscador sin dejar los resultados en una franja
+  inútil. Así se sigue viendo lo que va saliendo mientras se escribe; al cerrar,
+  la lista completa ocupa la pantalla.
+- **Teclas de 54 dp** (por encima del mínimo de 48 para un objetivo de mando),
+  filas centradas en columna para que el D-pad baje en vertical y no en diagonal.
+- **La búsqueda ignora acentos y mayúsculas**: «accion» encuentra «Acción» y
+  «PELICULAS» encuentra «Películas» (`SearchText`). Es lo que hace prescindible
+  el teclado de tildes.
+- **No captura teclas globalmente**: el foco vive dentro del teclado, así que un
+  teclado físico o uno Bluetooth siguen escribiendo en el campo sin estorbar, y
+  las teclas del reproductor siguen funcionando donde deben.
+
+El modelo (`TvKeypad`) es lógica pura y se prueba con tests de JVM: qué escribe
+cada tecla, que BORRAR con el campo vacío no rompa nada, que no se acumulen
+espacios (pulsar ESPACIO dos veces con el mando es lo más habitual) y el tope de
+64 caracteres.
+
 ## 🍎 Decisiones de diseño (estética Apple TV)
 
 - **Foco protagonista**: la tarjeta enfocada escala (1.08) y las filas restauran
@@ -437,8 +470,10 @@ qué. Omni TV resuelve los nombres con el **DNS de Cloudflare por HTTPS**
 - **El mando manda**: cada pantalla entra con el foco donde el usuario espera
   («Reproducir» en la ficha, el campo en Buscar, el primer perfil, el héroe en
   Inicio), y las filas sin acción propia no son focos alcanzables.
-- **Teclado en pantalla**: los dos campos de texto piden el IME con OK del
-  mando; sin eso, un televisor sin teclado físico no permite escribir nada.
+- **Teclado propio, no el del sistema**: el buscador trae su teclado en pantalla
+  (`TvKeyboard`). En Android TV el IME no se abre de forma fiable con Compose, y
+  el usuario acababa pulsando «Atrás» a ciegas; con teclado propio se ve siempre
+  y responde al D-pad.
 - **Zona segura**: 48 dp de margen (el overscan del 5 % de los paneles) para
   botones, textos y rejillas; rejillas de 5 columnas y héroe proporcional al
   alto de pantalla.

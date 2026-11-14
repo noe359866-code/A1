@@ -30,6 +30,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
@@ -74,17 +75,19 @@ fun RequestTvFocus(requester: FocusRequester, key: Any? = Unit) {
  * tiene teclado: si el usuario enfoca el campo y pulsa OK no pasa nada visible,
  * y se queda atascado sin poder escribir. Aquí:
  *
- *  - En Android TV el teclado en pantalla se abre solo al enfocar el campo,
- *    pero si el usuario lo cierra con «Atrás» se queda sin forma de volver a
- *    abrirlo: por eso OK / Enter del mando lo vuelven a mostrar
- *    (`LocalSoftwareKeyboardController`).
+ *  - El IME del sistema **no entra aquí**: en Android TV no aparece de forma
+ *    fiable con Compose (según fabricante, el campo se queda con el foco y no
+ *    se abre nada). Las pantallas que necesitan escribir teclado —hoy el
+ *    buscador— traen el suyo (`TvKeyboard`) y lo abren con [onFocusChange];
+ *    ver [imeOnCenter] para desactivar también el intento por OK.
  *  - El foco se pinta con anillo blanco de 3 dp y fondo elevado, porque en un
  *    televisor el color de fondo solo no se distingue.
- *  - La acción del teclado (`Buscar` / `Listo`) cierra el teclado y devuelve el
- *    foco a la pantalla, para no dejar al usuario encerrado en el IME.
+ *  - Si por [imeOnCenter] no se pide el IME, OK / Enter sobre el campo no hace
+ *    nada especial: escriben las teclas del teclado propio.
  *
  * Se expone [focusRequester] para que una pantalla pueda llevar el foco al
- * campo al entrar (por ejemplo, la pantalla de búsqueda).
+ * campo al entrar (por ejemplo, la pantalla de búsqueda), y [onFocusChange]
+ * para que la pantalla abra su propio teclado cuando el campo gana el foco.
  */
 @Composable
 fun TvTextField(
@@ -95,7 +98,20 @@ fun TvTextField(
     leadingIconRes: Int? = null,
     imeAction: ImeAction = ImeAction.Done,
     focusRequester: FocusRequester = remember { FocusRequester() },
-    onImeAction: () -> Unit = {}
+    onImeAction: () -> Unit = {},
+    onFocusChange: (Boolean) -> Unit = {},
+    /**
+     * Si es `false`, OK / Enter sobre el campo **no** piden el teclado del
+     * sistema. El buscador lo desactiva porque tiene teclado propio: si se
+     * dejara, en un televisor que sí tenga IME saldrían dos teclados a la vez.
+     */
+    imeOnCenter: Boolean = true,
+    /**
+     * Si es `false`, el campo no acepta el foco del D-pad. El buscador lo
+     * desactiva mientras su teclado está abierto: si no, las flechas podían
+     * volver al campo y dejar el teclado sin foco, escribiendo a ciegas.
+     */
+    focusable: Boolean = true
 ) {
     var focused by remember { mutableStateOf(false) }
     val keyboard = LocalSoftwareKeyboardController.current
@@ -146,10 +162,13 @@ fun TvTextField(
                 modifier = Modifier
                     .fillMaxWidth()
                     .focusRequester(focusRequester)
+                    .focusProperties { this.canFocus = focusable }
                     .onPreviewKeyEvent { event ->
-                        // OK / Enter del mando: abrir el teclado en pantalla.
-                        // Sin esto, un mando D-pad no puede escribir nada.
-                        if (event.type == KeyEventType.KeyDown &&
+                        // OK / Enter del mando: pedir el IME del sistema solo si
+                        // la pantalla lo quiere (`imeOnCenter`). Con teclado
+                        // propio se ignora, para no acabar con dos teclados.
+                        if (imeOnCenter &&
+                            event.type == KeyEventType.KeyDown &&
                             (event.key == Key.DirectionCenter ||
                                 event.key == Key.Enter ||
                                 event.key == Key.NumPadEnter)
@@ -160,7 +179,10 @@ fun TvTextField(
                             false
                         }
                     }
-                    .onFocusChanged { focused = it.isFocused }
+                    .onFocusChanged {
+                        focused = it.isFocused
+                        onFocusChange(it.isFocused)
+                    }
             )
         }
     }

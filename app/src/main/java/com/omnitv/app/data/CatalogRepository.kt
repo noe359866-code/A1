@@ -413,15 +413,17 @@ object CatalogRepository {
      * buscan contenido TP/7+ ([catalogFor]).
      */
     fun search(query: String, kidsOnly: Boolean = false): List<Video> {
-        val q = query.trim()
+        // Sin acentos ni mayúsculas: el teclado de la tele no tiene tildes, así
+        // que «accion» tiene que encontrar «Acción» (ver `SearchText`).
+        val q = SearchText.normalize(query)
         if (q.isEmpty()) return emptyList()
         return catalog
             .filter { video -> !kidsOnly || video.certification == "TP" || video.certification == "7+" }
             .filter { video ->
-                video.title.contains(q, ignoreCase = true) ||
-                    video.genres.any { it.contains(q, ignoreCase = true) } ||
-                    video.description.contains(q, ignoreCase = true) ||
-                    video.cast.any { it.contains(q, ignoreCase = true) }
+                SearchText.matches(video.title, q) ||
+                    video.genres.any { SearchText.matches(it, q) } ||
+                    SearchText.matches(video.description, q) ||
+                    video.cast.any { SearchText.matches(it, q) }
             }
     }
 
