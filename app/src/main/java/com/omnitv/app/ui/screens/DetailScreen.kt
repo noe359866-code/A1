@@ -1,3 +1,5 @@
+import androidx.annotation.OptIn
+import androidx.media3.common.util.UnstableApi
 package com.omnitv.app.ui.screens
 
 import androidx.compose.foundation.background
@@ -96,6 +98,7 @@ import com.omnitv.app.ui.theme.TextTertiary
  *   temporada; las fichas remotas se enriquecen con la meta del addon
  *   (episodios, reparto) al abrirse.
  */
+@OptIn(UnstableApi::class)
 @Composable
 fun DetailScreen(
     video: Video,

@@ -96,7 +96,8 @@ object Doh {
             anyAnswer = true
             ttl = minOf(ttl, recordTtl(json))
             for (address in answers) {
-                found.putIfAbsent(address.hostAddress ?: continue, address)
+                val key = address.hostAddress ?: continue
+                if (!found.containsKey(key)) found[key] = address
             }
         }
         if (!anyAnswer) return emptyList<InetAddress>() to 0L
@@ -179,7 +180,8 @@ object Doh {
             val record = answers.optJSONObject(i) ?: continue
             if (record.optInt("type", -1) != TYPE_A && record.optInt("type", -1) != TYPE_AAAA) continue
             val address = parseLiteral(record.optString("data", "")) ?: continue
-            result.putIfAbsent(address.hostAddress ?: continue, address)
+            val key = address.hostAddress ?: continue
+            if (!result.containsKey(key)) result[key] = address
         }
         return result.values.toList()
     }

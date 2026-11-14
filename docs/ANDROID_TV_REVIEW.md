@@ -35,6 +35,7 @@ La revisión encontró diferencias importantes entre esa intención y la impleme
 
 - El servidor de vinculación se abre al estar visible la actividad y se cierra en `onStop`; se enlaza a la dirección local del TV, con estado de error explícito si no hay red o no puede abrir el puerto.
 - Ajustes muestra la versión compilada, no `1.0.0` fijado a mano.
+- Lint detectó `putIfAbsent` (API 24) en DoH pese a `minSdk 22`; se sustituyó por una inserción compatible. El uso de la API marcada de Media3 UI queda declarado con `OptIn`, no oculto mediante un baseline.
 - Cronet configura el directorio necesario para su caché de disco. Se eliminó la copia de cookies de clearance entre dominios distintos.
 - StreamHub acepta también la forma simple documentada con un array JSON en la raíz.
 - CI comprueba el contrato TV, ejecuta tests, compila debug y ejecuta lint. El recuento de tests ahora falla si no se ejecuta ninguno. Release también pasa tests y lint antes de empaquetar.

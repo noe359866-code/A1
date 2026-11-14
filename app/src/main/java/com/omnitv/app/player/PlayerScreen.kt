@@ -1,3 +1,5 @@
+import androidx.annotation.OptIn
+import androidx.media3.common.util.UnstableApi
 package com.omnitv.app.player
 
 import androidx.activity.compose.BackHandler
@@ -90,6 +92,8 @@ import kotlin.math.abs
 
 private enum class MenuKind { NONE, SERVER, QUALITY, AUDIO, SUBTITLES, ASPECT, SPEED, SLEEP }
 
+// Media3 UI está fijado a 1.4.1; asumimos explícitamente su API marcada.
+@OptIn(UnstableApi::class)
 private enum class AspectMode(val label: String, val ratio: Float, val resizeMode: Int) {
     FIT("Ajustar", 0f, AspectRatioFrameLayout.RESIZE_MODE_FIT),
     FILL("Llenar", 0f, AspectRatioFrameLayout.RESIZE_MODE_FILL),
@@ -114,6 +118,7 @@ private fun nowClock(): String =
  *   automática, calidad/audio/subtítulos/velocidad, zoom y temporizador.
  * - Controles de vidrio para mando de TV y atajos ◀▶ (±10 s).
  */
+@OptIn(UnstableApi::class)
 @Composable
 fun PlayerScreen(
     video: Video,
