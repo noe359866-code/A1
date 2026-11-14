@@ -62,6 +62,9 @@ jobs:
       - name: Puente Cloudstream (runtime externo)
         run: node --test tools/cloudstream-bridge/bridge.test.mjs
 
+      - name: Puente FFmpeg (remux/transcode externo)
+        run: node --test tools/ffmpeg-bridge/bridge.test.mjs
+
       - name: Tests unitarios
         run: |
           set -o pipefail

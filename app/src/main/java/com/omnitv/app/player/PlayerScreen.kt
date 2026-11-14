@@ -26,6 +26,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
@@ -64,6 +65,8 @@ import androidx.compose.material.Text
 import coil.compose.AsyncImage
 import com.omnitv.app.R
 import com.omnitv.app.data.CatalogRepository
+import com.omnitv.app.data.MediaBridge
+import com.omnitv.app.data.PlaybackDiagnostics
 import com.omnitv.app.data.ProfileStore
 import com.omnitv.app.data.SettingsStore
 import com.omnitv.app.data.SkipKind
@@ -71,6 +74,7 @@ import com.omnitv.app.data.SkipSegment
 import com.omnitv.app.data.SkipSegmentService
 import com.omnitv.app.data.SkipTimeline
 import com.omnitv.app.data.StreamFormat
+import com.omnitv.app.data.TrackFacts
 import com.omnitv.app.data.Video
 import com.omnitv.app.ui.components.LoadingSpinner
 import com.omnitv.app.ui.components.MetaLine
@@ -83,7 +87,9 @@ import com.omnitv.app.ui.theme.LiveAccent
 import com.omnitv.app.ui.theme.TextMuted
 import com.omnitv.app.ui.theme.TextPrimary
 import com.omnitv.app.ui.theme.TextSecondary
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -108,6 +114,21 @@ private enum class AspectMode(val label: String, val ratio: Float, val resizeMod
 
 private data class TrackChoice(val group: TrackGroup, val index: Int, val format: Format)
 
+/** MIME/codecs que Media3 declaró para la pista seleccionada (o la primera). */
+private fun trackFacts(tracks: Tracks, type: Int): TrackFacts? {
+    var fallback: TrackFacts? = null
+    for (group in tracks.groups) {
+        if (group.type != type) continue
+        for (i in 0 until group.length) {
+            val format = group.getTrackFormat(i)
+            val facts = TrackFacts(format.sampleMimeType, format.codecs, group.isTrackSupported(i))
+            if (group.isTrackSelected(i)) return facts
+            if (fallback == null) fallback = facts
+        }
+    }
+    return fallback
+}
+
 private fun nowClock(): String =
     SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date())
 
@@ -129,7 +150,7 @@ fun PlayerScreen(
     onPlayNext: (Video) -> Unit = {}
 ) {
     val context = LocalContext.current
-    val sources = remember(video.id) { video.playbackSources }
+    var sources by remember(video.id) { mutableStateOf(video.playbackSources) }
     val nextVideo = remember(video.id) { CatalogRepository.nextEpisode(video.id) }
     if (sources.isEmpty()) {
         BackHandler(onBack = onBack)
@@ -175,6 +196,10 @@ fun PlayerScreen(
     var clock by remember { mutableStateOf(nowClock()) }
 
     var serverIndex by remember { mutableStateOf(0) }
+    var bridgeBusy by remember { mutableStateOf(false) }
+    var bridgeMessage by remember { mutableStateOf<String?>(null) }
+    val bridgeAttempted = remember(video.id) { mutableSetOf<String>() }
+    val scope = rememberCoroutineScope()
     var menu by remember { mutableStateOf(MenuKind.NONE) }
     var showInfo by remember { mutableStateOf(false) }
     var toast by remember { mutableStateOf<String?>(null) }
@@ -245,6 +270,7 @@ fun PlayerScreen(
             player.prepare()
             player.playWhenReady = true
             hasError = null
+            bridgeMessage = null
             toast = "Reproduciendo desde ${sources[index].label}"
         }
     }
@@ -333,6 +359,13 @@ fun PlayerScreen(
             }
 
             override fun onPlayerError(error: PlaybackException) {
+                val source = sources[serverIndex]
+                val report = PlaybackDiagnostics.record(
+                    errorCode = error.errorCodeName,
+                    sourceLabel = source.label,
+                    video = trackFacts(tracks, C.TRACK_TYPE_VIDEO),
+                    audio = trackFacts(tracks, C.TRACK_TYPE_AUDIO)
+                )
                 failedServers.add(serverIndex)
                 val next = (serverIndex + 1 until sources.size).firstOrNull { it !in failedServers }
                     ?: sources.indices.firstOrNull { it !in failedServers }
@@ -342,6 +375,32 @@ fun PlayerScreen(
                 } else {
                     hasError = error.errorCodeName
                     controlsVisible = true
+                    // Solo se pide conversión si Media3 apunta a códec/contenedor,
+                    // hay puente configurado y esta fuente no se intentó ya.
+                    if (report.bridgeRecommended && SettingsStore.ffmpegBridge.isNotBlank() &&
+                        !source.label.endsWith(" · puente") && bridgeAttempted.add(source.url)
+                    ) {
+                        bridgeBusy = true
+                        bridgeMessage = "Preparando una versión compatible en el puente…"
+                        scope.launch {
+                            try {
+                                val repaired = MediaBridge.repair(source, report.errorCode)
+                                if (repaired != null && sources.none { it.url == repaired.url }) {
+                                    bridgeAttempted.add(repaired.url)
+                                    sources = sources + repaired
+                                    switchServer(sources.lastIndex)
+                                } else {
+                                    bridgeMessage = MediaBridge.status.value
+                                }
+                            } catch (cancelled: CancellationException) {
+                                throw cancelled
+                            } catch (_: Exception) {
+                                bridgeMessage = "El puente multimedia no pudo completar la conversión"
+                            } finally {
+                                bridgeBusy = false
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -760,16 +819,30 @@ fun PlayerScreen(
                     Text("No se pudo reproducir el vídeo", style = fontSize20(), color = Color.White)
                     Spacer(Modifier.height(8.dp))
                     Text(hasError ?: "", style = fontSize13(), color = TextSecondary)
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        PlaybackDiagnostics.current()?.advice ?: "Revisa el diagnóstico en Ajustes",
+                        style = fontSize13(), color = TextSecondary
+                    )
+                    if (bridgeBusy || bridgeMessage != null) {
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            if (bridgeBusy) "Convirtiendo en el puente externo…" else bridgeMessage.orEmpty(),
+                            style = fontSize13(), color = LiveAccent
+                        )
+                    }
                     Spacer(Modifier.height(22.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
                         PillButton(
-                            text = "Reintentar",
+                            text = if (bridgeBusy) "Convirtiendo…" else "Reintentar",
                             iconRes = R.drawable.ic_server,
                             primary = true,
                             modifier = Modifier.focusRequester(retryFocus),
                             onClick = {
-                                failedServers.clear()
-                                switchServer(serverIndex)
+                                if (!bridgeBusy) {
+                                    failedServers.clear()
+                                    switchServer(serverIndex)
+                                }
                             }
                         )
                         PillButton(

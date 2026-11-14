@@ -16,6 +16,7 @@ internal interface PanelStore {
     fun setNuvioPlugins(urls: List<String>)
     fun setNuvioBridge(url: String)
     fun setCloudstreamBridge(url: String)
+    fun setFfmpegBridge(url: String)
     fun setApiKeys(keys: Map<String, String>)
 }
 
@@ -96,7 +97,7 @@ internal class PairingRouter(
                 val data = store.data()
                 PanelResponse(
                     200,
-                    """{"account":${jsonString(data.account)},"addons":${data.addons.size},"streams":${data.streamAddons.size},"plugins":${data.nuvioPlugins.size},"cloudstream":${if (data.cloudstreamBridge.isBlank()) 0 else 1},"apis":${data.apiKeys.size}}""",
+                    """{"account":${jsonString(data.account)},"addons":${data.addons.size},"streams":${data.streamAddons.size},"plugins":${data.nuvioPlugins.size},"cloudstream":${if (data.cloudstreamBridge.isBlank()) 0 else 1},"ffmpeg":${if (data.ffmpegBridge.isBlank()) 0 else 1},"apis":${data.apiKeys.size}}""",
                     jsonType
                 )
             }
@@ -136,6 +137,11 @@ internal class PairingRouter(
         form["cloudstreamBridge"]?.let { text ->
             val value = text.trim()
             if (value.isEmpty() || CloudstreamBridge.normalize(value) != null) store.setCloudstreamBridge(value)
+            else rejectedUrls++
+        }
+        form["ffmpegBridge"]?.let { text ->
+            val value = text.trim()
+            if (value.isEmpty() || MediaBridge.normalize(value) != null) store.setFfmpegBridge(value)
             else rejectedUrls++
         }
         form["apis"]?.let { text ->

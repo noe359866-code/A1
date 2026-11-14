@@ -10,7 +10,8 @@ internal class PanelData(
     val nuvioBridge: String,
     val cloudstreamBridge: String,
     val apiKeys: Map<String, String>,
-    val secretsEncrypted: Boolean
+    val secretsEncrypted: Boolean,
+    val ffmpegBridge: String = ""
 )
 
 /**
@@ -145,6 +146,16 @@ internal object PairingPortal {
       </label>
       <p class="hint">Omni TV no carga .cs3/DEX. El servicio de confianza ejecuta sus extensiones Cloudstream y responde a POST /resolve.
         Instala/configura las extensiones en ese servicio, no en el televisor.</p>
+    </div>
+    <div class="card">
+      <h2>🎞️ Compatibilidad multimedia · FFmpeg externo</h2>
+      <label>URL del puente multimedia (vacío = desactivado)
+        <input name="ffmpegBridge" type="url" placeholder="http://192.168.1.20:8790" value="${esc(data.ffmpegBridge)}">
+      </label>
+      <p class="hint">Opcional. Omni TV no incluye FFmpeg en el APK. Si Media3 falla por códec/contenedor,
+        este servicio puede remuxear a HLS y convertir el audio a AAC en otro equipo. Arranca
+        <code>tools/ffmpeg-bridge/bridge.mjs</code> con <code>--allow-origin</code> de tus CDN y, si escucha en la LAN,
+        con <code>--token</code>. Guarda el token abajo como <code>FFMPEG_BRIDGE=tu_token</code>.</p>
     </div>
     <div class="card">
       <h2>🔑 Añadir APIs</h2>

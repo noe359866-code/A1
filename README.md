@@ -80,6 +80,7 @@ Basado en Media3 ExoPlayer con investigación de Xuper TV:
 - **Adaptativo:** HLS/DASH ABR + selector manual (Auto / 1080p / 720p...)
 - **Pistas:** Audio, subtítulos, calidad vía `DefaultTrackSelector`
 - **Saltar intro/resumen/créditos:** tiempos de SkipDB, TheIntroDB e IntroDB; lectura anónima activa para todos, sin clave en la app ([detalle](docs/SKIP_SEGMENTS.md))
+- **Compatibilidad multimedia:** diagnóstico de códecs en Ajustes y puente FFmpeg externo opcional (remux HLS / audio AAC), sin FFmpeg dentro del APK ([detalle](docs/FFMPEG_BRIDGE.md))
 - **Aspecto:** Ajustar / Llenar / Zoom / 16:9 / 4:3 / 21:9
 - **Transporte:** ⏪10s / 10s⏩, barra con buffer, D-pad directo
 - **Autoplay / Auto-next:** Cuenta atrás 10s con miniatura, botón Siguiente
@@ -121,7 +122,7 @@ Basado en Media3 ExoPlayer con investigación de Xuper TV:
 - **Política de red:** solo `https://` hacia internet; `http://` únicamente en LAN privada — validado por `NetPolicy`
 - **Sin fallback demo:** si no hay enlaces, mensaje claro "Sin fuentes disponibles · configura un addon"
 
-Puente Cloudstream: `tools/cloudstream-bridge/` (runtime externo). Puente de streams simples: `tools/omni-stream-bridge/` (Python + Kotlin). Puente de plugins Nuvio: `tools/nuvio-bridge/` (Node 20+, ejecución JS externa). Guía completa: [Stremio y Nuvio](docs/NUVIO_INVESTIGACION.md). Los repositorios Nuvio sin puente no ejecutan scrapers.
+Puente Cloudstream: `tools/cloudstream-bridge/` (runtime externo). Puente de streams simples: `tools/omni-stream-bridge/` (Python + Kotlin). Puente de plugins Nuvio: `tools/nuvio-bridge/` (Node 20+, ejecución JS externa). Puente multimedia: `tools/ffmpeg-bridge/` (Node 20+ con FFmpeg/ffprobe externos, [detalle](docs/FFMPEG_BRIDGE.md)). Guía completa: [Stremio y Nuvio](docs/NUVIO_INVESTIGACION.md). Los repositorios Nuvio sin puente no ejecutan scrapers.
 
 ---
 
@@ -197,7 +198,7 @@ A1/
 │       └── res/drawable/ + mipmap/ + values/ + xml/
 ├── gradle/libs.versions.toml
 ├── docs/  STREAM-ADDON-PROTOCOL.md  XUPER-TV-RESEARCH.md
-└── tools/omni-stream-bridge/
+└── tools/  omni-stream-bridge/  nuvio-bridge/  cloudstream-bridge/  ffmpeg-bridge/
 ```
 
 ---

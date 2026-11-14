@@ -108,6 +108,14 @@ object SettingsStore {
     var cloudstreamBridge by mutableStateOf("")
         private set
 
+    /** Puente multimedia externo (FFmpeg/ffprobe); vacío = desactivado. */
+    var ffmpegBridge by mutableStateOf("")
+        private set
+
+    /** Último diagnóstico de reproducción persistido como JSON; vacío = ninguno. */
+    var lastPlaybackDiagnostic by mutableStateOf("")
+        private set
+
     /** APIs añadidas desde el panel (nombre → clave). */
     var apiKeys by mutableStateOf<Map<String, String>>(emptyMap())
         private set
@@ -157,6 +165,8 @@ object SettingsStore {
         nuvioPlugins = parseStringList(p.getString("nuvioPlugins", "[]")).filter { NetPolicy.isAllowed(it) }
         nuvioBridge = (p.getString("nuvioBridge", "") ?: "").takeIf { NetPolicy.isAllowed(it) }.orEmpty()
         cloudstreamBridge = CloudstreamBridge.normalize(p.getString("cloudstreamBridge", "") ?: "").orEmpty()
+        ffmpegBridge = MediaBridge.normalize(p.getString("ffmpegBridge", "") ?: "").orEmpty()
+        lastPlaybackDiagnostic = p.getString("lastPlaybackDiagnostic", "") ?: ""
         loadApiKeys(p)
     }
 
@@ -278,6 +288,20 @@ object SettingsStore {
         update { putString("cloudstreamBridge", cleaned) }
         cloudstreamBridge = cleaned
         revision++
+    }
+
+    fun saveFfmpegBridge(url: String) {
+        val cleaned = MediaBridge.normalize(url).orEmpty()
+        update { putString("ffmpegBridge", cleaned) }
+        ffmpegBridge = cleaned
+        revision++
+    }
+
+    /** Diagnóstico ligero del último fallo; no guarda URLs ni cabeceras del stream. */
+    fun saveLastPlaybackDiagnostic(json: String) {
+        val cleaned = json.take(4_000)
+        update { putString("lastPlaybackDiagnostic", cleaned) }
+        lastPlaybackDiagnostic = cleaned
     }
 
     /** Guarda las APIs añadidas desde el panel (nombre → clave). */

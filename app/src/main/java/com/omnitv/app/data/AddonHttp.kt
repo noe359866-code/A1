@@ -23,7 +23,12 @@ internal object AddonHttp {
         return parseJson(fallback)
     }
 
-    fun postJson(url: String, body: String): Any? = request("POST", url, body).value
+    fun postJson(
+        url: String,
+        body: String,
+        headers: Map<String, String> = emptyMap(),
+        readTimeoutMs: Int = 10_000
+    ): Any? = request("POST", url, body, headers, readTimeoutMs).value
 
     /** GET con estado HTTP: quien llama puede distinguir 429 de «sin datos». */
     fun getJsonWithStatus(url: String, headers: Map<String, String> = emptyMap()): Result =
@@ -35,7 +40,8 @@ internal object AddonHttp {
         method: String,
         initialUrl: String,
         body: String?,
-        headers: Map<String, String> = emptyMap()
+        headers: Map<String, String> = emptyMap(),
+        readTimeoutMs: Int = 10_000
     ): Result {
         if (!NetPolicy.isAllowed(initialUrl)) return Result(null)
         var current = initialUrl
@@ -44,13 +50,18 @@ internal object AddonHttp {
                 (URL(current).openConnection() as HttpURLConnection).apply {
                     requestMethod = method
                     connectTimeout = 6_000
-                    readTimeout = 10_000
+                    readTimeout = readTimeoutMs.coerceIn(1_000, 120_000)
                     instanceFollowRedirects = false
                     setRequestProperty("User-Agent", "OmniTV/1.2 (Android TV)")
                     setRequestProperty("Accept", "application/json")
-                    val sameOrigin = runCatching { URI(current).host.equals(URI(initialUrl).host, true) }.getOrDefault(false)
+                    val sameOrigin = runCatching {
+                        val a = URI(current); val b = URI(initialUrl)
+                        a.scheme.equals(b.scheme, true) && a.host.equals(b.host, true) &&
+                            (if (a.port >= 0) a.port else if (a.scheme.equals("https", true)) 443 else 80) ==
+                            (if (b.port >= 0) b.port else if (b.scheme.equals("https", true)) 443 else 80)
+                    }.getOrDefault(false)
                     headers.forEach { (name, value) ->
-                        val credential = name.equals("Authorization", true) || name.equals("X-API-Key", true)
+                        val credential = name.equals("Authorization", true) || name.equals("X-API-Key", true) || name.equals("X-Bridge-Token", true)
                         // Las credenciales no viajan a otro host tras una redirección.
                         if (value.isNotBlank() && (!credential || sameOrigin)) setRequestProperty(name, value)
                     }

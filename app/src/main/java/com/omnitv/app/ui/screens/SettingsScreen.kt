@@ -43,6 +43,8 @@ import com.omnitv.app.data.AddonRegistry
 import com.omnitv.app.data.NuvioPluginManager
 import com.omnitv.app.data.NuvioScraperResolver
 import com.omnitv.app.data.CloudstreamBridge
+import com.omnitv.app.data.MediaBridge
+import com.omnitv.app.data.PlaybackDiagnostics
 import com.omnitv.app.data.SkipKind
 import com.omnitv.app.data.SkipSegmentParser
 import com.omnitv.app.data.SkipSegmentService
@@ -84,6 +86,7 @@ fun SettingsScreen(onSwitchProfile: () -> Unit) {
     val scope = rememberCoroutineScope()
     var bridgeStatus by remember { mutableStateOf("Comprobando puente…") }
     var cloudstreamStatus by remember { mutableStateOf("Comprobando Cloudstream…") }
+    var mediaStatus by remember { mutableStateOf("Comprobando puente multimedia…") }
     var refreshing by remember { mutableStateOf(false) }
     suspend fun checkIntegrations() {
         refreshing = true
@@ -92,6 +95,7 @@ fun SettingsScreen(onSwitchProfile: () -> Unit) {
             NuvioPluginManager.refreshAll(force = true)
             bridgeStatus = NuvioScraperResolver.checkBridge()
             cloudstreamStatus = CloudstreamBridge.check()
+            mediaStatus = MediaBridge.check()
         } finally { refreshing = false }
     }
     LaunchedEffect(SettingsStore.revision) { checkIntegrations() }
@@ -249,6 +253,29 @@ fun SettingsScreen(onSwitchProfile: () -> Unit) {
 
         Spacer(Modifier.height(20.dp))
 
+        /* ---------------- Compatibilidad multimedia ---------------- */
+        SettingsCard(iconRes = R.drawable.ic_play, title = "Compatibilidad multimedia") {
+            Column(Modifier.fillMaxWidth().padding(horizontal = 22.dp, vertical = 12.dp)) {
+                StatusLine("Puente FFmpeg externo", mediaStatus)
+                StatusLine("URL", SettingsStore.ffmpegBridge.ifBlank { "Sin configurar · panel QR" })
+                StatusLine("Último error", PlaybackDiagnostics.summary())
+                PlaybackDiagnostics.current()?.let { report ->
+                    Spacer(Modifier.height(6.dp))
+                    Text("Fuente: ${report.sourceLabel}", style = AppType.metadata, color = TextSecondary)
+                    Text(report.advice, style = AppType.metadata, color = TextSecondary)
+                }
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    "El APK usa los decodificadores del dispositivo. FFmpeg/ffprobe solo se ejecutan en el puente opcional; " +
+                        "si Media3 falla por códec/contenedor, el TV puede pedir una versión HLS compatible. " +
+                        "Configura el puente y su token (FFMPEG_BRIDGE) desde el panel QR.",
+                    style = AppType.metadata, color = TextSecondary
+                )
+            }
+        }
+
+        Spacer(Modifier.height(20.dp))
+
         /* ---------------- Reproducción ---------------- */
         SettingsCard(iconRes = R.drawable.ic_play, title = "Reproducción") {
             SettingRow(
@@ -367,7 +394,7 @@ fun SettingsScreen(onSwitchProfile: () -> Unit) {
             )
             SettingRow(
                 title = "Motor de reproducción",
-                subtitle = "Reproductor integrado con soporte MP4, HLS, DASH y 4K",
+                subtitle = "Media3 ExoPlayer · MP4, HLS y DASH con los códecs del dispositivo; conversión externa opcional",
                 trailing = { ValueText("Media3 ExoPlayer") }
             )
             SettingRow(

@@ -129,7 +129,8 @@ object PairingServer {
             nuvioBridge = SettingsStore.nuvioBridge,
             cloudstreamBridge = SettingsStore.cloudstreamBridge,
             apiKeys = SettingsStore.apiKeys,
-            secretsEncrypted = SettingsStore.secretsEncrypted
+            secretsEncrypted = SettingsStore.secretsEncrypted,
+            ffmpegBridge = SettingsStore.ffmpegBridge
         )
 
         override fun setAccount(email: String) {
@@ -143,6 +144,7 @@ object PairingServer {
         override fun setNuvioPlugins(urls: List<String>) = SettingsStore.saveNuvioPlugins(urls)
         override fun setNuvioBridge(url: String) = SettingsStore.saveNuvioBridge(url)
         override fun setCloudstreamBridge(url: String) = SettingsStore.saveCloudstreamBridge(url)
+        override fun setFfmpegBridge(url: String) = SettingsStore.saveFfmpegBridge(url)
         override fun setApiKeys(keys: Map<String, String>) = SettingsStore.saveApiKeys(keys)
     }
 
