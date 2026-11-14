@@ -68,7 +68,7 @@ data class Video(
     val type: VideoType = VideoType.MOVIE,
     /** Episodios (series y anime). */
     val episodes: List<Episode> = emptyList(),
-    /** Contenido remoto (Cinemeta / Nuvio / addons) — requiere resolución de streams. */
+    /** Viene del catálogo real (Cinemeta/Nuvio) en lugar del demo local. */
     val isRemote: Boolean = false,
     /** Nombre del addon de origen ("Cinemeta" / "Nuvio"). */
     val source: String = "",

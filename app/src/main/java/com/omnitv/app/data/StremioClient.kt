@@ -9,19 +9,17 @@ import java.net.URL
 import java.net.URLEncoder
 
 /**
- * Cliente del protocolo de addons de Stremio (catalog / meta / stream),
- * ahora con parser tolerante de manifest (resources string|object, catalogs con extra, etc.)
- * y soporte completo de extras (search, genre, skip).
+ * Cliente mínimo del protocolo de addons de Stremio (catalog / meta),
+ * sin dependencias extra (HttpURLConnection + org.json).
  *
- * Addons base:
- * - Cinemeta  → https://v3-cinemeta.strem.io  (IMDb tt…)
- * - Nuvio     → https://catalog.nuvio.tv      (TMDB)
+ * Addons de catálogo conectados:
+ * - Cinemeta  → https://v3-cinemeta.strem.io  (catálogos IMDb, ids `tt…`)
+ * - Nuvio     → https://catalog.nuvio.tv      (catálogos TMDB)
  *
  * Endpoints:
  * - `GET {base}/manifest.json`
- * - `GET {base}/catalog/{type}/{catalogId}[/{extra}.json] → {metas:[…]}`
- * - `GET {base}/meta/{type}/{id}.json → {meta:{…, videos:[…]}}`
- * - `GET {base}/stream/{type}/{id}.json → {streams:[…]}`
+ * - `GET {base}/catalog/{type}/{catalogId}[/{extra=k&extra2=v}].json` → `{metas:[…]}`
+ * - `GET {base}/meta/{type}/{id}.json`                              → `{meta:{…, videos:[…]}}`
  */
 object StremioClient {
 
@@ -37,6 +35,10 @@ object StremioClient {
 
     /* ------------------------------- HTTP -------------------------------- */
 
+    /**
+     * Descarga [url] como JSON. Primero por el DNS normal; si el nombre no
+     * resuelve, reintenta con el DNS de Cloudflare ([Doh]).
+     */
     private fun httpJson(url: String): JSONObject? =
         httpJsonDirect(url) ?: Doh.retry(url)?.let { body ->
             runCatching { JSONObject(body) }.getOrNull()
@@ -58,19 +60,23 @@ object StremioClient {
 
     /* ------------------------------ Catálogo ----------------------------- */
 
-    /** Lee un catálogo. `extras` → `search=…&skip=20&genre=Action` */
+    /** Lee una lista de catálogo. `extras` se codifica como `search=…`, `genre=…&skip=20`. */
     suspend fun fetchCatalog(
         base: String,
         type: String,
         catalogId: String,
         extras: Map<String, String> = emptyMap()
     ): List<JSONObject> = withContext(Dispatchers.IO) {
-        val extraPath = if (extras.isEmpty()) "" else "/" + extras.entries.joinToString("&") { "${it.key}=${encode(it.value)}" }
+        val extraPath = if (extras.isEmpty()) {
+            ""
+        } else {
+            "/" + extras.entries.joinToString("&") { "${it.key}=${encode(it.value)}" }
+        }
         val json = httpJson("$base/catalog/$type/$catalogId$extraPath.json")
         json?.optJSONArray("metas").toObjectList()
     }
 
-    /** Búsqueda (extra: search). Respeta extraSupported del manifest si se provee. */
+    /** Búsqueda dentro de un catálogo (`extra: search`). */
     suspend fun fetchSearch(
         base: String,
         type: String,
@@ -78,37 +84,25 @@ object StremioClient {
         query: String
     ): List<JSONObject> = fetchCatalog(base, type, catalogId, mapOf("search" to query))
 
-    /** Ficha completa `meta/{type}/{id}` con reparto y episodios. */
+    /** Ficha completa (`meta/{type}/{id}`) con reparto y episodios (`videos`). */
     suspend fun fetchMeta(base: String, type: String, id: String): JSONObject? =
         withContext(Dispatchers.IO) {
             httpJson("$base/meta/$type/$id.json")?.optJSONObject("meta")
         }
 
-    /** Streams `stream/{type}/{id}` — usado por StreamHub para addons custom. */
-    suspend fun fetchStreams(base: String, type: String, id: String): List<JSONObject> = withContext(Dispatchers.IO) {
-        val json = httpJson("$base/stream/$type/${encode(id)}.json")
-            ?: httpJson("$base/stream/$type/${encode(id)}")
-            ?: return@withContext emptyList()
-        (json.optJSONArray("streams") ?: json.optJSONArray("results") ?: JSONArray()).toObjectList()
-    }
-
-    /** Manifest raw + parseado tolerante. */
+    /** Manifest de un addon arbitrario (URL completa o base del addon). */
     suspend fun fetchManifest(urlOrBase: String): JSONObject? = withContext(Dispatchers.IO) {
-        val url = if (urlOrBase.endsWith(".json")) urlOrBase else "${urlOrBase.trimEnd('/')}/manifest.json"
+        val url = if (urlOrBase.endsWith(".json")) {
+            urlOrBase
+        } else {
+            "${urlOrBase.trimEnd('/')}/manifest.json"
+        }
         httpJson(url)
     }
 
-    suspend fun fetchParsedManifest(urlOrBase: String): StremioManifest? = withContext(Dispatchers.IO) {
-        val json = fetchManifest(urlOrBase) ?: return@withContext null
-        runCatching { StremioManifestParser.parse(json) }.getOrNull()
-    }
-
-    /** Valida si el catálogo soporta los extras pedidos (search, genre, skip). */
-    fun catalogSupports(manifest: StremioManifest, catalog: StremioCatalog, extras: Set<String>): Boolean =
-        extras.all { catalog.supportsExtra(it) }
-
     /* ------------------------------ Mapeo -------------------------------- */
 
+    /** Convierte un `meta` de Stremio en el modelo [Video] de Omni TV. */
     fun parseVideo(meta: JSONObject, sourceName: String): Video {
         val id = meta.optString("id").ifEmpty { meta.optString("imdb_id") }
         val remoteType = meta.optString("type", "movie")
@@ -116,17 +110,22 @@ object StremioClient {
         val poster = meta.optString("poster", "")
         val background = meta.optString("background", "").ifEmpty { poster }
         val runtime = parseRuntime(meta.optString("runtime", ""))
-        val year = meta.optString("year", "").ifEmpty { meta.optString("releaseInfo", "") }.take(4).toIntOrNull() ?: 0
+        val year = meta.optString("year", "")
+            .ifEmpty { meta.optString("releaseInfo", "") }
+            .take(4).toIntOrNull() ?: 0
         val rating = meta.optString("imdbRating", "").toDoubleOrNull()
-            ?: meta.optJSONObject("app_extras")?.optJSONObject("ratings")?.optJSONObject("imdb")?.optString("rating")?.toDoubleOrNull()
-            ?: meta.optDouble("imdbRating", 0.0).takeIf { it > 0 } ?: 0.0
+            ?: meta.optJSONObject("app_extras")?.optJSONObject("ratings")
+                ?.optJSONObject("imdb")?.optString("rating")?.toDoubleOrNull()
+            ?: 0.0 // sin valoración en el addon: no se inventa (la interfaz la oculta)
 
+        // Series de animación → anime (para el chip de tipo)
         val type = when {
             remoteType == "movie" -> VideoType.MOVIE
             genres.any { it.contains("anim", ignoreCase = true) } -> VideoType.ANIME
             else -> VideoType.SERIES
         }
 
+        // Episodios (solo temporada ≥ 1; la 0 son extras)
         val episodes = meta.optJSONArray("videos").toObjectList()
             .filter { it.optInt("season", 1) >= 1 }
             .map { v ->
@@ -140,7 +139,7 @@ object StremioClient {
                     durationMinutes = runtime,
                     description = v.optString("description", v.optString("overview", "")),
                     thumbnailUrl = v.optString("thumbnail", "").ifEmpty { poster },
-                    videoUrl = "",
+                    videoUrl = "", // los addons de catálogo no traen streams
                     streamId = v.optString("id", ""),
                     aired = v.optString("released", v.optString("firstAired", "")).ifEmpty { null }
                 )
@@ -158,7 +157,7 @@ object StremioClient {
             certification = meta.optString("certification", meta.optString("ageRating", "")),
             quality = "HD",
             genres = genres,
-            videoUrl = "",
+            videoUrl = "", // sin stream: el reproductor usa la demo con aviso
             cast = meta.optJSONArray("cast").toStringList(),
             language = meta.optString("country", "").ifEmpty { "—" },
             type = type,
@@ -173,15 +172,20 @@ object StremioClient {
 
     private fun encode(value: String): String = URLEncoder.encode(value, "UTF-8")
 
-    private fun parseRuntime(runtime: String): Int = runtime.filter { it.isDigit() }.toIntOrNull() ?: 0
+    private fun parseRuntime(runtime: String): Int =
+        runtime.filter { it.isDigit() }.toIntOrNull() ?: 0
 
     private fun JSONArray?.toObjectList(): List<JSONObject> {
         if (this == null) return emptyList()
-        return buildList { for (i in 0 until length()) optJSONObject(i)?.let { add(it) } }
+        return buildList {
+            for (i in 0 until length()) optJSONObject(i)?.let { add(it) }
+        }
     }
 
     private fun JSONArray?.toStringList(): List<String> {
         if (this == null) return emptyList()
-        return buildList { for (i in 0 until length()) optString(i).takeIf { it.isNotBlank() }?.let { add(it) } }
+        return buildList {
+            for (i in 0 until length()) optString(i).takeIf { it.isNotBlank() }?.let { add(it) }
+        }
     }
 }

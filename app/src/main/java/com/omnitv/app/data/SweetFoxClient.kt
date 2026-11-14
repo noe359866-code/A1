@@ -110,7 +110,7 @@ object SweetFoxClient {
                 certification = "",
                 quality = "HD",
                 genres = emptyList(),
-                videoUrl = "", // resuelto por addons de streams configurados
+                videoUrl = "", // los catálogos no traen streams → demo en el reproductor
                 type = type,
                 isRemote = true,
                 source = "SweetFox",

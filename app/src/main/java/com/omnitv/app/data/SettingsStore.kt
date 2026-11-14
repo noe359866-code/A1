@@ -77,10 +77,6 @@ object SettingsStore {
     var streamAddons by mutableStateOf<List<String>>(emptyList())
         private set
 
-    /** Repositorios de plugins Nuvio (All-in-One, Yoru, etc.) — manifest con `scrapers[]`. */
-    var nuvioPlugins by mutableStateOf<List<String>>(emptyList())
-        private set
-
     /** APIs añadidas desde el panel (nombre → clave). */
     var apiKeys by mutableStateOf<Map<String, String>>(emptyMap())
         private set
@@ -123,7 +119,6 @@ object SettingsStore {
         // Las URLs guardadas por versiones anteriores también pasan la política de red
         customAddons = parseStringList(p.getString("customAddons", "[]")).filter { NetPolicy.isAllowed(it) }
         streamAddons = parseStringList(p.getString("streamAddons", "[]")).filter { NetPolicy.isAllowed(it) }
-        nuvioPlugins = parseStringList(p.getString("nuvioPlugins", "[]")).filter { NetPolicy.isAllowed(it) }
         loadApiKeys(p)
     }
 
@@ -216,15 +211,6 @@ object SettingsStore {
         val cleaned = urls.map { it.trim() }.filter { NetPolicy.isAllowed(it) }.distinct()
         update { putString("streamAddons", org.json.JSONArray(cleaned).toString()) }.also {
             streamAddons = cleaned
-            revision++
-        }
-    }
-
-    /** Guarda los repositorios de plugins Nuvio (manifest con `scrapers[]`). */
-    fun saveNuvioPlugins(urls: List<String>) {
-        val cleaned = urls.map { it.trim() }.filter { it.isNotBlank() && NetPolicy.isAllowed(it) }.distinct()
-        update { putString("nuvioPlugins", org.json.JSONArray(cleaned).toString()) }.also {
-            nuvioPlugins = cleaned
             revision++
         }
     }

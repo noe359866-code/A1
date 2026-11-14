@@ -13,7 +13,6 @@ internal interface PanelStore {
     fun setAccount(email: String)
     fun setAddons(urls: List<String>)
     fun setStreamAddons(urls: List<String>)
-    fun setNuvioPlugins(urls: List<String>)
     fun setApiKeys(keys: Map<String, String>)
 }
 
@@ -94,7 +93,7 @@ internal class PairingRouter(
                 val data = store.data()
                 PanelResponse(
                     200,
-                    """{"account":${jsonString(data.account)},"addons":${data.addons.size},"streams":${data.streamAddons.size},"plugins":${data.nuvioPlugins.size},"apis":${data.apiKeys.size}}""",
+                    """{"account":${jsonString(data.account)},"addons":${data.addons.size},"streams":${data.streamAddons.size},"apis":${data.apiKeys.size}}""",
                     jsonType
                 )
             }
@@ -119,11 +118,6 @@ internal class PairingRouter(
             store.setStreamAddons(accepted)
             rejectedUrls += rejected.size
         }
-        form["nuvioPlugins"]?.let { text ->
-            val (accepted, rejected) = splitUrls(text)
-            store.setNuvioPlugins(accepted)
-            rejectedUrls += rejected.size
-        }
         form["apis"]?.let { text ->
             val keys = text.lines()
                 .map { it.trim() }
@@ -138,7 +132,7 @@ internal class PairingRouter(
         val data = store.data()
         onEvent(
             "✅ Configuración guardada desde el panel web (addons: ${data.addons.size}, " +
-                "streams: ${data.streamAddons.size}, plugins: ${data.nuvioPlugins.size}, APIs: ${data.apiKeys.size})"
+                "streams: ${data.streamAddons.size}, APIs: ${data.apiKeys.size})"
         )
         val message = buildString {
             append("✅ Guardado. La cuenta, los addons y las APIs ya están en el televisor.")
