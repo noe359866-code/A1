@@ -1,7 +1,6 @@
 package com.omnitv.app.plugins
 
 import com.omnitv.app.data.Video
-import com.omnitv.app.plugins.extractors.*
 
 /**
  * Registro de providers locales (scraping) + bridge a Stremio/Nuvio.
