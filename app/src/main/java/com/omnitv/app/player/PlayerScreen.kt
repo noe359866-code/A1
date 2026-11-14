@@ -591,15 +591,17 @@ fun PlayerScreen(
             )
         }
 
-        // Cargando…
+        // Cargando — glass centrado premium
         if (isBuffering && hasError == null) {
-            Column(
-                Modifier.align(Alignment.Center),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                LoadingSpinner()
-                Spacer(Modifier.height(14.dp))
-                Text("Cargando…", style = fontSize15(), color = TextSecondary)
+            GlassPanel(modifier = Modifier.align(Alignment.Center)) {
+                Row(Modifier.padding(horizontal = 22.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+                    LoadingSpinner(size = 22.dp)
+                    Spacer(Modifier.width(12.dp))
+                    Column {
+                        Text("Cargando", style = AppType.bodyStrong.copy(color = Color.White, fontSize = 14.sp))
+                        Text("Preparando la mejor calidad…", style = AppType.caption.copy(color = Color.White.copy(alpha = 0.62f)))
+                    }
+                }
             }
         }
 
@@ -615,48 +617,37 @@ fun PlayerScreen(
             InfoChip(text = toast ?: "")
         }
 
-        // Error de reproducción
+        // Error premium — icon + copy + acciones
         if (hasError != null) {
-            GlassPanel(
-                modifier = Modifier
-                    .align(Alignment.Center)
-                    .width(520.dp)
-            ) {
-                Column(
-                    Modifier.padding(28.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Text("No se pudo reproducir el vídeo", style = fontSize20(), color = Color.White)
-                    Spacer(Modifier.height(8.dp))
-                    Text(hasError ?: "", style = fontSize13(), color = TextSecondary)
-                    Spacer(Modifier.height(22.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                        PillButton(
-                            text = "Reintentar",
-                            iconRes = R.drawable.ic_server,
-                            primary = true,
-                            onClick = {
-                                hasError = null
-                                player.setMediaItem(
-                                    ExoMediaItem.Builder().setUri(sources[serverIndex].url).build(),
-                                    positionMs
-                                )
-                                player.prepare()
-                                player.playWhenReady = true
-                            }
-                        )
-                        PillButton(
-                            text = "Volver",
-                            iconRes = R.drawable.ic_back,
-                            primary = false,
-                            onClick = onBack
-                        )
+            GlassPanel(modifier = Modifier.align(Alignment.Center).width(560.dp)) {
+                Column(Modifier.padding(28.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                    Box(Modifier.size(56.dp).clip(androidx.compose.foundation.shape.CircleShape).background(Color.White.copy(alpha = 0.08f)).border(1.dp, Color.White.copy(alpha = 0.08f), androidx.compose.foundation.shape.CircleShape), contentAlignment = Alignment.Center) {
+                        Text("!", style = AppType.display.copy(color = Color.White, fontSize = 28.sp))
+                    }
+                    Spacer(Modifier.height(14.dp))
+                    Text("No se pudo reproducir", style = AppType.sectionTitle.copy(color = Color.White), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                    Spacer(Modifier.height(6.dp))
+                    Text(hasError ?: "Intenta con otro servidor o vuelve más tarde", style = AppType.body.copy(color = Color.White.copy(alpha = 0.66f)), textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                    Spacer(Modifier.height(20.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        PillButton(text = "Reintentar", iconRes = R.drawable.ic_server, primary = true, onClick = {
+                            hasError = null
+                            player.setMediaItem(ExoMediaItem.Builder().setUri(sources[serverIndex].url).build(), positionMs)
+                            player.prepare(); player.playWhenReady = true
+                        })
+                        PillButton(text = "Volver", iconRes = R.drawable.ic_back, primary = false, onClick = onBack)
                     }
                 }
             }
         }
 
-        // ---------------- Superposición de controles ----------------
+        // Viñetas laterales sutiles cuando hay controles — profundidad cinematográfica
+        if (controlsVisible && hasError == null) {
+            Box(Modifier.fillMaxSize().background(Brush.horizontalGradient(0f to Color.Black.copy(alpha = 0.32f), 0.22f to Color.Transparent)))
+            Box(Modifier.fillMaxSize().background(Brush.horizontalGradient(0f to Color.Transparent, 0.78f to Color.Black.copy(alpha = 0.28f))))
+        }
+
+        // ---------------- Superposición de controles — premium ----------------
         AnimatedVisibility(
             visible = controlsVisible && hasError == null,
             enter = fadeIn(),
@@ -664,60 +655,45 @@ fun PlayerScreen(
             modifier = Modifier.fillMaxSize()
         ) {
             Column(Modifier.fillMaxSize()) {
-                // Cabecera: volver, título, franja EPG y reloj
-                Row(
-                    Modifier
-                        .fillMaxWidth()
-                        .background(
-                            Brush.verticalGradient(
-                                0f to Color.Black.copy(alpha = 0.78f),
-                                1f to Color.Transparent
-                            )
-                        )
-                        .padding(horizontal = 44.dp, vertical = 26.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                // Cabecera con scrim + glass
+                Box(
+                    Modifier.fillMaxWidth().background(PlayerScrimTop).padding(horizontal = 44.dp, vertical = 22.dp)
                 ) {
-                    TransportButton(
-                        iconRes = R.drawable.ic_back,
-                        contentDescription = "Volver",
-                        size = 48.dp,
-                        onClick = onBack
-                    )
-                    Spacer(Modifier.width(18.dp))
-                    Column {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(
-                                video.title,
-                                style = fontSize22(),
-                                color = Color.White,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                            Spacer(Modifier.width(12.dp))
-                            InfoChip(video.quality)
-                            Spacer(Modifier.width(8.dp))
-                            InfoChip(if (video.streamFormat == StreamFormat.HLS) "HLS" else "MP4")
-                            if (speed != 1f) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        TransportButton(iconRes = R.drawable.ic_back, contentDescription = "Volver", size = 48.dp, onClick = onBack)
+                        Spacer(Modifier.width(16.dp))
+                        Column(Modifier.weight(1f)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(video.title, style = AppType.bodyStrong.copy(color = Color.White, fontSize = 20.sp), maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+                                Spacer(Modifier.width(10.dp))
+                                InfoChip(video.quality.takeIf { it.isNotBlank() } ?: "HD")
+                                Spacer(Modifier.width(6.dp))
+                                InfoChip(if (video.streamFormat == StreamFormat.HLS) "HLS" else "MP4")
+                                if (speed != 1f) { Spacer(Modifier.width(6.dp)); InfoChip(SettingsStore.speedLabel(speed)) }
+                                if (sleepDeadline != null) { Spacer(Modifier.width(6.dp)); EpgChip(sleepLabel, Accent) }
+                            }
+                            Spacer(Modifier.height(7.dp))
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                EpgChip("AHORA", LiveAccent)
                                 Spacer(Modifier.width(8.dp))
-                                InfoChip(SettingsStore.speedLabel(speed))
+                                Text(video.title, style = AppType.caption.copy(color = Color.White.copy(alpha = 0.92f)), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                nextVideo?.let {
+                                    Spacer(Modifier.width(14.dp))
+                                    Box(Modifier.size(3.dp).clip(androidx.compose.foundation.shape.CircleShape).background(Color.White.copy(alpha = 0.35f)))
+                                    Spacer(Modifier.width(14.dp))
+                                    EpgChip("A CONTINUACIÓN", Color.White.copy(alpha = 0.42f))
+                                    Spacer(Modifier.width(8.dp))
+                                    Text(it.title, style = AppType.caption.copy(color = Color.White.copy(alpha = 0.62f)), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                }
                             }
                         }
-                        Spacer(Modifier.height(8.dp))
-                        // Franja EPG estilo Xuper TV: qué se emite ahora y después
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            EpgChip("AHORA", LiveAccent)
-                            Spacer(Modifier.width(8.dp))
-                            Text(video.title, style = fontSize13(), color = TextPrimary)
-                            nextVideo?.let {
-                                Spacer(Modifier.width(16.dp))
-                                EpgChip("A CONTINUACIÓN", TextMuted)
-                                Spacer(Modifier.width(8.dp))
-                                Text(it.title, style = fontSize13(), color = TextSecondary)
-                            }
+                        Spacer(Modifier.width(20.dp))
+                        Column(horizontalAlignment = Alignment.End) {
+                            Text(clock, style = AppType.bodyStrong.copy(fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace, fontSize = 18.sp, color = Color.White))
+                            Spacer(Modifier.height(2.dp))
+                            Text("EN VIVO", style = AppType.overline.copy(color = LiveAccent, fontSize = 10.sp), modifier = Modifier.background(LiveAccent.copy(alpha = 0.14f), AppRadius.xs).padding(horizontal = 6.dp, vertical = 2.dp))
                         }
                     }
-                    Spacer(Modifier.weight(1f))
-                    Text(clock, style = fontSize20(), color = Color.White)
                 }
 
                 Spacer(Modifier.weight(1f))
@@ -764,63 +740,41 @@ fun PlayerScreen(
                     }
                 }
 
-                // Panel «A continuación» (auto-next)
+                // Panel «A continuación» — countdown con anillo
                 showNextPanel?.let { next ->
-                    Row(
-                        Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 44.dp, vertical = 10.dp),
-                        horizontalArrangement = Arrangement.End
-                    ) {
-                        GlassPanel(Modifier.width(540.dp)) {
-                            Column(Modifier.padding(20.dp)) {
+                    Row(Modifier.fillMaxWidth().padding(horizontal = 44.dp, vertical = 10.dp), horizontalArrangement = Arrangement.End) {
+                        GlassPanel(Modifier.width(560.dp)) {
+                            Column(Modifier.padding(18.dp)) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
-                                    AsyncImage(
-                                        model = next.cardUrl,
-                                        contentDescription = null,
-                                        contentScale = ContentScale.Crop,
-                                        modifier = Modifier
-                                            .width(132.dp)
-                                            .height(74.dp)
-                                            .clip(AppRadius.sm)
-                                    )
+                                    Box {
+                                        AsyncImage(next.cardUrl, null, contentScale = ContentScale.Crop, modifier = Modifier.width(148.dp).height(84.dp).clip(AppRadius.md).background(Color.Black))
+                                        if (SettingsStore.autoNext) {
+                                            // anillo countdown sutil
+                                            androidx.compose.foundation.Canvas(Modifier.matchParentSize().padding(6.dp)) {
+                                                drawArc(Color.White.copy(alpha = 0.22f), -90f, 360f, false, style = androidx.compose.ui.graphics.drawscope.Stroke(2.dp.toPx()))
+                                                val sweep = (nextCountdown / 10f) * 360f
+                                                drawArc(Accent, -90f, sweep, false, style = androidx.compose.ui.graphics.drawscope.Stroke(3.dp.toPx(), cap = StrokeCap.Round))
+                                            }
+                                        }
+                                    }
                                     Spacer(Modifier.width(16.dp))
-                                    Column {
+                                    Column(Modifier.weight(1f)) {
                                         EpgChip("A CONTINUACIÓN", LiveAccent)
                                         Spacer(Modifier.height(6.dp))
-                                        Text(
-                                            next.title,
-                                            style = fontSize17(),
-                                            color = Color.White,
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis
-                                        )
+                                        Text(next.title, style = AppType.bodyStrong.copy(color = Color.White, fontSize = 16.sp), maxLines = 2, overflow = TextOverflow.Ellipsis)
                                         Spacer(Modifier.height(4.dp))
-                                        Text(
-                                            if (SettingsStore.autoNext) "Empieza en $nextCountdown s"
-                                            else "Listo para reproducir",
-                                            style = fontSize13(),
-                                            color = TextSecondary
-                                        )
+                                        Text(if (SettingsStore.autoNext) "Empieza en $nextCountdown s · Auto" else "Listo para reproducir", style = AppType.caption.copy(color = Color.White.copy(alpha = 0.68f)))
+                                    }
+                                    if (SettingsStore.autoNext) {
+                                        Box(Modifier.size(42.dp).clip(CircleShape).background(Color.White), contentAlignment = Alignment.Center) {
+                                            Text("$nextCountdown", style = AppType.bodyStrong.copy(color = OnLight, fontSize = 16.sp))
+                                        }
                                     }
                                 }
-                                Spacer(Modifier.height(16.dp))
-                                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                    PillButton(
-                                        text = "Reproducir ahora",
-                                        iconRes = R.drawable.ic_play,
-                                        primary = true,
-                                        onClick = {
-                                            showNextPanel = null
-                                            onPlayNext(next)
-                                        }
-                                    )
-                                    PillButton(
-                                        text = "Cancelar",
-                                        iconRes = R.drawable.ic_back,
-                                        primary = false,
-                                        onClick = { showNextPanel = null }
-                                    )
+                                Spacer(Modifier.height(14.dp))
+                                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                    PillButton(text = "Reproducir ahora", iconRes = R.drawable.ic_play, primary = true, onClick = { showNextPanel = null; onPlayNext(next) })
+                                    PillButton(text = "Cancelar", iconRes = R.drawable.ic_back, primary = false, onClick = { showNextPanel = null })
                                 }
                             }
                         }
@@ -848,35 +802,11 @@ fun PlayerScreen(
                     }
                 }
 
-                // Barra inferior de controles
+                // Barra inferior — timeline premium + transporte + pills
                 Column(
-                    Modifier
-                        .fillMaxWidth()
-                        .background(
-                            Brush.verticalGradient(
-                                0f to Color.Transparent,
-                                1f to Color.Black.copy(alpha = 0.88f)
-                            )
-                        )
-                        .padding(horizontal = 44.dp, vertical = 26.dp)
+                    Modifier.fillMaxWidth().background(PlayerScrimBottom).padding(horizontal = 44.dp, vertical = 22.dp)
                 ) {
-                    // Tiempos + barra de progreso
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(formatTime(positionMs), style = fontSize13(), color = TextSecondary)
-                        Spacer(Modifier.width(16.dp))
-                        SeekBar(
-                            positionMs = positionMs,
-                            durationMs = durationMs,
-                            bufferedMs = bufferedMs,
-                            modifier = Modifier.weight(1f)
-                        )
-                        Spacer(Modifier.width(16.dp))
-                        Text(
-                            if (durationMs > 0) "-${formatTime(durationMs - positionMs)}" else "--:--",
-                            style = fontSize13(),
-                            color = TextSecondary
-                        )
-                    }
+                    PlayerTimeline(positionMs = positionMs, durationMs = durationMs, bufferedMs = bufferedMs, modifier = Modifier.fillMaxWidth())
 
                     Spacer(Modifier.height(18.dp))
 
