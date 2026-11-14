@@ -10,7 +10,7 @@ import java.net.URL
  * Modelo de un scraper de Nuvio (plugin) — corresponde a una entrada de
  * `scrapers[]` en el manifest All-in-One-Nuvio.
  *
- * Cada scraper es un `providers/*.js` que Nuvio ejecuta para sacar links
+ * Cada scraper es un `providers/[id].js` que Nuvio ejecuta para sacar links
  * HTTP directos (mp4/mkv/m3u8/mpd) de una web concreta.
  *
  * Ejemplo: `{"id":"hianime","name":"HiAnime","supportedTypes":["movie","tv"],"formats":["m3u8"]}`
@@ -49,7 +49,7 @@ data class NuvioPluginManifest(
  *
  * El manifest Nuvio con `scrapers[]` no es installable como addon Stremio;
  * es un índice. Cada `filename: providers/xyz.js` se ejecuta dentro de Nuvio.
- * En Omni TV lo tratamos como catálogo de fuentes: si hay un bridge local
+ * En Omni TV lo tratamos como catalogo de fuentes: si hay un bridge local
  * (`http://192.168.x:8787/scrape/{id}`) que ejecute los JS, lo usamos.
  */
 object NuvioPluginManager {
@@ -153,7 +153,7 @@ object NuvioPluginManager {
 
 /**
  * Resolver de streams vía scrapers Nuvio — delega a un bridge local que sí
- * ejecuta los `providers/*.js`.
+ * ejecuta los `providers/[id].js`.
  *
  * El bridge esperado (opcional) expone: `POST http://192.168.x:8787/scrape/{scraperId}` con body
  * `{"type":"movie","id":"tt123","extra":{"tmdbId":"123","title":"..."}}` y
