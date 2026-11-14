@@ -221,7 +221,8 @@ fun OmniTvApp() {
             composable(Routes.SETTINGS) {
                 TvScaffold(appTabs, currentRoute, navController::selectTab, trailing = profileBadge) {
                     SettingsScreen(
-                        onSwitchProfile = { navController.navigate(Routes.PROFILES) }
+                        onSwitchProfile = { navController.navigate(Routes.PROFILES) },
+                        onExit = { navController.selectTab(appTabs.first()) }
                     )
                 }
             }

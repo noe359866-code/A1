@@ -80,6 +80,13 @@ object SettingsStore {
     var pairingCode by mutableStateOf("------")
         private set
 
+    /** Hay un PIN de control parental configurado. El PIN nunca se guarda en claro. */
+    var parentalPinEnabled by mutableStateOf(false)
+        private set
+
+    private var parentalSalt = ""
+    private var parentalHash = ""
+
     /** Cuenta enlazada desde el panel web (email). */
     var linkedAccount by mutableStateOf("")
         private set
@@ -158,6 +165,9 @@ object SettingsStore {
         pairingCode = p.getString("pairingCode", null) ?: generatePairingCode().also { code ->
             p.edit().putString("pairingCode", code).apply()
         }
+        parentalSalt = p.getString("parentalSalt", "") ?: ""
+        parentalHash = p.getString("parentalHash", "") ?: ""
+        parentalPinEnabled = parentalSalt.isNotBlank() && parentalHash.isNotBlank()
         linkedAccount = p.getString("linkedAccount", "") ?: ""
         // Las URLs guardadas por versiones anteriores también pasan la política de red
         customAddons = parseStringList(p.getString("customAddons", "[]")).filter { NetPolicy.isAllowed(it) }
@@ -238,6 +248,35 @@ object SettingsStore {
         linkedAccount = email
         revision++
     }
+
+    /** Cambia el código del QR. Las sesiones abiertas quedan invalidadas al instante. */
+    fun regeneratePairingCode() {
+        val code = generatePairingCode()
+        update { putString("pairingCode", code) }
+        pairingCode = code
+    }
+
+    /** Guarda un PIN de 4 cifras como huella con salt; devuelve false si no es válido. */
+    fun saveParentalPin(pin: String): Boolean {
+        val salt = ParentalPin.newSalt()
+        val hash = ParentalPin.hash(pin, salt) ?: return false
+        update { putString("parentalSalt", salt); putString("parentalHash", hash) }
+        parentalSalt = salt
+        parentalHash = hash
+        parentalPinEnabled = true
+        return true
+    }
+
+    /** Quita el PIN (la UI exige verificarlo antes de llamar aquí). */
+    fun clearParentalPin() {
+        update { remove("parentalSalt"); remove("parentalHash") }
+        parentalSalt = ""
+        parentalHash = ""
+        parentalPinEnabled = false
+    }
+
+    fun verifyParentalPin(pin: String): Boolean =
+        parentalPinEnabled && ParentalPin.verify(pin, parentalSalt, parentalHash)
 
     /**
      * Guarda los addons (URLs de manifest.json) añadidos desde el panel.

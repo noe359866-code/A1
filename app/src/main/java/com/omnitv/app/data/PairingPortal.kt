@@ -74,14 +74,14 @@ internal object PairingPortal {
 
     /** Página bloqueada: solo el campo del código. Sin ningún dato del televisor. */
     private fun lockedForm(): String = """
-  <form method="GET" action="/">
+  <form method="POST" action="/unlock">
     <div class="card">
       <h2>🔒 Código de emparejamiento</h2>
       <label>Está en el televisor: Ajustes → Vincular
         <input name="code" placeholder="6 caracteres" autocomplete="off" autocapitalize="characters"
           maxlength="12" required>
       </label>
-      <p class="hint">También puedes escanear el QR del televisor: abre el panel ya desbloqueado.</p>
+      <p class="hint">El código se envía por formulario, no en la dirección. El QR solo lleva la URL del panel.</p>
     </div>
     <button type="submit">Entrar</button>
   </form>"""
@@ -101,8 +101,7 @@ internal object PairingPortal {
 
         return """
   <form method="POST" action="/save">
-    <input type="hidden" name="code" value="${esc(data.code)}">
-    <p class="ok">Código verificado ✓</p>
+    <p class="ok">Sesión verificada ✓ · el código no aparece en esta página</p>
     <div class="card">
       <h2>👤 Enlazar cuenta</h2>
       <label>Email de tu cuenta Omni TV

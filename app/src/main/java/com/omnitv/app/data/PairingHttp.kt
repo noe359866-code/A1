@@ -19,11 +19,12 @@ internal class PanelRequest(
     val body: String
 )
 
-/** Respuesta del panel. */
+/** Respuesta del panel. [extraHeaders] permite, por ejemplo, `Set-Cookie`. */
 internal class PanelResponse(
     val status: Int,
     val body: String,
-    val contentType: String = "text/html; charset=utf-8"
+    val contentType: String = "text/html; charset=utf-8",
+    val extraHeaders: List<String> = emptyList()
 )
 
 /** La cabecera o el cuerpo superan el tamaño permitido (→ 413). */
@@ -155,5 +156,75 @@ internal class AttemptGuard(
 
     private companion object {
         const val MAX_CLIENTS = 512
+    }
+}
+
+/**
+ * Sesiones temporales del panel de vinculación.
+ *
+ * El código de 6 caracteres ya no viaja en la URL del QR: el móvil lo envía
+ * una vez por `POST /unlock` y recibe una cookie `HttpOnly` ligada a su IP y
+ * al código vigente. Si el código se regenera en Ajustes, la huella cambia y
+ * **todas** las sesiones abiertas dejan de valer sin necesidad de avisos.
+ */
+internal class SessionGuard(
+    private val ttlMillis: Long = 10 * 60_000L,
+    private val now: () -> Long = { System.currentTimeMillis() },
+    private val random: java.security.SecureRandom = java.security.SecureRandom()
+) {
+    private class Entry(val client: String, val fingerprint: String, val expiresAt: Long)
+
+    private val sessions = HashMap<String, Entry>()
+    private val hex = "0123456789abcdef".toCharArray()
+
+    @Synchronized
+    fun issue(client: String, code: String): String {
+        prune()
+        if (sessions.size >= MAX_SESSIONS) {
+            // Memoria acotada: si una LAN muy ruidosa abre demasiadas
+            // sesiones, se cierran todas en lugar de crecer sin límite.
+            sessions.clear()
+        }
+        val token = ByteArray(24).also { random.nextBytes(it) }.toHex()
+        sessions[token] = Entry(client, fingerprint(code), now() + ttlMillis)
+        return token
+    }
+
+    @Synchronized
+    fun valid(token: String?, client: String, code: String): Boolean {
+        if (token.isNullOrBlank()) return false
+        val entry = sessions[token] ?: return false
+        if (now() >= entry.expiresAt) {
+            sessions.remove(token)
+            return false
+        }
+        val expected = fingerprint(code).toByteArray(Charsets.US_ASCII)
+        return entry.client == client && java.security.MessageDigest.isEqual(
+            entry.fingerprint.toByteArray(Charsets.US_ASCII), expected
+        )
+    }
+
+    @Synchronized
+    fun clear() {
+        sessions.clear()
+    }
+
+    private fun prune() {
+        val time = now()
+        sessions.entries.removeAll { time >= it.value.expiresAt }
+    }
+
+    private fun fingerprint(code: String): String = java.security.MessageDigest
+        .getInstance("SHA-256").digest(code.toByteArray(Charsets.UTF_8)).toHex()
+
+    private fun ByteArray.toHex(): String = buildString(size * 2) {
+        for (b in this@toHex) {
+            val v = b.toInt() and 0xff
+            append(hex[v ushr 4]); append(hex[v and 0x0f])
+        }
+    }
+
+    private companion object {
+        const val MAX_SESSIONS = 512
     }
 }

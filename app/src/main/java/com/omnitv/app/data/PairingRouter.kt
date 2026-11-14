@@ -23,40 +23,45 @@ internal interface PanelStore {
 /**
  * Reglas del panel de vinculación: qué responde a cada petición.
  *
- * Invariante de seguridad: **sin el código de emparejamiento correcto no se
- * lee ni se escribe ningún dato** de [store]. Toda respuesta a un cliente no
- * validado es la página bloqueada de [PairingPortal], que no contiene nada
- * del televisor (ni siquiera el código).
+ * Invariante de seguridad: **sin el código correcto o una sesión vigente no
+ * se lee ni se escribe ningún dato** de [store]. El código se introduce una
+ * vez por `POST /unlock` (nunca en la URL del QR) y se canjea por una cookie
+ * de sesión [SessionGuard] ligada a la IP y al código vigente; rotar el
+ * código en Ajustes invalida todas las sesiones al instante.
  *
  * @param onEvent aviso legible de lo ocurrido, para mostrarlo en Ajustes.
  */
 internal class PairingRouter(
     private val store: PanelStore,
     private val guard: AttemptGuard = AttemptGuard(),
-    private val onEvent: (String) -> Unit = {}
+    private val onEvent: (String) -> Unit = {},
+    private val sessions: SessionGuard = SessionGuard()
 ) {
 
     /** Decide la respuesta a una petición. [client] identifica al remitente (su IP). */
     fun route(request: PanelRequest, client: String): PanelResponse {
         val path = request.path
+        val token = cookie(request, SESSION_COOKIE)
+        val currentCode = store.pairingCode
         return when {
             request.method == "GET" && (path == "/" || path == "/index.html") ->
-                openPanel(request.query["code"].orEmpty(), client)
+                openPanel(request.query["code"].orEmpty(), token, client, currentCode)
+
+            request.method == "POST" && path == "/unlock" ->
+                unlock(parseForm(request.body), token, client, currentCode, request)
 
             request.method == "GET" && path == "/status" ->
-                status(request.query["code"].orEmpty(), client)
+                status(request.query["code"].orEmpty(), token, client, currentCode)
 
             request.method == "POST" && path == "/save" ->
-                if (isCrossOrigin(request)) {
-                    onEvent("⚠️ POST /save rechazado por origen cruzado desde $client")
-                    PanelResponse(403, PairingPortal.html(null, MSG_CROSS_ORIGIN, isError = true))
-                } else save(parseForm(request.body), client)
+                save(parseForm(request.body), token, client, currentCode, request)
 
             else -> PanelResponse(404, PairingPortal.html(null, "Página no encontrada", isError = true))
         }
     }
 
     private enum class CodeCheck { OK, WRONG, LOCKED }
+    private enum class Auth { OK, NO_CODE, WRONG, LOCKED }
 
     /** Valida el código de emparejamiento aplicando el límite de intentos. */
     private fun checkCode(code: String, client: String): CodeCheck {
@@ -77,41 +82,117 @@ internal class PairingRouter(
         }
     }
 
+    /** Sesión vigente → acceso; si no, se valida el código (o se pide). */
+    private fun authorize(
+        code: String,
+        token: String?,
+        client: String,
+        currentCode: String,
+        allowBlank: Boolean
+    ): Auth {
+        if (sessions.valid(token, client, currentCode)) return Auth.OK
+        if (code.isBlank() && allowBlank) return Auth.NO_CODE
+        return when (checkCode(code, client)) {
+            CodeCheck.OK -> Auth.OK
+            CodeCheck.WRONG -> Auth.WRONG
+            CodeCheck.LOCKED -> Auth.LOCKED
+        }
+    }
+
     /** Respuesta común cuando el código no vale: página bloqueada, sin datos. */
-    private fun denied(check: CodeCheck): PanelResponse = when (check) {
-        CodeCheck.LOCKED -> PanelResponse(429, PairingPortal.html(null, MSG_LOCKED, isError = true))
+    private fun denied(check: Auth): PanelResponse = when (check) {
+        Auth.LOCKED -> PanelResponse(429, PairingPortal.html(null, MSG_LOCKED, isError = true))
         else -> PanelResponse(403, PairingPortal.html(null, MSG_WRONG_CODE, isError = true))
     }
 
-    private fun openPanel(code: String, client: String): PanelResponse {
-        // Sin código: solo el formulario para introducirlo (no cuenta como intento)
-        if (code.isBlank()) return PanelResponse(200, PairingPortal.html(null))
-        val check = checkCode(code, client)
-        if (check != CodeCheck.OK) return denied(check)
-        onEvent("Panel web abierto desde $client")
-        return PanelResponse(200, PairingPortal.html(store.data()))
+    /**
+     * Renueva la sesión en cada respuesta autenticada: el móvil no tiene que
+     * volver a escribir el código mientras siga usando el panel (TTL deslizante).
+     */
+    private fun sessionHeaders(client: String, currentCode: String): List<String> =
+        listOf(setCookie(sessions.issue(client, currentCode)))
+
+    private fun openPanel(code: String, token: String?, client: String, currentCode: String): PanelResponse {
+        when (authorize(code, token, client, currentCode, allowBlank = true)) {
+            // Sin código ni sesión: solo el formulario para introducirlo.
+            Auth.NO_CODE -> return PanelResponse(200, PairingPortal.html(null))
+            Auth.WRONG -> return denied(Auth.WRONG)
+            Auth.LOCKED -> return denied(Auth.LOCKED)
+            Auth.OK -> Unit
+        }
+        if (code.isNotBlank()) onEvent("Panel web abierto desde $client")
+        return PanelResponse(
+            200,
+            PairingPortal.html(store.data()),
+            extraHeaders = sessionHeaders(client, currentCode)
+        )
     }
 
-    private fun status(code: String, client: String): PanelResponse {
+    /**
+     * Camino principal desde el QR: el formulario envía el código por POST,
+     * así no queda en la URL, en el historial ni en `Referer`.
+     */
+    private fun unlock(
+        form: Map<String, String>,
+        token: String?,
+        client: String,
+        currentCode: String,
+        request: PanelRequest
+    ): PanelResponse {
+        if (isCrossOrigin(request)) {
+            onEvent("⚠️ /unlock rechazado por origen cruzado desde $client")
+            return PanelResponse(403, PairingPortal.html(null, MSG_CROSS_ORIGIN, isError = true))
+        }
+        val code = form["code"].orEmpty()
+        return when (authorize(code, token, client, currentCode, allowBlank = false)) {
+            Auth.OK -> {
+                onEvent("Panel web desbloqueado desde $client")
+                PanelResponse(
+                    200,
+                    PairingPortal.html(store.data()),
+                    // Rotamos la sesión en cada desbloqueo con código.
+                    extraHeaders = listOf(setCookie(sessions.issue(client, currentCode)))
+                )
+            }
+            Auth.LOCKED -> denied(Auth.LOCKED)
+            else -> denied(Auth.WRONG)
+        }
+    }
+
+    private fun status(code: String, token: String?, client: String, currentCode: String): PanelResponse {
         val jsonType = "application/json; charset=utf-8"
-        if (code.isBlank()) return PanelResponse(403, """{"error":"code_required"}""", jsonType)
-        return when (checkCode(code, client)) {
-            CodeCheck.OK -> {
+        return when (authorize(code, token, client, currentCode, allowBlank = false)) {
+            Auth.NO_CODE -> PanelResponse(403, """{"error":"code_required"}""", jsonType)
+            Auth.OK -> {
                 val data = store.data()
                 PanelResponse(
                     200,
                     """{"account":${jsonString(data.account)},"addons":${data.addons.size},"streams":${data.streamAddons.size},"plugins":${data.nuvioPlugins.size},"cloudstream":${if (data.cloudstreamBridge.isBlank()) 0 else 1},"ffmpeg":${if (data.ffmpegBridge.isBlank()) 0 else 1},"apis":${data.apiKeys.size}}""",
-                    jsonType
+                    jsonType,
+                    sessionHeaders(client, currentCode)
                 )
             }
-            CodeCheck.LOCKED -> PanelResponse(429, """{"error":"too_many_attempts"}""", jsonType)
-            CodeCheck.WRONG -> PanelResponse(403, """{"error":"wrong_code"}""", jsonType)
+            Auth.LOCKED -> PanelResponse(429, """{"error":"too_many_attempts"}""", jsonType)
+            Auth.WRONG -> PanelResponse(403, """{"error":"wrong_code"}""", jsonType)
         }
     }
 
-    private fun save(form: Map<String, String>, client: String): PanelResponse {
-        val check = checkCode(form["code"].orEmpty(), client)
-        if (check != CodeCheck.OK) return denied(check)
+    private fun save(
+        form: Map<String, String>,
+        token: String?,
+        client: String,
+        currentCode: String,
+        request: PanelRequest
+    ): PanelResponse {
+        if (isCrossOrigin(request)) {
+            onEvent("⚠️ POST /save rechazado por origen cruzado desde $client")
+            return PanelResponse(403, PairingPortal.html(null, MSG_CROSS_ORIGIN, isError = true))
+        }
+        when (authorize(form["code"].orEmpty(), token, client, currentCode, allowBlank = false)) {
+            Auth.OK -> Unit
+            Auth.LOCKED -> return denied(Auth.LOCKED)
+            else -> return denied(Auth.WRONG)
+        }
 
         var rejectedUrls = 0
         form["account"]?.trim()?.takeIf { it.isNotBlank() }?.let { store.setAccount(it) }
@@ -170,7 +251,11 @@ internal class PairingRouter(
                 append("con una IP de tu red local (192.168.x.x, 10.x.x.x…).")
             }
         }
-        return PanelResponse(200, PairingPortal.html(data, message))
+        return PanelResponse(
+            200,
+            PairingPortal.html(data, message),
+            extraHeaders = sessionHeaders(client, currentCode)
+        )
     }
 
     /** Separa las líneas de un campo de URLs en aceptadas y rechazadas por [NetPolicy]. */
@@ -179,9 +264,9 @@ internal class PairingRouter(
 
     /**
      * Mitigación CSRF: un formulario de otra web siempre anuncia un `Origin`
-     * distinto (o `Sec-Fetch-Site: cross-site`). Los clientes sin esas
-     * cabeceras (curl, apps propias) siguen pudiendo guardar, pero un
-     * navegador ajeno no puede reenviar el código del QR desde su origen.
+     * distinto (o `Sec-Fetch-Site: cross-site`). Con `SameSite=Strict` la
+     * cookie de sesión tampoco se envía desde otro sitio. Los clientes sin
+     * esas cabeceras (curl, apps propias) siguen pudiendo guardar con el código.
      */
     private fun isCrossOrigin(request: PanelRequest): Boolean {
         val site = header(request, "sec-fetch-site")?.trim()?.lowercase()
@@ -197,9 +282,23 @@ internal class PairingRouter(
         return expected.isNotBlank() && !authority.equals(expected, ignoreCase = true)
     }
 
-    /** `readPanelRequest` ya normaliza a minúsculas; aceptar cualquier caso evita sorpresas. */
+    /** `readPanelRequest` normaliza a minúsculas; aceptar cualquier caso evita sorpresas. */
     private fun header(request: PanelRequest, name: String): String? =
         request.headers.entries.firstOrNull { it.key.equals(name, ignoreCase = true) }?.value
+
+    private fun cookie(request: PanelRequest, name: String): String? {
+        val raw = header(request, "cookie") ?: return null
+        for (part in raw.split(';')) {
+            val idx = part.indexOf('=')
+            if (idx > 0 && part.substring(0, idx).trim().equals(name, ignoreCase = true)) {
+                return part.substring(idx + 1).trim().takeIf { it.isNotBlank() }
+            }
+        }
+        return null
+    }
+
+    private fun setCookie(token: String): String =
+        "Set-Cookie: $SESSION_COOKIE=$token; Path=/; HttpOnly; SameSite=Strict; Max-Age=600"
 
     private fun jsonString(value: String): String = buildString {
         append('"')
@@ -215,6 +314,7 @@ internal class PairingRouter(
     }
 
     private companion object {
+        const val SESSION_COOKIE = "omnitv_session"
         const val UNSET_CODE = "------"
         const val MSG_WRONG_CODE = "❌ Código de emparejamiento incorrecto"
         const val MSG_LOCKED = "⏳ Demasiados intentos fallidos. Espera un minuto y vuelve a probar."

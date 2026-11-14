@@ -37,11 +37,11 @@ Omni TV es una aplicación **exclusiva para Android TV / Google TV** con estánd
 | **Solo Android TV** | `leanback` requerido, `touchscreen` opcional, `LEANBACK_LAUNCHER` + banner 320×180 |
 | **Diseño Apple TV** | Superficies #16161C, tarjetas con escala 1.08 y borde blanco, botones píldora, velos degradados |
 | **Navegación D-pad** | Pestañas tvOS, `focusRestorer`, foco inicial inteligente en cada pantalla |
-| **Perfiles Netflix** | Selector con avatares ilustrados, modo infantil, Mi Lista y Continuar viendo por perfil |
+| **Perfiles Netflix** | Selector con avatares ilustrados, modo infantil con PIN parental opcional, Mi Lista y Continuar viendo por perfil |
 | **Reproductor Xuper TV** | Información del título/siguiente, multi-servidor, ABR HLS, audio/subs/calidad, zoom, ±10s, temporizador de pausa |
 | **Catálogo real** | Cinemeta + Nuvio + addons del usuario + cinejoy (plataformas) + sweetfox (estudios) |
 | **Búsqueda con mando** | Teclado propio lateral (37 teclas), también para nombres de perfil; búsqueda sin distinguir acentos/mayúsculas |
-| **Vinculación segura** | Servidor :8080 + QR + código de 6 caracteres, rate-limit, cifrado Keystore AES-GCM |
+| **Vinculación segura** | Servidor :8080 + QR solo con la URL, código de 6 caracteres por `POST /unlock`, sesión con cookie `HttpOnly`/`SameSite=Strict`, regeneración de código, rate-limit, cifrado Keystore AES-GCM |
 
 ---
 
@@ -56,7 +56,7 @@ Omni TV es una aplicación **exclusiva para Android TV / Google TV** con estánd
 | 4 | **Buscar** | Campo + chips de género + teclado D-pad + resultados combinados local/remoto |
 | 5 | **Detalle** | Fondo con backdrop + velos, match %, metadatos completos, episodios, reparto, Más como esto |
 | 6 | **Reproductor** | Media3 con todos los controles tvOS: EPG, servidores, calidad, audio, subtítulos, aspecto, velocidad, timer |
-| 7 | **Ajustes** | Tarjetas: Perfil, Vinculación (QR), Reproducción, Calidad, Red (DoH), Sistema |
+| 7 | **Ajustes** | Tarjetas: Perfil, Control parental, Vinculación (QR + sesión), Reproducción, Calidad, Red (DoH), Sistema |
 
 ---
 

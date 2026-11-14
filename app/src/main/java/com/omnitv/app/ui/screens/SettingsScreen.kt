@@ -3,6 +3,7 @@ package com.omnitv.app.ui.screens
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -17,6 +18,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
@@ -53,6 +55,7 @@ import com.omnitv.app.data.SettingsStore
 import com.omnitv.app.ui.components.AvatarView
 import com.omnitv.app.ui.components.KidsChip
 import com.omnitv.app.ui.components.PillButton
+import com.omnitv.app.ui.components.PinDialog
 import com.omnitv.app.ui.components.RequestTvFocus
 import com.omnitv.app.ui.components.SettingRow
 import com.omnitv.app.ui.components.TvToggle
@@ -70,19 +73,33 @@ import androidx.compose.material.Text
  * valores ciclables (calidad preferida, velocidad) persistidos en
  * [SettingsStore].
  */
+/** Motivo por el que se pide el PIN en esta pantalla. */
+private enum class PinTask { GATE, SET, CLEAR }
+
 @Composable
-fun SettingsScreen(onSwitchProfile: () -> Unit) {
+fun SettingsScreen(
+    onSwitchProfile: () -> Unit,
+    onExit: () -> Unit = {}
+) {
     val profile = ProfileStore.currentProfile
+    // El QR ya NO incluye el código: el móvil lo pide al abrir el panel y lo
+    // envía por POST. Así no queda en el historial ni en cabeceras Referer.
     val panelUrl = remember(PairingServer.running.value) { PairingServer.panelUrl() }
-    val pairingUrl = remember(panelUrl, SettingsStore.pairingCode) {
-        if (panelUrl.isEmpty()) "" else "$panelUrl?code=${SettingsStore.pairingCode}"
-    }
+    val pairingUrl = remember(PairingServer.running.value) { PairingServer.pairingUrl() }
+
+    // Un perfil infantil no puede ver ni cambiar ajustes sensibles sin el PIN.
+    var pinUnlocked by remember { mutableStateOf(false) }
+    var pinTask by remember { mutableStateOf<PinTask?>(null) }
+    val gated = SettingsStore.parentalPinEnabled && profile?.isKids == true && !pinUnlocked
+    LaunchedEffect(gated) { if (gated) pinTask = PinTask.GATE }
 
     // Foco inicial en «Calidad preferida», la primera fila pulsable del
     // listado: el mando entra en el contenido y no tiene que recorrer la
     // tarjeta de perfil para empezar a ajustar cosas.
     val firstFocus = remember { FocusRequester() }
-    RequestTvFocus(firstFocus)
+    // Con el PIN pendiente, el foco inicial debe ir al teclado del diálogo,
+    // no a una fila de ajustes tapada por la capa.
+    if (!gated) RequestTvFocus(firstFocus)
     val scope = rememberCoroutineScope()
     var bridgeStatus by remember { mutableStateOf("Comprobando puente…") }
     var cloudstreamStatus by remember { mutableStateOf("Comprobando Cloudstream…") }
@@ -100,6 +117,7 @@ fun SettingsScreen(onSwitchProfile: () -> Unit) {
     }
     LaunchedEffect(SettingsStore.revision) { checkIntegrations() }
 
+    Box(Modifier.fillMaxSize()) {
     Column(
         Modifier
             .fillMaxSize()
@@ -143,6 +161,43 @@ fun SettingsScreen(onSwitchProfile: () -> Unit) {
 
         Spacer(Modifier.height(20.dp))
 
+        /* ---------------- Control parental ---------------- */
+        SettingsCard(iconRes = R.drawable.ic_settings, title = "Control parental") {
+            Column(Modifier.fillMaxWidth().padding(horizontal = 22.dp, vertical = 16.dp)) {
+                Text(
+                    "Con un PIN de 4 cifras, un perfil infantil no puede salir a un perfil " +
+                        "estándar, gestionar perfiles ni abrir estos ajustes. Se guarda solo " +
+                        "como huella con salt en el televisor. Es un bloqueo de uso doméstico, " +
+                        "no una restricción del sistema operativo.",
+                    style = AppType.metadata,
+                    color = TextSecondary
+                )
+                Spacer(Modifier.height(12.dp))
+                StatusLine("PIN parental", if (SettingsStore.parentalPinEnabled) "Activado" else "Sin configurar")
+                Spacer(Modifier.height(14.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    PillButton(
+                        text = if (SettingsStore.parentalPinEnabled) "Quitar PIN" else "Configurar PIN",
+                        primary = false,
+                        danger = SettingsStore.parentalPinEnabled,
+                        onClick = {
+                            pinTask = if (SettingsStore.parentalPinEnabled) PinTask.CLEAR else PinTask.SET
+                        }
+                    )
+                }
+                if (SettingsStore.parentalPinEnabled) {
+                    Spacer(Modifier.height(10.dp))
+                    Text(
+                        "Para cambiarlo, quítalo con el PIN actual y vuelve a configurarlo.",
+                        style = AppType.metadata,
+                        color = TextSecondary
+                    )
+                }
+            }
+        }
+
+        Spacer(Modifier.height(20.dp))
+
         /* ---------------- Vincular (QR) ---------------- */
         SettingsCard(iconRes = R.drawable.ic_link, title = "Vincular cuenta · Addons · APIs") {
             Row(
@@ -177,9 +232,10 @@ fun SettingsScreen(onSwitchProfile: () -> Unit) {
                     Text("Escanea el QR con tu móvil", style = AppType.sectionTitle, color = TextPrimary)
                     Spacer(Modifier.height(8.dp))
                     Text(
-                        "El QR abre el panel web ya desbloqueado; si escribes la dirección a mano, " +
-                            "te pedirá el código de abajo. Solo entonces podrás enlazar tu cuenta, " +
-                            "instalar addons Stremio, guardar repositorios/puente Nuvio y registrar APIs.",
+                        "Escanea el QR e introduce en el móvil el código de abajo. El código " +
+                            "NO viaja en la URL: se envía por formulario y el panel abre una " +
+                            "sesión temporal. Solo entonces podrás enlazar tu cuenta, instalar " +
+                            "addons Stremio, guardar repositorios/puente Nuvio y registrar APIs.",
                         style = AppType.metadata,
                         color = TextSecondary
                     )
@@ -189,6 +245,12 @@ fun SettingsScreen(onSwitchProfile: () -> Unit) {
                         style = AppType.metadata,
                         color = TextPrimary,
                         fontFamily = FontFamily.Monospace
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    PillButton(
+                        text = "Regenerar código",
+                        primary = false,
+                        onClick = { SettingsStore.regeneratePairingCode() }
                     )
                     Spacer(Modifier.height(12.dp))
                     StatusLine(
@@ -405,6 +467,47 @@ fun SettingsScreen(onSwitchProfile: () -> Unit) {
         }
 
         Spacer(Modifier.height(56.dp))
+    }
+
+    // Capa de PIN: se dibuja encima del listado para que el mando no pueda
+    // llegar a las filas de ajustes mientras esté bloqueada.
+    val task = pinTask
+    if (task != null) {
+        key(task) {
+            PinDialog(
+                title = when (task) {
+                    PinTask.GATE -> "Ajustes bloqueados"
+                    PinTask.SET -> "Configurar PIN parental"
+                    PinTask.CLEAR -> "Quitar PIN parental"
+                },
+                subtitle = when (task) {
+                    PinTask.GATE -> "Introduce el PIN para ver los ajustes desde un perfil infantil"
+                    PinTask.SET -> "Elige 4 cifras. Se guardará solo como huella cifrada en el televisor."
+                    PinTask.CLEAR -> "Introduce el PIN actual para desactivar el control parental"
+                },
+                confirmEntry = task == PinTask.SET,
+                onDismiss = if (task == PinTask.GATE) onExit else { pinTask = null },
+                onSubmit = { pin ->
+                    when (task) {
+                        PinTask.GATE -> if (SettingsStore.verifyParentalPin(pin)) {
+                            pinUnlocked = true
+                            pinTask = null
+                            true
+                        } else false
+                        PinTask.SET -> if (SettingsStore.saveParentalPin(pin)) {
+                            pinTask = null
+                            true
+                        } else false
+                        PinTask.CLEAR -> if (SettingsStore.verifyParentalPin(pin)) {
+                            SettingsStore.clearParentalPin()
+                            pinTask = null
+                            true
+                        } else false
+                    }
+                }
+            )
+        }
+    }
     }
 }
 
