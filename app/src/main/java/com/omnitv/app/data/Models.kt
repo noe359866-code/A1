@@ -84,10 +84,19 @@ data class Video(
             "$durationMinutes min"
         }
 
+    /**
+     * Hay una valoración real. `0.0` significa «desconocida» (el origen no
+     * la trae): la interfaz no debe mostrar ni nota ni afinidad.
+     */
+    val hasRating: Boolean get() = rating > 0.0
+
     val ratingLabel: String
         get() = String.format(Locale.US, "%.1f", rating).replace('.', ',')
 
-    /** Porcentaje de afinidad estilo Netflix («98 % para ti»). */
+    /**
+     * Porcentaje de afinidad estilo Netflix («98 % para ti»), derivado de la
+     * valoración. Solo tiene sentido si [hasRating].
+     */
     val matchPercent: Int
         get() = (55 + rating * 5).toInt().coerceAtMost(99)
 

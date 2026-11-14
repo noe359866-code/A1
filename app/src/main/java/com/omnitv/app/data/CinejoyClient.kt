@@ -29,7 +29,15 @@ object CinejoyClient {
 
     /* ------------------------------ HTTP -------------------------------- */
 
-    private fun httpText(url: String): String? = runCatching {
+    /**
+     * Descarga [url]. Primero por el DNS normal; si el nombre no resuelve
+     * (redes con DNS roto o filtrado), reintenta con el DNS de Cloudflare
+     * ([Doh]) validando el certificado del nombre original.
+     */
+    private fun httpText(url: String): String? =
+        httpTextDirect(url) ?: Doh.retry(url)
+
+    private fun httpTextDirect(url: String): String? = runCatching {
         val connection = URL(url).openConnection() as HttpURLConnection
         try {
             connection.connectTimeout = 10_000
@@ -50,12 +58,12 @@ object CinejoyClient {
     private val posterRegex =
         """image\.tmdb\.org/t/p/(?:w\d{3}|original)/([\w.\-]+\.jpg)""".toRegex()
     private val altRegex = """alt="([^"]{2,120})"""".toRegex()
-    private val ratingRegex = """\b(\d\.\d)\b""".toRegex()
     private val yearInSlugRegex = """-(19|20)\d{2}$""".toRegex()
 
     internal fun parseProviderPage(html: String, providerId: Int): List<Video> {
         val results = LinkedHashMap<String, Video>()
-        for (match in linkRegex.findAll(html)) {
+        val links = linkRegex.findAll(html).toList()
+        for ((index, match) in links.withIndex()) {
             val kind = match.groupValues[1] // movie | tv | series
             val tmdbId = match.groupValues[2]
             if (tmdbId in results) continue
@@ -72,7 +80,13 @@ object CinejoyClient {
                 ?: titleFromSlug(slugPath)
             val year = yearInSlugRegex.find(slugPath)?.value
                 ?.trim('-')?.toIntOrNull() ?: 0
-            val rating = ratingRegex.find(window)?.groupValues?.get(1)?.toDoubleOrNull() ?: 7.0
+            // Valoración: solo texto visible de ESTA ficha (desde su enlace hasta el de
+            // la siguiente). Si no aparece queda en 0.0 y la interfaz no muestra nota.
+            val cardEnd = links.drop(index + 1)
+                .firstOrNull { it.groupValues[2] != tmdbId }?.range?.first
+                ?: html.length
+            val card = html.substring(match.range.first, minOf(cardEnd, to))
+            val rating = ScrapeText.rating(card, title)
 
             val isMovie = kind == "movie"
             val type = when {

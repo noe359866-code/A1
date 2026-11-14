@@ -3,7 +3,6 @@ package com.omnitv.app.ui.screens
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -15,13 +14,14 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
@@ -37,15 +37,17 @@ import com.omnitv.app.data.SettingsStore
 import com.omnitv.app.ui.components.AvatarView
 import com.omnitv.app.ui.components.KidsChip
 import com.omnitv.app.ui.components.PillButton
+import com.omnitv.app.ui.components.RequestTvFocus
 import com.omnitv.app.ui.components.SettingRow
 import com.omnitv.app.ui.components.TvToggle
 import com.omnitv.app.ui.theme.Accent
+import com.omnitv.app.ui.theme.AppRadius
 import com.omnitv.app.ui.theme.AppType
 import com.omnitv.app.ui.theme.Background
-import com.omnitv.app.ui.theme.GlassFill
+import com.omnitv.app.ui.theme.SurfaceCard
 import com.omnitv.app.ui.theme.TextPrimary
 import com.omnitv.app.ui.theme.TextSecondary
-import androidx.tv.material.Text
+import androidx.compose.material.Text
 
 /**
  * Ajustes de Omni TV: tarjetas con iconos, interruptores tipo iOS y
@@ -55,6 +57,12 @@ import androidx.tv.material.Text
 @Composable
 fun SettingsScreen(onSwitchProfile: () -> Unit) {
     val profile = ProfileStore.currentProfile
+
+    // Foco inicial en «Calidad preferida», la primera fila pulsable del
+    // listado: el mando entra en el contenido y no tiene que recorrer la
+    // tarjeta de perfil para empezar a ajustar cosas.
+    val firstFocus = remember { FocusRequester() }
+    RequestTvFocus(firstFocus)
 
     Column(
         Modifier
@@ -113,7 +121,7 @@ fun SettingsScreen(onSwitchProfile: () -> Unit) {
                         data = PairingServer.pairingUrl(),
                         modifier = Modifier
                             .size(176.dp)
-                            .clip(RoundedCornerShape(12.dp))
+                            .clip(AppRadius.md)
                     )
                     Spacer(Modifier.height(12.dp))
                     Text(
@@ -131,9 +139,9 @@ fun SettingsScreen(onSwitchProfile: () -> Unit) {
                     Text("Escanea el QR con tu móvil", style = AppType.sectionTitle, color = TextPrimary)
                     Spacer(Modifier.height(8.dp))
                     Text(
-                        "Se abrirá el panel web para enlazar tu cuenta, añadir addons " +
-                            "(manifest.json de Stremio) y registrar APIs. Todo llega al " +
-                            "televisor al instante.",
+                        "El QR abre el panel web ya desbloqueado; si escribes la dirección a mano, " +
+                            "te pedirá el código de abajo. Solo entonces podrás enlazar tu cuenta, " +
+                            "añadir addons (manifest.json de Stremio) y registrar APIs.",
                         style = AppType.metadata,
                         color = TextSecondary
                     )
@@ -150,6 +158,16 @@ fun SettingsScreen(onSwitchProfile: () -> Unit) {
                     StatusLine("Addons añadidos", "${SettingsStore.customAddons.size}")
                     StatusLine("Addons de streams", "${SettingsStore.streamAddons.size}")
                     StatusLine("APIs añadidas", "${SettingsStore.apiKeys.size}")
+                    StatusLine(
+                        "Claves de API",
+                        if (SettingsStore.apiKeys.isEmpty()) {
+                            "Sin claves"
+                        } else if (SettingsStore.secretsEncrypted) {
+                            "Cifradas en el televisor"
+                        } else {
+                            "Sin cifrar (Android 5.1 no admite el cifrado)"
+                        }
+                    )
                     if (PairingServer.lastAction.value.isNotEmpty()) {
                         Spacer(Modifier.height(10.dp))
                         Text(PairingServer.lastAction.value, style = AppType.metadata, color = Accent)
@@ -165,17 +183,17 @@ fun SettingsScreen(onSwitchProfile: () -> Unit) {
             SettingRow(
                 title = "Autoplay",
                 subtitle = "Los vídeos empiezan a reproducirse solos al abrirlos",
-                trailing = { TvToggle(SettingsStore.autoplay, onCheckedChange = { SettingsStore.setAutoplay(it) }) }
+                trailing = { TvToggle(SettingsStore.autoplay, onCheckedChange = { SettingsStore.setAutoplayEnabled(it) }) }
             )
             SettingRow(
                 title = "Siguiente automático",
                 subtitle = "Al terminar, reproduce el siguiente título con cuenta atrás de 10 s",
-                trailing = { TvToggle(SettingsStore.autoNext, onCheckedChange = { SettingsStore.setAutoNext(it) }) }
+                trailing = { TvToggle(SettingsStore.autoNext, onCheckedChange = { SettingsStore.setAutoNextEnabled(it) }) }
             )
             SettingRow(
                 title = "Iniciar silenciado",
                 subtitle = "Los vídeos empiezan sin audio",
-                trailing = { TvToggle(SettingsStore.mutedStart, onCheckedChange = { SettingsStore.setMutedStart(it) }) }
+                trailing = { TvToggle(SettingsStore.mutedStart, onCheckedChange = { SettingsStore.setMutedStartEnabled(it) }) }
             )
         }
 
@@ -187,10 +205,11 @@ fun SettingsScreen(onSwitchProfile: () -> Unit) {
                 title = "Calidad preferida",
                 subtitle = "Se aplica automáticamente al iniciar cada vídeo",
                 trailing = { ValueText(SettingsStore.preferredQuality) },
+                modifier = Modifier.focusRequester(firstFocus),
                 onClick = {
                     val presets = SettingsStore.QUALITY_PRESETS
                     val next = presets[(presets.indexOf(SettingsStore.preferredQuality) + 1) % presets.size]
-                    SettingsStore.setPreferredQuality(next)
+                    SettingsStore.savePreferredQuality(next)
                 }
             )
             SettingRow(
@@ -200,13 +219,26 @@ fun SettingsScreen(onSwitchProfile: () -> Unit) {
                 onClick = {
                     val presets = SettingsStore.SPEED_PRESETS
                     val next = presets[(presets.indexOf(SettingsStore.playbackSpeed) + 1) % presets.size]
-                    SettingsStore.setPlaybackSpeed(next)
+                    SettingsStore.savePlaybackSpeed(next)
                 }
             )
             SettingRow(
                 title = "Subtítulos por defecto",
                 subtitle = "Activa los subtítulos automáticamente si hay pistas",
-                trailing = { TvToggle(SettingsStore.subtitlesDefault, onCheckedChange = { SettingsStore.setSubtitlesDefault(it) }) }
+                trailing = { TvToggle(SettingsStore.subtitlesDefault, onCheckedChange = { SettingsStore.setSubtitlesByDefault(it) }) }
+            )
+        }
+
+        Spacer(Modifier.height(20.dp))
+
+        /* ---------------- Red ---------------- */
+        SettingsCard(iconRes = R.drawable.ic_server, title = "Red") {
+            SettingRow(
+                title = "DNS de Cloudflare",
+                subtitle = "Si el DNS de tu router falla o filtra, los nombres se resuelven " +
+                    "por DNS sobre HTTPS (cloudflare-dns.com, 1.1.1.1). El certificado se " +
+                    "sigue comprobando contra el nombre original; solo se usa https://",
+                trailing = { TvToggle(SettingsStore.cloudflareDns, onCheckedChange = { SettingsStore.saveCloudflareDns(it) }) }
             )
         }
 
@@ -248,9 +280,9 @@ private fun SettingsCard(
     Column(
         Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(18.dp))
-            .background(Color(0xFF15151B))
-            .border(1.dp, Color.White.copy(alpha = 0.06f), RoundedCornerShape(18.dp))
+            .clip(AppRadius.lg)
+            .background(SurfaceCard)
+            .border(1.dp, Color.White.copy(alpha = 0.06f), AppRadius.lg)
             .padding(vertical = 10.dp)
     ) {
         Row(
@@ -260,7 +292,7 @@ private fun SettingsCard(
             Box(
                 Modifier
                     .size(42.dp)
-                    .clip(RoundedCornerShape(11.dp))
+                    .clip(AppRadius.sm)
                     .background(Accent.copy(alpha = 0.22f)),
                 contentAlignment = Alignment.Center
             ) {
@@ -277,7 +309,7 @@ private fun SettingsCard(
                 style = androidx.compose.ui.text.TextStyle(
                     fontFamily = FontFamily.SansSerif,
                     fontWeight = FontWeight.SemiBold,
-                    fontSize = 18.sp
+                    fontSize = 22.sp
                 ),
                 color = TextPrimary
             )

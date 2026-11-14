@@ -407,6 +407,26 @@ object CatalogRepository {
             catalog
         }
 
+    /**
+     * Búsqueda local (título, géneros, descripción y reparto) sobre el
+     * catálogo disponible para el perfil. Los perfiles infantiles solo ven y
+     * buscan contenido TP/7+ ([catalogFor]).
+     */
+    fun search(query: String, kidsOnly: Boolean = false): List<Video> {
+        // Sin acentos ni mayúsculas: el teclado de la tele no tiene tildes, así
+        // que «accion» tiene que encontrar «Acción» (ver `SearchText`).
+        val q = SearchText.normalize(query)
+        if (q.isEmpty()) return emptyList()
+        return catalog
+            .filter { video -> !kidsOnly || video.certification == "TP" || video.certification == "7+" }
+            .filter { video ->
+                SearchText.matches(video.title, q) ||
+                    video.genres.any { SearchText.matches(it, q) } ||
+                    SearchText.matches(video.description, q) ||
+                    video.cast.any { SearchText.matches(it, q) }
+            }
+    }
+
     fun featuredFor(profile: Profile?): Video =
         if (profile?.isKids == true) {
             catalog.first { it.id == "big-buck-bunny" }

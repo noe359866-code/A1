@@ -25,7 +25,7 @@ import com.omnitv.app.ui.theme.AppType
 import com.omnitv.app.ui.theme.Background
 import com.omnitv.app.ui.theme.TextPrimary
 import com.omnitv.app.ui.theme.TextSecondary
-import androidx.tv.material.Text
+import androidx.compose.material.Text
 
 /**
  * Rejilla con todo el catálogo (pestaña "Películas"): catálogo real
@@ -67,7 +67,9 @@ fun MoviesScreen(onOpenDetail: (Video) -> Unit) {
         Spacer(Modifier.height(28.dp))
 
         LazyVerticalGrid(
-            columns = GridCells.Fixed(4),
+            // 5 columnas: en 960 dp de ancho, 4 dejan pósters de 220 dp
+            // con 20 dp de hueco; 5 encajan con la zona segura.
+            columns = GridCells.Fixed(5),
             contentPadding = PaddingValues(bottom = 56.dp),
             horizontalArrangement = Arrangement.spacedBy(20.dp),
             verticalArrangement = Arrangement.spacedBy(24.dp)
@@ -78,7 +80,7 @@ fun MoviesScreen(onOpenDetail: (Video) -> Unit) {
                     onClick = { onOpenDetail(video) },
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(230.dp)
+                        .height(200.dp)
                 )
             }
         }

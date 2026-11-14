@@ -3,7 +3,6 @@ package com.omnitv.app.ui.screens
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.focusable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -21,7 +20,6 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -33,11 +31,14 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -52,7 +53,7 @@ import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
-import androidx.tv.material.Text
+import androidx.compose.material.Text
 import coil.compose.AsyncImage
 import com.omnitv.app.R
 import com.omnitv.app.data.CatalogRepository
@@ -64,13 +65,17 @@ import com.omnitv.app.data.VideoType
 import com.omnitv.app.ui.components.CircleIconButton
 import com.omnitv.app.ui.components.PillButton
 import com.omnitv.app.ui.components.PosterCard
+import com.omnitv.app.ui.components.RequestTvFocus
+import com.omnitv.app.ui.components.TvChip
 import com.omnitv.app.ui.theme.Accent
 import com.omnitv.app.ui.theme.AccentGreen
+import com.omnitv.app.ui.theme.AppRadius
 import com.omnitv.app.ui.theme.AppType
 import com.omnitv.app.ui.theme.Background
 import com.omnitv.app.ui.theme.GlassFill
 import com.omnitv.app.ui.theme.GlassFillStrong
 import com.omnitv.app.ui.theme.SurfaceElevated
+import com.omnitv.app.ui.theme.TextMuted
 import com.omnitv.app.ui.theme.TextPrimary
 import com.omnitv.app.ui.theme.TextSecondary
 import com.omnitv.app.ui.theme.TextTertiary
@@ -96,6 +101,7 @@ fun DetailScreen(
     onOpenDetail: (Video) -> Unit
 ) {
     val context = LocalContext.current
+    val screenHeight = LocalConfiguration.current.screenHeightDp.dp
 
     // Ficha completa: se enriquece con la meta remota (episodios, reparto)
     var full by remember(video.id) { mutableStateOf(video) }
@@ -108,6 +114,11 @@ fun DetailScreen(
     val related = remember(full.id, full.episodes.size) { CatalogRepository.related(full.id) }
     var muted by remember { mutableStateOf(true) }
     var selectedSeason by remember { mutableStateOf(1) }
+
+    // Foco inicial en «Reproducir»: es la acción que el usuario viene a hacer.
+    // Si el foco cayera en «Atrás», el primer OK saldría de la ficha.
+    val playFocus = remember { FocusRequester() }
+    RequestTvFocus(playFocus, key = video.id)
 
     // Título a reproducir: primer episodio en series/anime, el vídeo en películas
     val playTarget = remember(full.id, full.episodes.size) {
@@ -153,6 +164,10 @@ fun DetailScreen(
                         this.player = trailerPlayer
                         useController = false
                         resizeMode = AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+                        // El tráiler es fondo decorativo: no debe robar el foco
+                        // del mando a los botones de la ficha.
+                        isFocusable = false
+                        isFocusableInTouchMode = false
                     }
                 },
                 update = { it.player = trailerPlayer },
@@ -198,8 +213,10 @@ fun DetailScreen(
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
         ) {
-            // Zona superior: el tráiler se ve a la izquierda con la info encima
-            Spacer(Modifier.height(190.dp))
+            // Zona superior: el tráiler se ve a la izquierda con la info encima.
+            // El hueco es proporcional a la pantalla (no 190 dp fijos): así el
+            // tráiler se sigue viendo tanto en 1080p como en un panel 4K.
+            Spacer(Modifier.height(screenHeight * 0.30f))
             Column(
                 Modifier
                     .padding(horizontal = 48.dp)
@@ -223,28 +240,28 @@ fun DetailScreen(
                 Spacer(Modifier.height(16.dp))
                 // Metadatos: match % estilo Netflix + año + duración/episodios + calidad
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        "${full.matchPercent} % para ti",
-                        style = androidx.compose.ui.text.TextStyle(
-                            fontFamily = FontFamily.SansSerif,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 15.sp
-                        ),
-                        color = AccentGreen
+                    // La afinidad se deriva de la valoración: sin valoración real no se muestra
+                    if (full.hasRating) {
+                        Text(
+                            "${full.matchPercent} % para ti",
+                            style = androidx.compose.ui.text.TextStyle(
+                                fontFamily = FontFamily.SansSerif,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 19.sp
+                            ),
+                            color = AccentGreen
+                        )
+                    }
+                    // Solo datos que existen (un título remoto puede llegar sin año o duración)
+                    val metaParts = listOfNotNull(
+                        full.year.takeIf { it > 0 }?.toString(),
+                        full.episodesLabel ?: full.durationLabel.takeIf { full.durationMinutes > 0 },
+                        full.quality.takeIf { it.isNotBlank() },
+                        full.certification.takeIf { it.isNotBlank() }
                     )
-                    Dot()
-                    Text("${full.year}", style = AppType.metadata, color = TextSecondary)
-                    Dot()
-                    Text(
-                        full.episodesLabel ?: full.durationLabel,
-                        style = AppType.metadata,
-                        color = TextSecondary
-                    )
-                    Dot()
-                    Text(full.quality, style = AppType.metadata, color = TextSecondary)
-                    if (full.certification.isNotEmpty()) {
-                        Dot()
-                        Text(full.certification, style = AppType.metadata, color = TextSecondary)
+                    metaParts.forEachIndexed { index, part ->
+                        if (index > 0 || full.hasRating) Dot()
+                        Text(part, style = AppType.metadata, color = TextSecondary)
                     }
                 }
 
@@ -265,7 +282,8 @@ fun DetailScreen(
                         text = "Reproducir",
                         iconRes = R.drawable.ic_play,
                         primary = true,
-                        onClick = { onPlay(playTarget) }
+                        onClick = { onPlay(playTarget) },
+                        modifier = Modifier.focusRequester(playFocus)
                     )
                     val inMyList = ProfileStore.currentProfile?.myList?.contains(full.id) == true
                     PillButton(
@@ -294,7 +312,8 @@ fun DetailScreen(
                         "Catálogo real de ${full.source} · los addons de catálogo no incluyen " +
                             "enlaces de reproducción: se reproducirá una demostración",
                         style = AppType.metadata,
-                        color = TextTertiary
+                        // No `TextTertiary` (2,5:1 sobre el fondo): es texto real
+                        color = TextMuted
                     )
                 }
             }
@@ -321,8 +340,8 @@ fun DetailScreen(
                         Spacer(Modifier.height(14.dp))
                         LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                             items(seasons) { season ->
-                                SeasonChip(
-                                    label = "Temporada $season",
+                                TvChip(
+                                    text = "Temporada $season",
                                     selected = season == currentSeason,
                                     onClick = { selectedSeason = season }
                                 )
@@ -401,7 +420,7 @@ fun DetailScreen(
             onClick = onBack,
             modifier = Modifier
                 .align(Alignment.TopStart)
-                .padding(28.dp)
+                .padding(48.dp)
         )
 
         // Estado del fondo (arriba a la derecha)
@@ -428,7 +447,7 @@ fun DetailScreen(
 private fun TypeChip(type: VideoType) {
     Box(
         Modifier
-            .clip(RoundedCornerShape(5.dp))
+            .clip(AppRadius.xs)
             .background(Color.White.copy(alpha = 0.18f))
             .padding(horizontal = 10.dp, vertical = 4.dp)
     ) {
@@ -444,7 +463,7 @@ private fun TypeChip(type: VideoType) {
 private fun AccentChip(text: String) {
     Box(
         Modifier
-            .clip(RoundedCornerShape(5.dp))
+            .clip(AppRadius.xs)
             .background(Accent)
             .padding(horizontal = 10.dp, vertical = 4.dp)
     ) {
@@ -456,44 +475,11 @@ private fun AccentChip(text: String) {
 private fun InfoChip(text: String) {
     Box(
         Modifier
-            .clip(RoundedCornerShape(9.dp))
+            .clip(AppRadius.sm)
             .background(GlassFillStrong)
             .padding(horizontal = 14.dp, vertical = 8.dp)
     ) {
         Text(text, style = AppType.metadata, color = TextPrimary)
-    }
-}
-
-@Composable
-private fun SeasonChip(label: String, selected: Boolean, onClick: () -> Unit) {
-    var focused by remember { mutableStateOf(false) }
-    Box(
-        Modifier
-            .clip(RoundedCornerShape(9.dp))
-            .background(
-                when {
-                    focused -> Accent
-                    selected -> GlassFillStrong
-                    else -> GlassFill
-                }
-            )
-            .then(
-                if (focused) Modifier.border(1.5.dp, Color.White.copy(alpha = 0.6f), RoundedCornerShape(9.dp))
-                else Modifier
-            )
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null,
-                onClick = onClick
-            )
-            .onFocusChanged { focused = it.isFocused }
-            .padding(horizontal = 16.dp, vertical = 9.dp)
-    ) {
-        Text(
-            label,
-            style = AppType.metadata,
-            color = if (focused || selected) TextPrimary else TextSecondary
-        )
     }
 }
 
@@ -517,7 +503,7 @@ private fun Dot() {
         Modifier
             .padding(horizontal = 10.dp)
             .size(3.dp)
-            .clip(RoundedCornerShape(2.dp))
+            .clip(AppRadius.xs)
             .background(TextTertiary)
     )
 }
@@ -536,10 +522,10 @@ private fun EpisodeRow(episode: Episode, onClick: () -> Unit) {
         Modifier
             .fillMaxWidth()
             .graphicsLayer { scaleX = scale; scaleY = scale }
-            .clip(RoundedCornerShape(14.dp))
+            .clip(AppRadius.md)
             .background(if (focused) SurfaceElevated.copy(alpha = 0.85f) else GlassFill)
             .then(
-                if (focused) Modifier.border(1.5.dp, Color.White.copy(alpha = 0.5f), RoundedCornerShape(14.dp))
+                if (focused) Modifier.border(3.dp, Color.White.copy(alpha = 0.5f), AppRadius.md)
                 else Modifier
             )
             .clickable(
@@ -556,7 +542,7 @@ private fun EpisodeRow(episode: Episode, onClick: () -> Unit) {
             style = androidx.compose.ui.text.TextStyle(
                 fontFamily = FontFamily.SansSerif,
                 fontWeight = FontWeight.Bold,
-                fontSize = 24.sp
+                fontSize = 28.sp
             ),
             color = if (focused) TextPrimary else TextSecondary,
             modifier = Modifier.width(34.dp)
@@ -570,13 +556,13 @@ private fun EpisodeRow(episode: Episode, onClick: () -> Unit) {
                 modifier = Modifier
                     .width(168.dp)
                     .height(94.dp)
-                    .clip(RoundedCornerShape(10.dp))
+                    .clip(AppRadius.sm)
             )
             Box(
                 Modifier
                     .align(Alignment.Center)
                     .size(34.dp)
-                    .clip(RoundedCornerShape(17.dp))
+                    .clip(AppRadius.lg)
                     .background(Color.Black.copy(alpha = 0.55f)),
                 contentAlignment = Alignment.Center
             ) {
@@ -591,7 +577,7 @@ private fun EpisodeRow(episode: Episode, onClick: () -> Unit) {
                     style = androidx.compose.ui.text.TextStyle(
                         fontFamily = FontFamily.SansSerif,
                         fontWeight = FontWeight.SemiBold,
-                        fontSize = 16.sp
+                        fontSize = 20.sp
                     ),
                     color = TextPrimary,
                     maxLines = 1,

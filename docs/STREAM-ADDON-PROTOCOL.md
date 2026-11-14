@@ -48,8 +48,17 @@ Parámetros:
 
 Campos reconocidos:
 
-- `url` (obligatorio) — enlace directo reproducible (`http/https`, `.mp4`
-  o `.m3u8`). Los campos solo-torrent (`infoHash` sin `url`) se ignoran.
+- `url` (obligatorio) — enlace directo reproducible (`.mp4` o `.m3u8`). Los
+  campos solo-torrent (`infoHash` sin `url`) se ignoran.
+  - `https://` se acepta siempre.
+  - `http://` **solo vale si el host está en tu red local**: una IP privada
+    (`10.x`, `172.16–31.x`, `192.168.x`, `169.254.x`, `127.x`), `localhost`
+    o un nombre `*.local`. Es el caso de un puente casero en
+    `http://192.168.1.20:8787`.
+  - Un enlace `http://` hacia una IP pública o un dominio de internet se
+    descarta al entrar (la app no lo muestra ni lo reproduce). Si tu CDN no
+    tiene TLS, sirve los enlaces por LAN o pon un proxy `https://` delante.
+  - Se rechazan además las URLs con usuario y contraseña (`user:pass@host`).
 - `name` / `label` — nombre del servidor (se muestra en el menú
   multi-servidor del reproductor).
 - `title` — descripción adicional (calidad, idioma…).

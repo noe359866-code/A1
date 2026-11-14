@@ -2,7 +2,7 @@
 
 <p align="center">
   <em>«Seis pantallas, una experiencia»</em> — una app de streaming <strong>solo para Android TV</strong>,
-  construida con <strong>Kotlin</strong>, <strong>Jetpack Compose for TV</strong> y <strong>Media3 ExoPlayer</strong>,
+  construida con <strong>Kotlin</strong>, <strong>Jetpack Compose</strong> y <strong>Media3 ExoPlayer</strong>,
   con un diseño inspirado en la experiencia de <strong>Apple TV / tvOS</strong>.
 </p>
 
@@ -14,7 +14,7 @@
 | --- | --- |
 | **Solo Android TV** | `AndroidManifest.xml` con `leanback` obligatorio, `touchscreen` opcional y `LEANBACK_LAUNCHER` + banner 320×180 para el launcher de TV |
 | **Diseño Apple TV** | Fondo casi negro `#0B0B0F`, acento azul `#0A84FF`, tarjetas con foco que escalan a 1.08, botones píldora, velos de degradado, tipografía de jerarquía marcada |
-| **Compose for TV** | `androidx.tv:tv-material` (`MaterialTheme`, `Card` con estados de foco D-pad) + Compose estándar con `focusRestorer` |
+| **Compose + foco D-pad** | Componentes con foco dibujados a mano (tarjetas que escalan a 1.08 con borde blanco, píldoras) y `focusRestorer` para que la fila recupere el foco al volver; tema Material 3 sobre Compose |
 | **Media3 ExoPlayer** | Reproductor estilo **Xuper TV**: franja EPG *Ahora/A continuación*, **multi-servidor** con conmutación automática ante errores, selectores de **calidad / audio / subtítulos**, **relación de aspecto y zoom** (16:9, 4:3, 21:9…), controles ±10 s, barra con búfer y auto-ocultado |
 | **Navegación por mando** | Pestañas superiores tipo tvOS (Inicio · Películas · Buscar · Ajustes), ficha de detalle y reproductor con `navigation-compose` |
 | **Perfiles como Netflix** | «¿Quién está viendo?», avatares con caras ilustradas estilo Netflix, modo infantil, *Continuar viendo* y *Mi lista* por perfil, gestión completa (crear/editar/eliminar) y cambio rápido desde la barra superior |
@@ -33,7 +33,9 @@
 4. **Detalle — transparente con tráiler de fondo** *(estilo Netflix)*: el
    **tráiler se reproduce en bucle y silenciado** detrás de la interfaz
    (con botón de sonido y chip *TRÁILER*), título grande, **match %** verde
-   («98 % para ti»), chip de tipo (**Película · Serie · Anime**), metadatos,
+   («98 % para ti», solo si el título trae valoración), chip de tipo
+   (**Película · Serie · Anime**), metadatos (sin huecos: lo que el origen no
+   trae —año, duración, nota— no se muestra),
    botones *Reproducir / Mi lista / Sonido del tráiler*, **lista de episodios**
    reproducibles en series y anime, reparto, géneros e info sobre velos de
    degradado. *Más como esto* al final.
@@ -48,10 +50,10 @@
 
 | Tecla | Inicio / listas | Reproductor |
 | --- | --- | --- |
-| **Centro / Enter** | Abrir elemento enfocado | Botón enfocado · mostrar controles |
+| **Centro / Enter** | Abrir elemento enfocado · **escribir la tecla enfocada** (buscador) | Botón enfocado · mostrar controles |
 | **◀ / ▶** | Moverse por las filas | Retroceder / avanzar **10 s** (con controles ocultos) · navegar controles |
 | **▲ / ▼** | Moverse entre filas | Mostrar controles · menús de opciones |
-| **Atrás** | Volver | Cerrar menú → ocultar controles → salir |
+| **Atrás** | Volver · **cerrar el teclado** si está abierto | Cerrar menú → ocultar controles → salir |
 
 ## 🎬 Reproductor estilo Xuper TV
 
@@ -112,11 +114,12 @@ Todo persistido en `SharedPreferences`.
 | Kotlin | 2.0.20 |
 | Android Gradle Plugin | 8.7.2 · Gradle 8.9 |
 | Jetpack Compose (BOM) | 2024.10.01 |
-| Compose for TV (`tv-material`) | 1.0.0 |
+| Compose Material 2 (`Text`) y Material 3 (tema) | versión del BOM 2024.10.01 |
 | Media3 ExoPlayer (+ HLS, ui) | 1.4.1 |
 | Navigation Compose | 2.8.4 |
 | Coil (imágenes) | 2.6.0 |
 | ZXing (códigos QR) | 3.5.3 |
+| DNS de Cloudflare (DoH) | `cloudflare-dns.com` · sin dependencias nuevas (`HttpURLConnection`) |
 | minSdk / targetSdk / compileSdk | 22 / 34 / 35 |
 
 Sin dependencias de red propias: el cliente Stremio usa `HttpURLConnection` +
@@ -124,6 +127,16 @@ Sin dependencias de red propias: el cliente Stremio usa `HttpURLConnection` +
 `CatalogRepository` y usa **streams públicos de prueba** (bucket de samples de
 Google, HLS de prueba de Apple *bipbop* y Mux) — aptos para desarrollar, no para
 distribución comercial.
+
+**Red y datos guardados** (ver [Seguridad](#-seguridad-y-datos-guardados)):
+
+- `https://` siempre; `http://` **solo hacia la red local** (`NetPolicy`).
+- Si el DNS del router falla o filtra, los nombres se resuelven con el
+  **DNS de Cloudflare por HTTPS** (`Doh`): `https://cloudflare-dns.com/dns-query`
+  (1.1.1.1), con el certificado validado **contra el nombre original**.
+- El panel de vinculación **exige el código** antes de leer o escribir nada.
+- Las claves de API se cifran con el **Android Keystore** y quedan **fuera de
+  las copias de seguridad**.
 
 ## 🌐 Catálogo real (addons de Stremio)
 
@@ -164,6 +177,10 @@ Al elegir una plataforma se carga su **catálogo real**:
 - Los títulos (`tmdb:{id}`) se enriquecen con `meta/{type}/tmdb:{id}` de
   Nuvio (reparto, géneros, clasificación por edades) y sus episodios con la
   meta de Cinemeta. Filtros *Todas / Películas / Series*.
+- La valoración sale **solo del texto visible de esa ficha** (`ScrapeText`).
+  Si la web no la muestra (estrenos futuros, por ejemplo), el título queda
+  **sin nota**: la interfaz no enseña estrella ni «% para ti», en vez de
+  inventarse un 7,0.
 - Perfiles infantiles: sección no disponible (catálogo curado local).
 
 ## 🎬 Addon interno de streams — «Omni Streams»
@@ -187,6 +204,12 @@ externos entregan.
   entrega enlaces → flujo *demo* etiquetado (chip `DEMO`).
 - Soporta `.mp4` y `.m3u8` (HLS); los enlaces solo-torrent (`infoHash`) se
   ignoran de momento.
+- **Enlaces aceptados**: `https://` siempre; `http://` solo si el host es una
+  IP de la red local (`10.x`, `172.16–31.x`, `192.168.x`, `169.254.x`,
+  `127.x`), `localhost` o un nombre `*.local`. Un enlace `http://` hacia
+  internet se descarta (el manifiesto permite tráfico sin cifrar porque
+  `network_security_config` no sabe expresar rangos de IP; el límite lo pone
+  la app).
 - **Puente listo para copiar**: `tools/omni-stream-bridge/` (Python y
   Kotlin) para que cualquier proyecto tuyo entregue sus streams a Omni TV
   — solo hay que enganchar tus resolvers en `resolve()`.
@@ -195,19 +218,34 @@ externos entregan.
 ## 🔗 Vinculación por QR (panel web embebido)
 
 La pestaña **Ajustes → «Vincular cuenta · Addons · APIs»** muestra un **QR**
-con la URL del panel **debajo** (formato `http://{ip-del-tv}:8080/`, como el
-ejemplo `https://192.124.0.10:8080/`) y el **código de emparejamiento**.
+con la URL del panel **debajo** (`http://{ip-del-tv}:8080/`) y el **código de
+emparejamiento** (`K7QW9Z`, 6 caracteres sin `0/O/1/I`, generado con
+`SecureRandom`). El QR codifica esa URL **con** el código (`?code=…`).
 
 - Al escanear el QR, el móvil abre el **portal web servido por la propia TV**
-  (`data/PairingServer.kt`, servidor HTTP embebido en el puerto 8080):
+  (`data/PairingServer.kt`, servidor HTTP embebido en el puerto 8080) y puede:
   - **Enlazar cuenta** (email),
   - **Añadir addons** (URLs de `manifest.json` de Stremio — se cargan como
     filas nuevas del catálogo en caliente),
   - **Añadir APIs** (`NOMBRE=clave`, guardadas para integraciones).
-- Todo se valida con el código de emparejamiento y se persiste en
-  `SettingsStore`; el Inicio se recarga automáticamente al recibir cambios.
-- El estado en Ajustes es en vivo: servidor, cuenta, nº de addons y APIs y
-  la última acción recibida desde el panel.
+- **El código es la única llave.** El QR lo incluye en la URL
+  (`…:8080/?code=K7QW9Z`) y por eso abre el panel ya desbloqueado; si alguien
+  escribe `http://{ip-del-tv}:8080/` a mano, solo ve el campo del código.
+  Sin el código correcto **no se lee ni se escribe nada del televisor**: ni el
+  propio código, ni la cuenta, ni los addons, ni las claves. `GET /status`
+  responde `403`, y los formularios fallan sin tocar los ajustes.
+- **Freno a la fuerza bruta**: 5 fallos seguidos desde la misma IP bloquean a
+  ese cliente 60 s (`429`). Las peticiones están acotadas (16 KB de cabecera,
+  64 KB de cuerpo → `413`) y se responden con `no-store`, `no-referrer`,
+  `nosniff` y `X-Frame-Options: DENY`.
+- Todo se valida y se persiste en `SettingsStore`; el Inicio se recarga
+  automáticamente al recibir cambios. El estado en Ajustes es en vivo:
+  servidor, cuenta, nº de addons y APIs, si las claves están cifradas y la
+  última acción recibida.
+- Limitación honesta: el panel viaja **sin TLS** por la red local. En una
+  Wi-Fi ajena (hotel, cafetería) cualquiera puede intentar el código; por eso
+  hay límite de intentos y el código se genera con `SecureRandom`. Úsalo en tu
+  red de casa.
 - QR generado con **ZXing** (`com.google.zxing:core:3.5.3`).
 
 ## 🎬 «Por estudio» (como «Browse by studio» de sweetfox.app)
@@ -227,6 +265,8 @@ pestaña Plataformas (fusión de ambos modos de explorar):
   *Populares / Mejor valoradas / Recientes* (como las pestañas de la web).
 - Los títulos (`tmdb:{id}`) se enriquecen con la meta de Nuvio (reparto,
   géneros, certificación) y sus episodios con Cinemeta. Caché por estudio.
+- Igual que en Plataformas: sin valoración en la ficha → sin nota en la app
+  (caso real: «Avengers: Doomsday» aparece como `Movie2026`, sin nota).
 
 ## 🎯 «Solo en {plataforma}» (como «Only on» de flystream.net)
 
@@ -244,37 +284,48 @@ tarjetas con cierre **«Ver todo»** → catálogo completo de esa plataforma.
 A1/
 ├── app/
 │   ├── build.gradle.kts
-│   └── src/main/
-│       ├── AndroidManifest.xml          # leanback, banner TV, sin touchscreen
-│       ├── java/com/omnitv/app/
-│       │   ├── MainActivity.kt          # ComponentActivity + keep-screen-on
-│       │   ├── OmniTvApp.kt             # NavHost + pestañas + rutas
-│       │   ├── data/
-│       │   │   ├── Models.kt            # Video, Episode, MediaRow, StreamSource
-│       │   │   ├── Profile.kt           # perfiles + avatarRes (8 caras)
-│       │   │   ├── ProfileStore.kt      # persistencia de perfiles (SharedPreferences)
-│       │   │   ├── SettingsStore.kt     # ajustes + vinculación (cuenta/addons/APIs)
-│       │   │   ├── CatalogRepository.kt # catálogo demo + caché remoto + episodios
-│       │   │   ├── StremioClient.kt     # protocolo de addons Stremio (Cinemeta/Nuvio)
-│       │   │   ├── RemoteCatalog.kt     # filas remotas, plataformas, estudios, búsqueda
-│       │   │   ├── CinejoyClient.kt     # catálogo por plataforma (cinejoy.pk)
-│       │   │   ├── SweetFoxClient.kt    # catálogo por estudio (sweetfox.app)
-│       │   │   ├── Providers.kt         # 17 plataformas (logos TMDB)
-│       │   │   ├── Studios.kt           # 24 estudios (logos TMDB)
-│       │   │   └── PairingServer.kt     # servidor web :8080 + portal de vinculación
-│       │   ├── player/
-│       │   │   ├── PlayerScreen.kt      # reproductor estilo Xuper TV (Media3)
-│       │   │   └── PlayerUi.kt          # vidrio, píldoras, menús, EPG chip
-│       │   └── ui/
-│       │       ├── theme/               # Color, AppType (tipografía), Theme
-│       │       ├── components/          # Cards, PillButton, HeroBanner, OnlyOnSection…
-│       │       │                        # ProfileComponents, StudioSection
-│       │       └── screens/             # Perfiles, Home, Detail, Plataformas,
-│       │                                # StudioCatalog, Search, Settings…
-│       └── res/
-│           ├── drawable/                # tv_banner, iconos y 8 caras de avatar
-│           ├── mipmap*/                 # icono adaptativo (lupa con 6 puntos)
-│           └── values/                  # strings, colors, themes
+│   └── src/
+│       ├── main/
+│       │   ├── AndroidManifest.xml      # leanback, banner TV, sin touchscreen
+│       │   ├── java/com/omnitv/app/
+│       │   │   ├── MainActivity.kt      # ComponentActivity + keep-screen-on
+│       │   │   ├── OmniTvApp.kt         # NavHost + pestañas + rutas
+│       │   │   ├── data/
+│       │   │   │   ├── Models.kt            # Video, Episode, MediaRow, StreamSource
+│       │   │   │   ├── Profile.kt           # perfiles + avatarRes (8 caras)
+│       │   │   │   ├── ProfileStore.kt      # persistencia de perfiles (SharedPreferences)
+│       │   │   │   ├── SettingsStore.kt     # ajustes + vinculación (cuenta/addons/APIs)
+│       │   │   │   ├── CatalogRepository.kt # catálogo demo + caché remoto + episodios
+│       │   │   │   ├── StremioClient.kt     # protocolo de addons Stremio (Cinemeta/Nuvio)
+│       │   │   │   ├── RemoteCatalog.kt     # filas remotas, plataformas, estudios, búsqueda
+│       │   │   │   ├── CinejoyClient.kt     # catálogo por plataforma (cinejoy.pk)
+│       │   │   │   ├── SweetFoxClient.kt    # catálogo por estudio (sweetfox.app)
+│       │   │   │   ├── ScrapeText.kt        # lectura del HTML: un dato ausente no se inventa
+│       │   │   │   ├── Providers.kt         # 17 plataformas (logos TMDB)
+│       │   │   │   ├── Studios.kt           # 24 estudios (logos TMDB)
+│       │   │   │   ├── NetPolicy.kt         # URLs aceptadas (https; http solo en la LAN)
+│       │   │   │   ├── Doh.kt               # DNS de Cloudflare por HTTPS (red de seguridad)
+│       │   │   │   ├── SecretBox.kt         # cifrado de secretos (Android Keystore AES-GCM)
+│       │   │   │   ├── PairingServer.kt     # servidor web :8080 (sockets)
+│       │   │   │   ├── PairingRouter.kt     # reglas del panel: sin código no hay datos
+│       │   │   │   ├── PairingPortal.kt     # HTML del panel (bloqueado y desbloqueado)
+│       │   │   │   └── PairingHttp.kt       # lectura HTTP, formularios, límite de intentos
+│       │   │   ├── player/
+│       │   │   │   ├── PlayerScreen.kt      # reproductor estilo Xuper TV (Media3)
+│       │   │   │   └── PlayerUi.kt          # vidrio, píldoras, menús, EPG chip
+│       │   │   └── ui/
+│       │   │       ├── theme/               # Color, AppType (tipografía), Theme
+│       │   │       ├── components/          # Cards, PillButton, HeroBanner, OnlyOnSection…
+│       │   │       │                        # ProfileComponents, StudioSection
+│       │   │       └── screens/             # Perfiles, Home, Detail, Plataformas,
+│       │   │                                # StudioCatalog, Search, Settings…
+│       │   └── res/
+│       │       ├── drawable/                # tv_banner, iconos y 8 caras de avatar
+│       │       ├── mipmap*/                 # icono adaptativo (lupa con 6 puntos)
+│       │       ├── values/                  # strings, colors, themes
+│       │       └── xml/                     # backup_rules / data_extraction_rules
+│       └── test/java/com/omnitv/app/data/   # tests unitarios de JVM (sin Android)
+├── .github/workflows/ci.yml             # tests + assembleDebug en cada push
 ├── docs/XUPER-TV-RESEARCH.md            # investigación del reproductor Xuper TV
 ├── gradle/libs.versions.toml            # catálogo de versiones
 └── gradlew / gradle/wrapper/            # Gradle 8.9
@@ -294,10 +345,101 @@ CLI con el SDK instalado.
 
 # Lint del contrato de TV
 ./gradlew lint
+
+# Tests unitarios de JVM (red, panel de vinculación y parsers)
+./gradlew testDebugUnitTest
 ```
+
+La integración continua (`.github/workflows/ci.yml`) ejecuta los tests y
+`assembleDebug` en cada push y pull request.
 
 > **Emulador:** crea un AVD con perfil *Android TV (1080p)*, API 22+ (recomendado 34).
 > La app solo aparece en el launcher de TV (categoría `LEANBACK_LAUNCHER`).
+
+## 🔐 Seguridad y datos guardados
+
+Lo que la app promete es lo que hace:
+
+| Dato | Dónde vive | Cifrado | Copia de seguridad |
+| --- | --- | --- | --- |
+| Claves de API (`NOMBRE=clave`) | `SharedPreferences` `omni_tv_settings` | **AES-256-GCM con clave del Android Keystore** (`SecretBox`) en Android 6.0+ | Excluidas |
+| Cuenta enlazada, addons y addons de streams | `omni_tv_settings` | No (URLs y email) | Excluidas |
+| Código de emparejamiento | `omni_tv_settings` | No | Excluido |
+| Perfiles y *Mi lista* | `SharedPreferences` de perfiles | No | Incluidas (no contienen secretos) |
+
+- **`allowBackup` sigue activo**, pero `res/xml/backup_rules.xml` (API 30-) y
+  `res/xml/data_extraction_rules.xml` (API 31+) **excluyen el fichero
+  `omni_tv_settings.xml`** tanto de la copia en la nube como del traslado a un
+  dispositivo nuevo: los secretos nunca salen del televisor.
+- El cifrado usa una clave que **no sale del Keystore**; el valor guardado es
+  hexadecimal (`longitud-IV · IV · texto cifrado + etiqueta GCM`). Las claves
+  antiguas en texto plano se **migran** al primer arranque.
+- **Android 5.1 (API 22) no tiene Keystore AES**: allí las claves se guardan sin
+  cifrar y la interfaz lo dice («Sin cifrar») en lugar de prometer un cifrado
+  que no existe. Desde Android 6.0 se muestra «Cifradas en el televisor».
+- Si el dato cifrado no se puede abrir (copia restaurada en otro aparato, dato
+  alterado), la app arranca **sin claves** en vez de con basura: hay que
+  volver a introducirlas.
+- El panel de vinculación y la política de red (`NetPolicy`) se describen en
+  sus secciones. `http://` sin cifrar nunca sale de la red local.
+
+## 🌐 DNS de Cloudflare (DoH)
+
+En Android TV hay routers de operador, cajas y Wi-Fi de hotel donde el DNS
+falla, filtra o responde lento: los addons se quedan cargando sin decir por
+qué. Omni TV resuelve los nombres con el **DNS de Cloudflare por HTTPS**
+(DNS over HTTPS), que viaja cifrado y no depende del DNS del router.
+
+- **Endpoint**: `https://cloudflare-dns.com/dns-query` con
+  `Accept: application/dns-json` (el JSON documentado de 1.1.1.1), consultas
+  `A` y `AAAA`. Sin librerías nuevas: `HttpURLConnection` + `org.json`.
+- **Cuándo**: solo como **red de seguridad**. Cada cliente (Cinemeta/Nuvio,
+  addons de streams, cinejoy, sweetfox) intenta primero su conexión normal; si
+  el nombre no resuelve, reintenta resolviendo por Cloudflare.
+- **Solo `https://`**. Un `http://` nunca sale por el resolutor público:
+  `NetPolicy` solo lo permite en la red local, donde no hace falta.
+- **El certificado se valida contra el nombre original**, no contra la IP
+  (SNI + verificador del sistema). Saber la IP de Cloudflare no permite que
+  nadie se haga pasar por el servidor.
+- **Si DoH falla** (sin red, puerto bloqueado, respuesta rara), la app se queda
+  como estaba: sin datos. Nunca se pintan datos de un tercero.
+- **Caché** en memoria (64 nombres) con el TTL que anuncia el DNS, acotado
+  entre 30 s y 5 min. Los errores (`Status != 0`, CNAME, texto) se descartan.
+- **Interruptor**: Ajustes → **Red → «DNS de Cloudflare»** (activo por
+  defecto). Apagado = comportamiento clásico, solo el DNS del sistema.
+
+## ⌨️ Buscar con el mando (teclado propio)
+
+Con un mando y sin teclado físico, buscar era el punto más frágil de la app: el
+campo recibía el foco, se pulsaba OK y **no pasaba nada** —el IME de Android TV
+no se abre de forma fiable desde Compose, y varía según el fabricante—. Se
+resolvió con un teclado de la propia app.
+
+- **Cuatro filas de caracteres** (37 teclas): `1234567890` · `QWERTYUIOP` ·
+  `ASDFGHJKLÑ` · `ZXCVBNM`, más ESPACIO / BORRAR / LISTO en una quinta fila.
+  Mayúsculas y con Ñ, para escribir nombres propios sin pelear con el mando.
+  Sin teclas de tildes: se resuelven en la búsqueda (ver abajo), y cada tecla
+  que sobra son varias pulsaciones de D-pad de menos.
+- **Se abre solo** al entrar en Buscar (el foco va al campo y de ahí a la
+  primera tecla), con **animación de entrada** desde abajo. Se cierra con
+  LISTO o con **Atrás**, y en ambos casos el foco vuelve al campo.
+- **Se superpone** a la mitad inferior en vez de empujar el contenido: con 342 dp
+  de alto no cabe debajo del buscador sin dejar los resultados en una franja
+  inútil. Así se sigue viendo lo que va saliendo mientras se escribe; al cerrar,
+  la lista completa ocupa la pantalla.
+- **Teclas de 54 dp** (por encima del mínimo de 48 para un objetivo de mando),
+  filas centradas en columna para que el D-pad baje en vertical y no en diagonal.
+- **La búsqueda ignora acentos y mayúsculas**: «accion» encuentra «Acción» y
+  «PELICULAS» encuentra «Películas» (`SearchText`). Es lo que hace prescindible
+  el teclado de tildes.
+- **No captura teclas globalmente**: el foco vive dentro del teclado, así que un
+  teclado físico o uno Bluetooth siguen escribiendo en el campo sin estorbar, y
+  las teclas del reproductor siguen funcionando donde deben.
+
+El modelo (`TvKeypad`) es lógica pura y se prueba con tests de JVM: qué escribe
+cada tecla, que BORRAR con el campo vacío no rompa nada, que no se acumulen
+espacios (pulsar ESPACIO dos veces con el mando es lo más habitual) y el tope de
+64 caracteres.
 
 ## 🍎 Decisiones de diseño (estética Apple TV)
 
@@ -310,8 +452,31 @@ CLI con el SDK instalado.
   y los botones primarios.
 - **Botones píldora** con icono (▶ Reproducir / ⓘ Más información) idénticos en
   héroe, detalle y reproductor.
-- **Tipografía**: pesos altos, interletraje cerrado y jerarquía muy marcada
-  (46 / 34 / 21 / 16 / 14 sp).
+- **Tipografía de 10 pies**: pesos altos, interletraje cerrado y jerarquía muy
+  marcada (54 / 40 / 27 / 21 / 18 / 15 sp). El cuerpo son 21 sp, no los 16 de
+  móvil: a 2–3 m del sofá, 16 sp no se lee. El mínimo de la app son 15 sp.
+- **Foco siempre visible**: anillo blanco de 3 dp (no solo cambio de fondo) en
+  tarjetas, pestañas, chips, interruptores y botones, más escala de 1,08 y
+  sombra al enfocar. Regla única: **foco = blanco, seleccionado = azul**; si el
+  relleno es claro (botón primario, pestaña activa) el anillo va oscuro.
+- **Sistema de diseño** (`ui/theme/Dimens.kt`): cuatro radios de esquina
+  (4 / 8 / 14 / 22 dp) más cápsula, una escala de espaciado y un solo grosor de
+  foco. Antes había dieciséis radios y cuatro grosores distintos elegidos a ojo.
+- **Un componente por patrón**: `TvChip` sustituye las cuatro copias de chip que
+  había (sugerencias, filtros de plataforma, filtros de estudio, temporadas) con
+  tres rellenos y dos colores distintos.
+- **Contraste**: el texto atenuado usa `TextMuted` (≈ 6:1 sobre el fondo); el
+  gris `TextTertiary` (2,5:1) se queda solo para adornos no textuales.
+- **El mando manda**: cada pantalla entra con el foco donde el usuario espera
+  («Reproducir» en la ficha, el campo en Buscar, el primer perfil, el héroe en
+  Inicio), y las filas sin acción propia no son focos alcanzables.
+- **Teclado propio, no el del sistema**: el buscador trae su teclado en pantalla
+  (`TvKeyboard`). En Android TV el IME no se abre de forma fiable con Compose, y
+  el usuario acababa pulsando «Atrás» a ciegas; con teclado propio se ve siempre
+  y responde al D-pad.
+- **Zona segura**: 48 dp de margen (el overscan del 5 % de los paneles) para
+  botones, textos y rejillas; rejillas de 5 columnas y héroe proporcional al
+  alto de pantalla.
 
 ## 📄 Licencia
 

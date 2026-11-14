@@ -7,6 +7,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -16,7 +17,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -38,14 +38,13 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
+import androidx.media3.common.Format
 import androidx.media3.common.MediaItem as ExoMediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
@@ -56,7 +55,7 @@ import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
-import androidx.tv.material.Text
+import androidx.compose.material.Text
 import coil.compose.AsyncImage
 import com.omnitv.app.R
 import com.omnitv.app.data.CatalogRepository
@@ -69,6 +68,12 @@ import com.omnitv.app.ui.components.MetaLine
 import com.omnitv.app.ui.components.PillButton
 import com.omnitv.app.ui.components.SeekBar
 import com.omnitv.app.ui.components.formatTime
+import com.omnitv.app.ui.theme.AppRadius
+import com.omnitv.app.ui.theme.AppType
+import com.omnitv.app.ui.theme.LiveAccent
+import com.omnitv.app.ui.theme.TextMuted
+import com.omnitv.app.ui.theme.TextPrimary
+import com.omnitv.app.ui.theme.TextSecondary
 import kotlinx.coroutines.delay
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -90,7 +95,7 @@ private enum class AspectMode(val label: String, val ratio: Float, val resizeMod
     R21_9("21:9", 21f / 9f, AspectRatioFrameLayout.RESIZE_MODE_ZOOM)
 }
 
-private data class TrackChoice(val group: TrackGroup, val index: Int)
+private data class TrackChoice(val group: TrackGroup, val index: Int, val format: Format)
 
 private fun nowClock(): String =
     SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date())
@@ -243,7 +248,7 @@ fun PlayerScreen(
                                 val diff = abs(height - target)
                                 if (diff < bestDiff) {
                                     bestDiff = diff
-                                    best = TrackChoice(group.mediaTrackGroup, i)
+                                    best = TrackChoice(group.mediaTrackGroup, i, group.getTrackFormat(i))
                                 }
                             }
                         }
@@ -259,7 +264,7 @@ fun PlayerScreen(
                                 for (i in 0 until group.length) {
                                     if (!group.isTrackSupported(i)) continue
                                     subtitlesOn = true
-                                    textChoice = TrackChoice(group.mediaTrackGroup, i)
+                                    textChoice = TrackChoice(group.mediaTrackGroup, i, group.getTrackFormat(i))
                                     applyTrack(C.TRACK_TYPE_TEXT, textChoice, disable = false)
                                     return@run
                                 }
@@ -395,8 +400,8 @@ fun PlayerScreen(
                         append(if (format.height > 0) "${format.height}p" else (format.label ?: "Pista ${i + 1}"))
                         if (format.bitrate > 0) append(" · ${format.bitrate / 1000} kbps")
                     }
-                    add(PlayerOption(label, videoChoice == TrackChoice(group.mediaTrackGroup, i)) {
-                        videoChoice = TrackChoice(group.mediaTrackGroup, i)
+                    add(PlayerOption(label, videoChoice == TrackChoice(group.mediaTrackGroup, i, format)) {
+                        videoChoice = TrackChoice(group.mediaTrackGroup, i, format)
                         applyTrack(C.TRACK_TYPE_VIDEO, videoChoice)
                         menu = MenuKind.NONE
                     })
@@ -418,8 +423,8 @@ fun PlayerScreen(
                     if (!group.isTrackSupported(i)) continue
                     val format = group.getTrackFormat(i)
                     val label = format.label ?: format.language ?: "Pista ${i + 1}"
-                    add(PlayerOption(label, audioChoice == TrackChoice(group.mediaTrackGroup, i)) {
-                        audioChoice = TrackChoice(group.mediaTrackGroup, i)
+                    add(PlayerOption(label, audioChoice == TrackChoice(group.mediaTrackGroup, i, format)) {
+                        audioChoice = TrackChoice(group.mediaTrackGroup, i, format)
                         applyTrack(C.TRACK_TYPE_AUDIO, audioChoice)
                         menu = MenuKind.NONE
                     })
@@ -442,9 +447,9 @@ fun PlayerScreen(
                     if (!group.isTrackSupported(i)) continue
                     val format = group.getTrackFormat(i)
                     val label = format.label ?: format.language ?: "Subtítulos ${i + 1}"
-                    add(PlayerOption(label, subtitlesOn && textChoice == TrackChoice(group.mediaTrackGroup, i)) {
+                    add(PlayerOption(label, subtitlesOn && textChoice == TrackChoice(group.mediaTrackGroup, i, format)) {
                         subtitlesOn = true
-                        textChoice = TrackChoice(group.mediaTrackGroup, i)
+                        textChoice = TrackChoice(group.mediaTrackGroup, i, format)
                         applyTrack(C.TRACK_TYPE_TEXT, textChoice, disable = false)
                         menu = MenuKind.NONE
                     })
@@ -474,7 +479,7 @@ fun PlayerScreen(
         PlayerOption(SettingsStore.speedLabel(preset), speed == preset) {
             speed = preset
             player.setPlaybackSpeed(preset)
-            SettingsStore.setPlaybackSpeed(preset)
+            SettingsStore.savePlaybackSpeed(preset)
             menu = MenuKind.NONE
             toast = "Velocidad ${SettingsStore.speedLabel(preset)}"
         }
@@ -493,8 +498,8 @@ fun PlayerScreen(
     }
 
     val qualityLabel = videoChoice?.let { choice ->
-        val format = choice.group.getTrackFormat(choice.index)
-        if (format.height > 0) "${format.height}p" else "Manual"
+        val height = choice.format.height
+        if (height > 0) "${height}p" else "Manual"
     } ?: "Auto"
 
     // ---------------- Interfaz ----------------
@@ -552,15 +557,25 @@ fun PlayerScreen(
                     this.player = player
                     useController = false
                     setKeepContentOnPlayerReset(true)
+                    // La vista de vídeo no debe quedarse el foco del D-pad: los
+                    // controles (y el Box raíz) son quienes lo manejan.
+                    isFocusable = false
+                    isFocusableInTouchMode = false
                 }
             },
             update = { view ->
                 view.player = player
                 view.resizeMode = aspectMode.resizeMode
-                // 0f = relación natural del vídeo
-                view.setAspectRatio(if (aspectMode.ratio > 0f) aspectMode.ratio else 0f)
             },
-            modifier = Modifier.fillMaxSize()
+            // Las relaciones fijas (16:9, 4:3, 21:9) recortan con aspectRatio;
+            // los modos Ajustar/Llenar/Zoom dejan la relación natural del vídeo.
+            modifier = if (aspectMode.ratio > 0f) {
+                Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(aspectMode.ratio)
+            } else {
+                Modifier.fillMaxSize()
+            }
         )
 
         // Botón central grande al pausar (como Xuper TV)
@@ -584,7 +599,7 @@ fun PlayerScreen(
             ) {
                 LoadingSpinner()
                 Spacer(Modifier.height(14.dp))
-                Text("Cargando…", style = fontSize15(), color = Color(0xFF8E8E93))
+                Text("Cargando…", style = fontSize15(), color = TextSecondary)
             }
         }
 
@@ -613,7 +628,7 @@ fun PlayerScreen(
                 ) {
                     Text("No se pudo reproducir el vídeo", style = fontSize20(), color = Color.White)
                     Spacer(Modifier.height(8.dp))
-                    Text(hasError ?: "", style = fontSize13(), color = Color(0xFF8E8E93))
+                    Text(hasError ?: "", style = fontSize13(), color = TextSecondary)
                     Spacer(Modifier.height(22.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
                         PillButton(
@@ -690,14 +705,14 @@ fun PlayerScreen(
                         Spacer(Modifier.height(8.dp))
                         // Franja EPG estilo Xuper TV: qué se emite ahora y después
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            EpgChip("AHORA", Color(0xFFE50914))
+                            EpgChip("AHORA", LiveAccent)
                             Spacer(Modifier.width(8.dp))
-                            Text(video.title, style = fontSize13(), color = Color(0xFFE5E5EA))
+                            Text(video.title, style = fontSize13(), color = TextPrimary)
                             nextVideo?.let {
                                 Spacer(Modifier.width(16.dp))
-                                EpgChip("A CONTINUACIÓN", Color(0xFF636366))
+                                EpgChip("A CONTINUACIÓN", TextMuted)
                                 Spacer(Modifier.width(8.dp))
-                                Text(it.title, style = fontSize13(), color = Color(0xFF8E8E93))
+                                Text(it.title, style = fontSize13(), color = TextSecondary)
                             }
                         }
                     }
@@ -722,7 +737,7 @@ fun PlayerScreen(
                                 modifier = Modifier
                                     .width(200.dp)
                                     .height(112.dp)
-                                    .clip(RoundedCornerShape(10.dp))
+                                    .clip(AppRadius.sm)
                             )
                             Spacer(Modifier.width(20.dp))
                             Column {
@@ -733,7 +748,7 @@ fun PlayerScreen(
                                 Text(
                                     video.description,
                                     style = fontSize13(),
-                                    color = Color(0xFF8E8E93),
+                                    color = TextSecondary,
                                     maxLines = 2,
                                     overflow = TextOverflow.Ellipsis,
                                     modifier = Modifier.fillMaxWidth()
@@ -767,11 +782,11 @@ fun PlayerScreen(
                                         modifier = Modifier
                                             .width(132.dp)
                                             .height(74.dp)
-                                            .clip(RoundedCornerShape(10.dp))
+                                            .clip(AppRadius.sm)
                                     )
                                     Spacer(Modifier.width(16.dp))
                                     Column {
-                                        EpgChip("A CONTINUACIÓN", Color(0xFFE50914))
+                                        EpgChip("A CONTINUACIÓN", LiveAccent)
                                         Spacer(Modifier.height(6.dp))
                                         Text(
                                             next.title,
@@ -785,7 +800,7 @@ fun PlayerScreen(
                                             if (SettingsStore.autoNext) "Empieza en $nextCountdown s"
                                             else "Listo para reproducir",
                                             style = fontSize13(),
-                                            color = Color(0xFF8E8E93)
+                                            color = TextSecondary
                                         )
                                     }
                                 }
@@ -847,7 +862,7 @@ fun PlayerScreen(
                 ) {
                     // Tiempos + barra de progreso
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(formatTime(positionMs), style = fontSize13(), color = Color(0xFF8E8E93))
+                        Text(formatTime(positionMs), style = fontSize13(), color = TextSecondary)
                         Spacer(Modifier.width(16.dp))
                         SeekBar(
                             positionMs = positionMs,
@@ -859,7 +874,7 @@ fun PlayerScreen(
                         Text(
                             if (durationMs > 0) "-${formatTime(durationMs - positionMs)}" else "--:--",
                             style = fontSize13(),
-                            color = Color(0xFF8E8E93)
+                            color = TextSecondary
                         )
                     }
 
@@ -956,25 +971,14 @@ fun PlayerScreen(
 }
 
 /* -------------------------------------------------------------------------- */
-/*  Estilos tipográficos locales del reproductor                              */
+/*  Estilos tipográficos                                                        */
 /* -------------------------------------------------------------------------- */
 
-private fun fontSize22() = androidx.compose.ui.text.TextStyle(
-    fontFamily = FontFamily.SansSerif, fontWeight = FontWeight.SemiBold, fontSize = 22.sp
-)
-
-private fun fontSize20() = androidx.compose.ui.text.TextStyle(
-    fontFamily = FontFamily.SansSerif, fontWeight = FontWeight.SemiBold, fontSize = 20.sp
-)
-
-private fun fontSize17() = androidx.compose.ui.text.TextStyle(
-    fontFamily = FontFamily.SansSerif, fontWeight = FontWeight.SemiBold, fontSize = 17.sp
-)
-
-private fun fontSize15() = androidx.compose.ui.text.TextStyle(
-    fontFamily = FontFamily.SansSerif, fontWeight = FontWeight.Medium, fontSize = 15.sp
-)
-
-private fun fontSize13() = androidx.compose.ui.text.TextStyle(
-    fontFamily = FontFamily.SansSerif, fontWeight = FontWeight.Medium, fontSize = 13.sp
-)
+// El reproductor tenía sus propios tamaños (26/24/21/19/18 sp) al margen del
+// tema, así que cualquier ajuste de la escala se olvidaba de esta pantalla.
+// Ahora usa `AppType`, igual que el resto de la app.
+private fun fontSize22() = AppType.sectionTitle   // títulos destacados
+private fun fontSize20() = AppType.body           // texto principal
+private fun fontSize17() = AppType.body           // títulos de las fichas
+private fun fontSize15() = AppType.metadata       // avisos y estados
+private fun fontSize13() = AppType.metadata       // pies y segundas líneas

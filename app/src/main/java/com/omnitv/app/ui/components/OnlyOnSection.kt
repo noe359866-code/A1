@@ -3,7 +3,6 @@ package com.omnitv.app.ui.components
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.focusable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -18,7 +17,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -37,12 +35,13 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.tv.material.Text
+import androidx.compose.material.Text
 import coil.compose.AsyncImage
 import com.omnitv.app.data.RemoteCatalog
 import com.omnitv.app.data.StreamingProvider
 import com.omnitv.app.data.Video
 import com.omnitv.app.ui.theme.Accent
+import com.omnitv.app.ui.theme.AppRadius
 import com.omnitv.app.ui.theme.AppType
 import com.omnitv.app.ui.theme.GlassFill
 import com.omnitv.app.ui.theme.TextPrimary
@@ -82,7 +81,7 @@ fun OnlyOnSection(
                 style = androidx.compose.ui.text.TextStyle(
                     fontFamily = androidx.compose.ui.text.font.FontFamily.SansSerif,
                     fontWeight = FontWeight.Bold,
-                    fontSize = 22.sp
+                    fontSize = 26.sp
                 ),
                 color = Accent
             )
@@ -148,13 +147,17 @@ private fun ProviderLogoChip(
     Box(
         Modifier
             .graphicsLayer { scaleX = scale; scaleY = scale }
-            .clip(RoundedCornerShape(12.dp))
+            .clip(AppRadius.md)
             .background(if (selected) GlassFill.copy(alpha = 0.95f) else GlassFill)
             .then(
+                // Regla única de la app: **foco = blanco** (siempre 3 dp),
+                // **selección = azul**. Antes el foco azul y el blanco se
+                // alternaban según el componente y no había forma de saber si
+                // un elemento estaba enfocado o seleccionado.
                 when {
-                    focused -> Modifier.border(2.dp, Color.White, RoundedCornerShape(12.dp))
-                    selected -> Modifier.border(2.dp, Accent, RoundedCornerShape(12.dp))
-                    else -> Modifier.border(1.dp, Color.White.copy(alpha = 0.10f), RoundedCornerShape(12.dp))
+                    focused -> Modifier.border(3.dp, Color.White, AppRadius.md)
+                    selected -> Modifier.border(2.dp, Accent, AppRadius.md)
+                    else -> Modifier.border(1.dp, Color.White.copy(alpha = 0.10f), AppRadius.md)
                 }
             )
             .clickable(
@@ -183,11 +186,11 @@ private fun MoreChip(onClick: () -> Unit) {
     var focused by remember { mutableStateOf(false) }
     Box(
         Modifier
-            .clip(RoundedCornerShape(12.dp))
+            .clip(AppRadius.md)
             .background(if (focused) Accent else GlassFill)
             .then(
-                if (focused) Modifier.border(2.dp, Color.White, RoundedCornerShape(12.dp))
-                else Modifier.border(1.dp, Color.White.copy(alpha = 0.10f), RoundedCornerShape(12.dp))
+                if (focused) Modifier.border(3.dp, Color.White, AppRadius.md)
+                else Modifier.border(1.dp, Color.White.copy(alpha = 0.10f), AppRadius.md)
             )
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
@@ -214,11 +217,12 @@ private fun SeeAllCard(provider: StreamingProvider, onClick: () -> Unit) {
         Modifier
             .size(160.dp, 140.dp)
             .graphicsLayer { scaleX = if (focused) 1.05f else 1f; scaleY = if (focused) 1.05f else 1f }
-            .clip(RoundedCornerShape(12.dp))
+            .clip(AppRadius.md)
             .background(if (focused) Accent.copy(alpha = 0.35f) else GlassFill)
             .then(
-                if (focused) Modifier.border(2.dp, Accent, RoundedCornerShape(12.dp))
-                else Modifier.border(1.dp, Color.White.copy(alpha = 0.10f), RoundedCornerShape(12.dp))
+                // Foco = blanco; el azul se queda como relleno de «activo».
+                if (focused) Modifier.border(3.dp, Color.White, AppRadius.md)
+                else Modifier.border(1.dp, Color.White.copy(alpha = 0.10f), AppRadius.md)
             )
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
@@ -236,7 +240,7 @@ private fun SeeAllCard(provider: StreamingProvider, onClick: () -> Unit) {
                 style = androidx.compose.ui.text.TextStyle(
                     fontFamily = androidx.compose.ui.text.font.FontFamily.SansSerif,
                     fontWeight = FontWeight.Bold,
-                    fontSize = 13.sp
+                    fontSize = 17.sp
                 ),
                 color = TextSecondary,
                 textAlign = TextAlign.Center,

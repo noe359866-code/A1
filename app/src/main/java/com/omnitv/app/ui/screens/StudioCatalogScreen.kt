@@ -1,10 +1,6 @@
 package com.omnitv.app.ui.screens
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.focusable
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -19,7 +15,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -28,15 +23,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.focus.onFocusChanged
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import androidx.tv.material.Text
+import androidx.compose.material.Text
 import coil.compose.AsyncImage
 import com.omnitv.app.R
 import com.omnitv.app.data.RemoteCatalog
@@ -45,10 +34,9 @@ import com.omnitv.app.data.Video
 import com.omnitv.app.data.VideoType
 import com.omnitv.app.ui.components.CircleIconButton
 import com.omnitv.app.ui.components.PosterCard
-import com.omnitv.app.ui.theme.Accent
+import com.omnitv.app.ui.components.TvChip
 import com.omnitv.app.ui.theme.AppType
 import com.omnitv.app.ui.theme.Background
-import com.omnitv.app.ui.theme.GlassFill
 import com.omnitv.app.ui.theme.TextPrimary
 import com.omnitv.app.ui.theme.TextSecondary
 
@@ -124,13 +112,21 @@ fun StudioCatalogScreen(
             Spacer(Modifier.height(22.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 listOf("Todas", "Películas", "Series").forEach { option ->
-                    StudioFilterChip(option, selected = typeFilter == option) { typeFilter = option }
+                    TvChip(
+                        text = option,
+                        selected = typeFilter == option,
+                        onClick = { typeFilter = option }
+                    )
                 }
             }
             Spacer(Modifier.height(10.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 listOf("Populares", "Mejor valoradas", "Recientes").forEach { option ->
-                    StudioFilterChip(option, selected = sortBy == option) { sortBy = option }
+                    TvChip(
+                        text = option,
+                        selected = sortBy == option,
+                        onClick = { sortBy = option }
+                    )
                 }
             }
 
@@ -157,7 +153,7 @@ fun StudioCatalogScreen(
                 }
             } else {
                 LazyVerticalGrid(
-                    columns = GridCells.Fixed(4),
+                    columns = GridCells.Fixed(5),
                     contentPadding = PaddingValues(bottom = 56.dp),
                     horizontalArrangement = Arrangement.spacedBy(20.dp),
                     verticalArrangement = Arrangement.spacedBy(24.dp)
@@ -179,44 +175,7 @@ fun StudioCatalogScreen(
             onClick = onBack,
             modifier = Modifier
                 .align(Alignment.TopStart)
-                .padding(28.dp)
-        )
-    }
-}
-
-@Composable
-private fun StudioFilterChip(text: String, selected: Boolean, onClick: () -> Unit) {
-    var focused by remember { mutableStateOf(false) }
-    Box(
-        Modifier
-            .clip(RoundedCornerShape(999.dp))
-            .background(
-                when {
-                    selected -> Accent
-                    focused -> GlassFill.copy(alpha = 0.9f)
-                    else -> GlassFill
-                }
-            )
-            .then(
-                if (focused) Modifier.border(1.5.dp, Color.White.copy(alpha = 0.6f), RoundedCornerShape(999.dp))
-                else Modifier
-            )
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null,
-                onClick = onClick
-            )
-            .onFocusChanged { focused = it.isFocused }
-            .padding(horizontal = 18.dp, vertical = 9.dp)
-    ) {
-        Text(
-            text,
-            style = androidx.compose.ui.text.TextStyle(
-                fontFamily = FontFamily.SansSerif,
-                fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
-                fontSize = 13.sp
-            ),
-            color = TextPrimary
+                .padding(48.dp)
         )
     }
 }

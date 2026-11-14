@@ -35,7 +35,16 @@ object StremioClient {
 
     /* ------------------------------- HTTP -------------------------------- */
 
-    private fun httpJson(url: String): JSONObject? = runCatching {
+    /**
+     * Descarga [url] como JSON. Primero por el DNS normal; si el nombre no
+     * resuelve, reintenta con el DNS de Cloudflare ([Doh]).
+     */
+    private fun httpJson(url: String): JSONObject? =
+        httpJsonDirect(url) ?: Doh.retry(url)?.let { body ->
+            runCatching { JSONObject(body) }.getOrNull()
+        }
+
+    private fun httpJsonDirect(url: String): JSONObject? = runCatching {
         val connection = URL(url).openConnection() as HttpURLConnection
         try {
             connection.connectTimeout = 10_000
@@ -107,7 +116,7 @@ object StremioClient {
         val rating = meta.optString("imdbRating", "").toDoubleOrNull()
             ?: meta.optJSONObject("app_extras")?.optJSONObject("ratings")
                 ?.optJSONObject("imdb")?.optString("rating")?.toDoubleOrNull()
-            ?: 7.0
+            ?: 0.0 // sin valoración en el addon: no se inventa (la interfaz la oculta)
 
         // Series de animación → anime (para el chip de tipo)
         val type = when {

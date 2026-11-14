@@ -1,5 +1,6 @@
 package com.omnitv.app.data
 
+import androidx.compose.runtime.mutableStateOf
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -74,7 +75,9 @@ class ProjectStreamAddon(
             for (i in 0 until array.length()) {
                 val item = array.optJSONObject(i) ?: continue
                 val url = item.optString("url").ifEmpty { item.optString("externalUrl") }
-                if (url.isBlank() || !url.startsWith("http")) continue // infoHash/torrent: no soportado
+                // Sin url (infoHash/torrent) no hay soporte; y los enlaces deben cumplir la
+                // política de red: https, o http solo dentro de la red local
+                if (url.isBlank() || !NetPolicy.isAllowed(url)) continue
                 val rawName = item.optString("name", item.optString("label", name))
                 val title = item.optString("title", "")
                 val quality = item.optString("quality", "").ifEmpty {
@@ -96,7 +99,16 @@ class ProjectStreamAddon(
         }
     }
 
-    private fun httpJson(url: String): JSONObject? = runCatching {
+    /**
+     * Descarga [url] como JSON. Primero por el DNS normal; si el nombre no
+     * resuelve, reintenta con el DNS de Cloudflare ([Doh]).
+     */
+    private fun httpJson(url: String): JSONObject? =
+        httpJsonDirect(url) ?: Doh.retry(url)?.let { body ->
+            runCatching { JSONObject(body) }.getOrNull()
+        }
+
+    private fun httpJsonDirect(url: String): JSONObject? = runCatching {
         val connection = URL(url).openConnection() as HttpURLConnection
         try {
             connection.connectTimeout = 6_000

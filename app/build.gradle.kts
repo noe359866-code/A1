@@ -59,8 +59,13 @@ dependencies {
     implementation(libs.androidx.foundation)
     debugImplementation(libs.androidx.ui.tooling)
 
-    // Compose for TV (Material para televisores: Card con foco, MaterialTheme…)
-    implementation(libs.androidx.tv.material)
+    // Componentes de texto (Material 2) y tema (Material 3), versiones del BOM.
+    // No se usa androidx.tv:tv-material: su Material 2 para TV no expone Text
+    // ni MaterialTheme en la versión 1.0.0, y los componentes con foco están
+    // dibujados a mano (PosterCard, PillButton…) para no depender de APIs
+    // experimentales de TV Material 3.
+    implementation(libs.compose.material)
+    implementation(libs.compose.material3)
 
     // Navegación
     implementation(libs.androidx.navigation.compose)
@@ -73,4 +78,12 @@ dependencies {
 
     // Imágenes
     implementation(libs.coil.compose)
+
+    // Código QR del panel de vinculación (Ajustes → Vincular)
+    implementation(libs.zxing.core)
+
+    // Tests unitarios (JVM): política de red, panel de vinculación y parsers.
+    // org.json no existe en la JVM de escritorio (en Android lo pone el sistema).
+    testImplementation(libs.junit)
+    testImplementation(libs.json)
 }
