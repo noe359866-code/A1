@@ -48,7 +48,8 @@
             android:exported="true"
             android:launchMode="singleTask"
             android:screenOrientation="landscape"
-            android:theme="@style/Theme.OmniTV">
+            android:theme="@style/Theme.OmniTV"
+            android:windowSoftInputMode="adjustPan">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <!-- Solo aparece en el launcher de Android TV -->
