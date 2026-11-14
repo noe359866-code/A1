@@ -50,7 +50,7 @@ class WebViewResolver(private val context: Context) {
 
                     if (!challenge && usable && !finished) {
                         finished = true
-                        CronetClient.promoteClearanceCookies(urlFinished)
+                        CronetClient.persistCookies()
                         cont.resume(Result(urlFinished, html, cookies))
                     } else if (System.currentTimeMillis() - start > timeoutMs && !finished) {
                         finished = true

@@ -3,9 +3,9 @@
 # - Los tests unitarios de JVM cubren la parte que más se rompe sin avisar:
 #   la política de red (http solo en la LAN), el panel de vinculación (sin
 #   código no se entrega nada) y los dos parsers de HTML.
-# - assembleDebug verifica que la app compila de verdad (dependencias de
-#   Compose TV, Media3, ZXing…). El build de release no se hace aquí porque
-#   necesita un keystore que no debe estar en el repositorio.
+# - assembleDebug y lintDebug verifican compilación y análisis Android.
+# - El contrato estático comprueba que no se añada un launcher de móvil.
+#   La distribución actual es sideload; release usa firma debug (no Play Store).
 #
 # Las versiones de las acciones se fijan a las que se ejecutan sobre Node 24
 # (las de Node 20 están retiradas y GitHub las rechaza con un aviso).
@@ -51,8 +51,20 @@ jobs:
           SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
           if [ -x "$SDKMANAGER" ]; then yes | "$SDKMANAGER" --licenses > /dev/null; fi
 
+      - name: Contrato de Android TV
+        run: python3 tools/check_android_tv.py
+
       # `pipefail` es imprescindible: sin él, el código de salida sería el de `tee`
       # y un fallo de Gradle pasaría por bueno.
+      - name: Puente Nuvio (HTTP y worker JS)
+        run: node --test tools/nuvio-bridge/bridge.test.mjs
+
+      - name: Puente Cloudstream (runtime externo)
+        run: node --test tools/cloudstream-bridge/bridge.test.mjs
+
+      - name: Puente FFmpeg (remux/transcode externo)
+        run: node --test tools/ffmpeg-bridge/bridge.test.mjs
+
       - name: Tests unitarios
         run: |
           set -o pipefail
@@ -62,6 +74,29 @@ jobs:
         run: |
           set -o pipefail
           ./gradlew --no-daemon :app:assembleDebug 2>&1 | tee build-app.log
+
+      - name: Lint Android
+        run: |
+          set -o pipefail
+          ./gradlew --no-daemon :app:lintDebug 2>&1 | tee build-lint.log
+
+      - name: Anotar los errores de lint
+        if: always()
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import xml.etree.ElementTree as ET
+          path = Path('app/build/reports/lint-results-debug.xml')
+          if path.exists():
+              for issue in ET.parse(path).getroot().findall('issue'):
+                  if issue.get('severity') not in ('Error', 'Fatal'):
+                      continue
+                  loc = issue.find('location')
+                  file = loc.get('file', '') if loc is not None else ''
+                  line = loc.get('line', '1') if loc is not None else '1'
+                  message = issue.get('message', '').replace('\n', ' ')
+                  print(f'::error file={file},line={line}::[{issue.get("id")}] {message}')
+          PY
 
       # Los avisos del compilador (w:) quedan como anotación del job.
       - name: Avisos del compilador
@@ -96,6 +131,8 @@ jobs:
               print('::error::Hay tests que fallan')
           elif total == 0:
               print('::error::No se ejecutó ningún test')
+          if failed or total == 0:
+              raise SystemExit(1)
           PY
 
       # Si algo falla, lo importante aparece como anotación en el resumen del
@@ -107,7 +144,7 @@ jobs:
           import glob, html, re
           def note(text):
               print('::error::' + text.replace('\n', ' ').replace('\r', ' ')[:900])
-          for log in ('build-tests.log', 'build-app.log'):
+          for log in ('build-tests.log', 'build-app.log', 'build-lint.log'):
               try:
                   lines = open(log, encoding='utf-8', errors='replace').read().splitlines()
               except FileNotFoundError:
@@ -136,5 +173,9 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: informes-tests
-          path: app/build/reports/tests/
+          path: |
+            app/build/reports/tests/
+            app/build/reports/lint-results-debug.html
+            app/build/reports/lint-results-debug.xml
+            build-lint.log
           if-no-files-found: ignore

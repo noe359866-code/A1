@@ -55,6 +55,25 @@ object SettingsStore {
     var preferredQuality by mutableStateOf("Auto")
         private set
 
+    // ---------------- Saltar intro / créditos ----------------
+
+    /**
+     * Tramos saltables activos para todo el mundo: las tres bases de datos se
+     * leen de forma anónima, sin clave incluida en la app.
+     */
+    var skipSegmentsEnabled by mutableStateOf(true)
+        private set
+
+    /** Salto automático por tipo. Por defecto solo se ofrece el botón. */
+    var autoSkipKinds by mutableStateOf<Set<String>>(emptySet())
+        private set
+
+    /** Bases de datos consultadas (nombres de [SkipSegmentParser]). */
+    var skipSources by mutableStateOf(
+        setOf(SkipSegmentParser.SOURCE_SKIPDB, SkipSegmentParser.SOURCE_THEINTRODB, SkipSegmentParser.SOURCE_INTRODB)
+    )
+        private set
+
     // ---------------- Vinculación (QR del panel de Ajustes) ----------------
 
     /** Código de emparejamiento del televisor (se muestra junto al QR). */
@@ -75,6 +94,26 @@ object SettingsStore {
      * «Omni Streams» les pide enlaces de reproducción.
      */
     var streamAddons by mutableStateOf<List<String>>(emptyList())
+        private set
+
+    /** Índices de plugins Nuvio (`scrapers[]`), NO addons Stremio. */
+    var nuvioPlugins by mutableStateOf<List<String>>(emptyList())
+        private set
+
+    /** Puente HTTP opcional que ejecuta los JS de Nuvio en otro equipo. */
+    var nuvioBridge by mutableStateOf("")
+        private set
+
+    /** Servicio externo que ejecuta extensiones Cloudstream; vacío = desactivado. */
+    var cloudstreamBridge by mutableStateOf("")
+        private set
+
+    /** Puente multimedia externo (FFmpeg/ffprobe); vacío = desactivado. */
+    var ffmpegBridge by mutableStateOf("")
+        private set
+
+    /** Último diagnóstico de reproducción persistido como JSON; vacío = ninguno. */
+    var lastPlaybackDiagnostic by mutableStateOf("")
         private set
 
     /** APIs añadidas desde el panel (nombre → clave). */
@@ -110,6 +149,10 @@ object SettingsStore {
         subtitlesDefault = p.getBoolean("subtitlesDefault", false)
         playbackSpeed = p.getFloat("playbackSpeed", 1f)
         preferredQuality = p.getString("preferredQuality", "Auto") ?: "Auto"
+        skipSegmentsEnabled = p.getBoolean("skipSegmentsEnabled", true)
+        autoSkipKinds = parseStringList(p.getString("autoSkipKinds", "[]")).toSet()
+        skipSources = parseStringList(p.getString("skipSources", null)).toSet().filter { it in SKIP_SOURCE_NAMES }.toSet()
+            .ifEmpty { setOf(SkipSegmentParser.SOURCE_SKIPDB, SkipSegmentParser.SOURCE_THEINTRODB, SkipSegmentParser.SOURCE_INTRODB) }
         cloudflareDns = p.getBoolean("cloudflareDns", true)
         Doh.enabled = cloudflareDns
         pairingCode = p.getString("pairingCode", null) ?: generatePairingCode().also { code ->
@@ -119,6 +162,11 @@ object SettingsStore {
         // Las URLs guardadas por versiones anteriores también pasan la política de red
         customAddons = parseStringList(p.getString("customAddons", "[]")).filter { NetPolicy.isAllowed(it) }
         streamAddons = parseStringList(p.getString("streamAddons", "[]")).filter { NetPolicy.isAllowed(it) }
+        nuvioPlugins = parseStringList(p.getString("nuvioPlugins", "[]")).filter { NetPolicy.isAllowed(it) }
+        nuvioBridge = (p.getString("nuvioBridge", "") ?: "").takeIf { NetPolicy.isAllowed(it) }.orEmpty()
+        cloudstreamBridge = CloudstreamBridge.normalize(p.getString("cloudstreamBridge", "") ?: "").orEmpty()
+        ffmpegBridge = MediaBridge.normalize(p.getString("ffmpegBridge", "") ?: "").orEmpty()
+        lastPlaybackDiagnostic = p.getString("lastPlaybackDiagnostic", "") ?: ""
         loadApiKeys(p)
     }
 
@@ -196,7 +244,7 @@ object SettingsStore {
      * Solo se aceptan las URLs que cumplen [NetPolicy] (https, o http en la red local).
      */
     fun saveCustomAddons(urls: List<String>) {
-        val cleaned = urls.map { it.trim() }.filter { NetPolicy.isAllowed(it) }.distinct()
+        val cleaned = urls.mapNotNull(StremioUrl::normalize).distinct()
         update { putString("customAddons", org.json.JSONArray(cleaned).toString()) }.also {
             customAddons = cleaned
             revision++
@@ -215,11 +263,82 @@ object SettingsStore {
         }
     }
 
+    /** Guarda repositorios Nuvio; su contenido se valida al refrescar, no al escribir. */
+    fun saveNuvioPlugins(urls: List<String>) {
+        val cleaned = urls.map { it.trim() }.filter { NetPolicy.isAllowed(it) }.distinct()
+        update { putString("nuvioPlugins", org.json.JSONArray(cleaned).toString()) }
+        nuvioPlugins = cleaned
+        revision++
+    }
+
+    /** Vaciar la URL desconecta el puente sin borrar los repositorios guardados. */
+    fun saveNuvioBridge(url: String) {
+        val cleaned = url.trim().trimEnd('/').takeIf {
+            it.isEmpty() || (NetPolicy.isAllowed(it) && runCatching {
+                val uri = java.net.URI(it); uri.rawQuery == null && uri.rawFragment == null
+            }.getOrDefault(false))
+        }.orEmpty()
+        update { putString("nuvioBridge", cleaned) }
+        nuvioBridge = cleaned
+        revision++
+    }
+
+    fun saveCloudstreamBridge(url: String) {
+        val cleaned = CloudstreamBridge.normalize(url).orEmpty()
+        update { putString("cloudstreamBridge", cleaned) }
+        cloudstreamBridge = cleaned
+        revision++
+    }
+
+    fun saveFfmpegBridge(url: String) {
+        val cleaned = MediaBridge.normalize(url).orEmpty()
+        update { putString("ffmpegBridge", cleaned) }
+        ffmpegBridge = cleaned
+        revision++
+    }
+
+    /** Diagnóstico ligero del último fallo; no guarda URLs ni cabeceras del stream. */
+    fun saveLastPlaybackDiagnostic(json: String) {
+        val cleaned = json.take(4_000)
+        update { putString("lastPlaybackDiagnostic", cleaned) }
+        lastPlaybackDiagnostic = cleaned
+    }
+
     /** Guarda las APIs añadidas desde el panel (nombre → clave). */
     fun saveApiKeys(keys: Map<String, String>) {
         val cleaned = keys.filterKeys { it.isNotBlank() }.filterValues { it.isNotBlank() }
         persistApiKeys(cleaned)
         apiKeys = cleaned
+        revision++
+    }
+
+    val SKIP_SOURCE_NAMES = listOf(
+        SkipSegmentParser.SOURCE_SKIPDB, SkipSegmentParser.SOURCE_THEINTRODB, SkipSegmentParser.SOURCE_INTRODB
+    )
+
+    fun saveSkipSegmentsEnabled(enabled: Boolean) {
+        update { putBoolean("skipSegmentsEnabled", enabled) }
+        skipSegmentsEnabled = enabled
+        SkipSegmentService.clearCache()
+        revision++
+    }
+
+    /** Activa/desactiva el salto automático de un tipo (intro, resumen, créditos…). */
+    fun setAutoSkip(kind: SkipKind, enabled: Boolean) {
+        val next = autoSkipKinds.toMutableSet().apply { if (enabled) add(kind.name) else remove(kind.name) }
+        update { putString("autoSkipKinds", org.json.JSONArray(next.toList()).toString()) }
+        autoSkipKinds = next
+        revision++
+    }
+
+    /** Al menos una base de datos queda activa: sin fuentes no hay tramos. */
+    fun setSkipSource(source: String, enabled: Boolean) {
+        if (source !in SKIP_SOURCE_NAMES) return
+        val next = skipSources.toMutableSet().apply { if (enabled) add(source) else remove(source) }
+        if (next.isEmpty()) return
+        update { putString("skipSources", org.json.JSONArray(next.toList()).toString()) }
+        skipSources = next
+        SkipSegmentService.clearCache()
         revision++
     }
 

@@ -5,7 +5,7 @@ import com.omnitv.app.data.Video
 /**
  * Contrato Provider inspirado en Streamflix Reborn — adaptado a Omni TV / Leanback.
  * Un provider puede ser scraping local (Jsoup) o delegar a addon Stremio/Nuvio.
- * Implementaciones viven en `providers/` y se registran en [ProviderRegistry].
+ * Contrato heredado; la reproducción actual usa StreamHub y sus adaptadores.
  */
 interface Provider {
     val id: String // ej: "cb01", "animeunity"

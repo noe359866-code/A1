@@ -80,7 +80,7 @@ fun PlataformasScreen(
         Text("Plataformas", style = AppType.screenTitle, color = TextPrimary)
         Spacer(Modifier.height(6.dp))
         Text(
-            "Explora por proveedor y por estudio · catálogo real de cinejoy.pk, Nuvio y sweetfox.app",
+            "Explora películas y series por plataforma y estudio",
             style = AppType.metadata,
             color = TextSecondary
         )
@@ -224,6 +224,13 @@ fun PlatformCatalogScreen(
         ) {
             Spacer(Modifier.height(12.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
+                CircleIconButton(
+                    iconRes = R.drawable.ic_back,
+                    contentDescription = "Volver",
+                    size = 48.dp,
+                    onClick = onBack
+                )
+                Spacer(Modifier.width(16.dp))
                 AsyncImage(
                     model = provider.logoUrl,
                     contentDescription = provider.name,
@@ -236,7 +243,7 @@ fun PlatformCatalogScreen(
                 Column {
                     Text(provider.name, style = AppType.screenTitle, color = TextPrimary)
                     Text(
-                        "Catálogo real · cinejoy.pk${if (provider.nuvioMoviesCatalog != null) " + Nuvio" else ""}",
+                        "Películas y series de la plataforma",
                         style = AppType.metadata,
                         color = TextSecondary
                     )
@@ -295,13 +302,5 @@ fun PlatformCatalogScreen(
             }
         }
 
-        CircleIconButton(
-            iconRes = R.drawable.ic_back,
-            contentDescription = "Volver",
-            onClick = onBack,
-            modifier = Modifier
-                .align(Alignment.TopStart)
-                .padding(48.dp)
-        )
     }
 }

@@ -16,6 +16,12 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -30,8 +36,18 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.omnitv.app.BuildConfig
 import com.omnitv.app.R
 import com.omnitv.app.data.PairingServer
+import com.omnitv.app.data.AddonRegistry
+import com.omnitv.app.data.NuvioPluginManager
+import com.omnitv.app.data.NuvioScraperResolver
+import com.omnitv.app.data.CloudstreamBridge
+import com.omnitv.app.data.MediaBridge
+import com.omnitv.app.data.PlaybackDiagnostics
+import com.omnitv.app.data.SkipKind
+import com.omnitv.app.data.SkipSegmentParser
+import com.omnitv.app.data.SkipSegmentService
 import com.omnitv.app.data.ProfileStore
 import com.omnitv.app.data.SettingsStore
 import com.omnitv.app.ui.components.AvatarView
@@ -57,12 +73,32 @@ import androidx.compose.material.Text
 @Composable
 fun SettingsScreen(onSwitchProfile: () -> Unit) {
     val profile = ProfileStore.currentProfile
+    val panelUrl = remember(PairingServer.running.value) { PairingServer.panelUrl() }
+    val pairingUrl = remember(panelUrl, SettingsStore.pairingCode) {
+        if (panelUrl.isEmpty()) "" else "$panelUrl?code=${SettingsStore.pairingCode}"
+    }
 
     // Foco inicial en «Calidad preferida», la primera fila pulsable del
     // listado: el mando entra en el contenido y no tiene que recorrer la
     // tarjeta de perfil para empezar a ajustar cosas.
     val firstFocus = remember { FocusRequester() }
     RequestTvFocus(firstFocus)
+    val scope = rememberCoroutineScope()
+    var bridgeStatus by remember { mutableStateOf("Comprobando puente…") }
+    var cloudstreamStatus by remember { mutableStateOf("Comprobando Cloudstream…") }
+    var mediaStatus by remember { mutableStateOf("Comprobando puente multimedia…") }
+    var refreshing by remember { mutableStateOf(false) }
+    suspend fun checkIntegrations() {
+        refreshing = true
+        try {
+            AddonRegistry.refresh(force = true)
+            NuvioPluginManager.refreshAll(force = true)
+            bridgeStatus = NuvioScraperResolver.checkBridge()
+            cloudstreamStatus = CloudstreamBridge.check()
+            mediaStatus = MediaBridge.check()
+        } finally { refreshing = false }
+    }
+    LaunchedEffect(SettingsStore.revision) { checkIntegrations() }
 
     Column(
         Modifier
@@ -117,15 +153,17 @@ fun SettingsScreen(onSwitchProfile: () -> Unit) {
             ) {
                 // QR con la URL debajo (como el ejemplo del panel)
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    QrCode(
-                        data = PairingServer.pairingUrl(),
-                        modifier = Modifier
-                            .size(176.dp)
-                            .clip(AppRadius.md)
-                    )
+                    if (pairingUrl.isNotEmpty()) {
+                        QrCode(
+                            data = pairingUrl,
+                            modifier = Modifier.size(176.dp).clip(AppRadius.md)
+                        )
+                    } else {
+                        Text("Sin red local", style = AppType.metadata, color = TextSecondary)
+                    }
                     Spacer(Modifier.height(12.dp))
                     Text(
-                        PairingServer.panelUrl(),
+                        panelUrl.ifEmpty { "Conecta el televisor a la red local" },
                         style = AppType.metadata,
                         color = Accent,
                         fontFamily = FontFamily.Monospace
@@ -141,7 +179,7 @@ fun SettingsScreen(onSwitchProfile: () -> Unit) {
                     Text(
                         "El QR abre el panel web ya desbloqueado; si escribes la dirección a mano, " +
                             "te pedirá el código de abajo. Solo entonces podrás enlazar tu cuenta, " +
-                            "añadir addons (manifest.json de Stremio) y registrar APIs.",
+                            "instalar addons Stremio, guardar repositorios/puente Nuvio y registrar APIs.",
                         style = AppType.metadata,
                         color = TextSecondary
                     )
@@ -153,7 +191,14 @@ fun SettingsScreen(onSwitchProfile: () -> Unit) {
                         fontFamily = FontFamily.Monospace
                     )
                     Spacer(Modifier.height(12.dp))
-                    StatusLine("Servidor", if (PairingServer.running.value) "Activo en ${PairingServer.localIpv4()}:8080" else "Iniciando…")
+                    StatusLine(
+                        "Servidor",
+                        when {
+                            PairingServer.running.value -> "Activo · solo mientras la app está visible"
+                            PairingServer.lastError.value.isNotEmpty() -> PairingServer.lastError.value
+                            else -> "Detenido"
+                        }
+                    )
                     StatusLine("Cuenta enlazada", SettingsStore.linkedAccount.ifEmpty { "Sin enlazar" })
                     StatusLine("Addons añadidos", "${SettingsStore.customAddons.size}")
                     StatusLine("Addons de streams", "${SettingsStore.streamAddons.size}")
@@ -178,6 +223,59 @@ fun SettingsScreen(onSwitchProfile: () -> Unit) {
 
         Spacer(Modifier.height(20.dp))
 
+        /* ---------------- Addons y plugins ---------------- */
+        SettingsCard(iconRes = R.drawable.ic_link, title = "Addons Stremio · Plugins Nuvio") {
+            Column(Modifier.fillMaxWidth().padding(horizontal = 22.dp, vertical = 12.dp)) {
+                Text("Stremio: manifests con resources. Nuvio: índices de scrapers JS.", style = AppType.metadata, color = TextSecondary)
+                Spacer(Modifier.height(10.dp))
+                if (AddonRegistry.statuses.value.isEmpty()) {
+                    StatusLine("Stremio", "Sin addons instalados")
+                } else AddonRegistry.statuses.value.forEach { StatusLine(it.label, it.summary) }
+                Spacer(Modifier.height(8.dp))
+                if (NuvioPluginManager.repositories.value.isEmpty()) {
+                    StatusLine("Nuvio", "Sin repositorios guardados")
+                } else NuvioPluginManager.repositories.value.forEach { StatusLine(it.label, it.summary) }
+                StatusLine("Puente JS", bridgeStatus)
+                StatusLine("Cloudstream", cloudstreamStatus)
+                Text(
+                    "Los repositorios Nuvio no se ejecutan en el televisor. Sin puente solo quedan guardados. " +
+                        "Los torrents/P2P no se reproducen.",
+                    style = AppType.metadata, color = TextSecondary
+                )
+                Spacer(Modifier.height(12.dp))
+                PillButton(
+                    text = if (refreshing) "Comprobando…" else "Comprobar manifests y puentes",
+                    primary = false,
+                    onClick = { if (!refreshing) scope.launch { checkIntegrations() } }
+                )
+            }
+        }
+
+        Spacer(Modifier.height(20.dp))
+
+        /* ---------------- Compatibilidad multimedia ---------------- */
+        SettingsCard(iconRes = R.drawable.ic_play, title = "Compatibilidad multimedia") {
+            Column(Modifier.fillMaxWidth().padding(horizontal = 22.dp, vertical = 12.dp)) {
+                StatusLine("Puente FFmpeg externo", mediaStatus)
+                StatusLine("URL", SettingsStore.ffmpegBridge.ifBlank { "Sin configurar · panel QR" })
+                StatusLine("Último error", PlaybackDiagnostics.summary())
+                PlaybackDiagnostics.current()?.let { report ->
+                    Spacer(Modifier.height(6.dp))
+                    Text("Fuente: ${report.sourceLabel}", style = AppType.metadata, color = TextSecondary)
+                    Text(report.advice, style = AppType.metadata, color = TextSecondary)
+                }
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    "El APK usa los decodificadores del dispositivo. FFmpeg/ffprobe solo se ejecutan en el puente opcional; " +
+                        "si Media3 falla por códec/contenedor, el TV puede pedir una versión HLS compatible. " +
+                        "Configura el puente y su token (FFMPEG_BRIDGE) desde el panel QR.",
+                    style = AppType.metadata, color = TextSecondary
+                )
+            }
+        }
+
+        Spacer(Modifier.height(20.dp))
+
         /* ---------------- Reproducción ---------------- */
         SettingsCard(iconRes = R.drawable.ic_play, title = "Reproducción") {
             SettingRow(
@@ -195,6 +293,49 @@ fun SettingsScreen(onSwitchProfile: () -> Unit) {
                 subtitle = "Los vídeos empiezan sin audio",
                 trailing = { TvToggle(SettingsStore.mutedStart, onCheckedChange = { SettingsStore.setMutedStartEnabled(it) }) }
             )
+        }
+
+        Spacer(Modifier.height(20.dp))
+
+        /* ---------------- Saltar intro y créditos ---------------- */
+        SettingsCard(iconRes = R.drawable.ic_skip_next, title = "Saltar intro y créditos") {
+            SettingRow(
+                title = "Tramos saltables",
+                subtitle = "Botón «Saltar» con los tiempos de la comunidad. Funciona sin clave: " +
+                    "las bases de datos se leen de forma anónima desde tu propia conexión",
+                trailing = { TvToggle(SettingsStore.skipSegmentsEnabled, onCheckedChange = { SettingsStore.saveSkipSegmentsEnabled(it) }) }
+            )
+            listOf(SkipKind.INTRO, SkipKind.RECAP, SkipKind.CREDITS).forEach { kind ->
+                SettingRow(
+                    title = "Saltar ${kind.label} automáticamente",
+                    subtitle = "Si lo dejas apagado, aparece el botón y decides tú",
+                    trailing = {
+                        TvToggle(kind.name in SettingsStore.autoSkipKinds, onCheckedChange = { SettingsStore.setAutoSkip(kind, it) })
+                    }
+                )
+            }
+            SettingsStore.SKIP_SOURCE_NAMES.forEach { source ->
+                SettingRow(
+                    title = source,
+                    subtitle = when (source) {
+                        SkipSegmentParser.SOURCE_SKIPDB -> "Ajusta los tiempos a la duración de tu stream · necesita id IMDb"
+                        SkipSegmentParser.SOURCE_THEINTRODB -> "Intro, resumen, créditos y avance · admite id TMDB o IMDb"
+                        else -> "Intro, resumen y créditos · necesita id IMDb"
+                    },
+                    trailing = {
+                        TvToggle(source in SettingsStore.skipSources, onCheckedChange = { SettingsStore.setSkipSource(source, it) })
+                    }
+                )
+            }
+            Column(Modifier.fillMaxWidth().padding(horizontal = 22.dp, vertical = 12.dp)) {
+                StatusLine("Último título", SkipSegmentService.lastStatus.value.ifBlank { "Sin consultas todavía" })
+                Text(
+                    "Datos de SkipDB (ODbL 1.0), TheIntroDB e IntroDB. Omni TV no incluye ninguna clave API: " +
+                        "cada usuario puede añadir la suya en el panel QR (THEINTRODB=tu_clave) para subir su " +
+                        "límite de consultas. Los tiempos son comunitarios y pueden no encajar con tu versión del vídeo.",
+                    style = AppType.metadata, color = TextSecondary
+                )
+            }
         }
 
         Spacer(Modifier.height(20.dp))
@@ -253,13 +394,13 @@ fun SettingsScreen(onSwitchProfile: () -> Unit) {
             )
             SettingRow(
                 title = "Motor de reproducción",
-                subtitle = "Reproductor integrado con soporte MP4, HLS y 4K",
+                subtitle = "Media3 ExoPlayer · MP4, HLS y DASH con los códecs del dispositivo; conversión externa opcional",
                 trailing = { ValueText("Media3 ExoPlayer") }
             )
             SettingRow(
                 title = "Acerca de",
                 subtitle = "Omni TV · diseñado para Android TV",
-                trailing = { ValueText("1.0.0") }
+                trailing = { ValueText(BuildConfig.VERSION_NAME) }
             )
         }
 

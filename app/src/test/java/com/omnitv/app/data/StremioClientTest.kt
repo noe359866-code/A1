@@ -75,6 +75,24 @@ class StremioClientTest {
     }
 
     @Test
+    fun `la presentacion neutra conserva el origen interno para resolver la ficha`() {
+        val manifestUrl = "https://addon.example/configuracion/manifest.json"
+        val video = StremioClient.parseVideo(
+            meta("id" to "tt123", "name" to "Película", "type" to "movie"),
+            StremioClient.NUVIO_NAME,
+            manifestUrl
+        )
+        val title = CatalogLabels.title(StremioCatalog("movie", "top", "Películas populares"))
+
+        assertEquals("Películas populares", title)
+        assertFalse(title.contains(video.source))
+        assertEquals(StremioClient.NUVIO_NAME, video.source)
+        assertEquals(manifestUrl, video.metaAddonUrl)
+        assertEquals(StremioClient.NUVIO, StremioClient.baseFor(video.source))
+        assertEquals("movie", video.remoteType)
+    }
+
+    @Test
     fun `sin duracion ni ano no se inventan valores`() {
         val video = StremioClient.parseVideo(meta("id" to "tt5", "name" to "Sin nada"), "Nuvio")
 

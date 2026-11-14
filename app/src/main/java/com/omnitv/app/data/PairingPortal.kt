@@ -6,8 +6,12 @@ internal class PanelData(
     val account: String,
     val addons: List<String>,
     val streamAddons: List<String>,
+    val nuvioPlugins: List<String>,
+    val nuvioBridge: String,
+    val cloudstreamBridge: String,
     val apiKeys: Map<String, String>,
-    val secretsEncrypted: Boolean
+    val secretsEncrypted: Boolean,
+    val ffmpegBridge: String = ""
 )
 
 /**
@@ -86,6 +90,7 @@ internal object PairingPortal {
     private fun settingsForm(data: PanelData): String {
         val addonsValue = esc(data.addons.joinToString("\n"))
         val streamsValue = esc(data.streamAddons.joinToString("\n"))
+        val pluginsValue = esc(data.nuvioPlugins.joinToString("\n"))
         val apisValue = esc(data.apiKeys.entries.joinToString("\n") { "${it.key}=${it.value}" })
         val storageHint = if (data.secretsEncrypted) {
             "Se guardan cifradas en el televisor (Android Keystore) y no se incluyen en copias de seguridad."
@@ -105,22 +110,52 @@ internal object PairingPortal {
       </label>
     </div>
     <div class="card">
-      <h2>🧩 Añadir addons</h2>
+      <h2>🧩 Addons Stremio</h2>
       <label>URLs de manifest.json (una por línea)
         <textarea name="addons" placeholder="https://v3-cinemeta.strem.io/manifest.json">$addonsValue</textarea>
       </label>
-      <p class="hint">Cualquier addon de Stremio compatible (catálogo/meta). Aparecerá como filas nuevas en el Inicio.</p>
+      <p class="hint">URL del manifest, conservando su configuración. Se comprobarán resources/types/idPrefixes: catálogo y fichas en Inicio; streams HTTP al reproducir. Un índice Nuvio con scrapers[] va en el campo de abajo.</p>
     </div>
     <div class="card">
-      <h2>🎬 Añadir addons de streams</h2>
+      <h2>🎬 Proyectos de streams (URL base)</h2>
       <label>Proyectos que entregan enlaces de reproducción (una URL por línea)
         <textarea name="streamAddons" placeholder="https://tu-proyecto.ejemplo">$streamsValue</textarea>
       </label>
       <p class="hint">El addon interno «Omni Streams» les pide los streams con el protocolo
         <code>stream/{tipo}/{id}</code> (Stremio). Compatible con proyectos tipo
-        StreamFlix Reborn, Torrentio, Comet… que expongan su API de enlaces.</p>
+        proyectos que expongan esa API. Los addons Stremio se instalan arriba por su manifest, no aquí.</p>
       <p class="hint">Se admite <code>https://</code> siempre, y <code>http://</code> solo si es una IP de tu
         red local (p. ej. <code>http://192.168.1.20:8787</code>, el puente en tu PC o móvil).</p>
+    </div>
+    <div class="card">
+      <h2>🔌 Plugins Nuvio · repositorios JS</h2>
+      <label>URLs de manifest con scrapers[] (una por línea)
+        <textarea name="nuvioPlugins" placeholder="https://raw.githubusercontent.com/…/manifest.json">$pluginsValue</textarea>
+      </label>
+      <p class="hint">No son addons Stremio ni catálogos. Se listan en el televisor y solo se ejecutan mediante el puente JS de abajo.</p>
+      <label>Puente JS (URL base; vacío = desconectado)
+        <input name="nuvioBridge" type="url" placeholder="http://192.168.1.20:8788" value="${esc(data.nuvioBridge)}">
+      </label>
+      <p class="hint">El puente debe implementar POST /scrape/{id} y GET /health. Omni TV no ejecuta los JS en el televisor.
+        Guarda solo repositorios de confianza: el equipo del puente ejecutará su código.</p>
+    </div>
+    <div class="card">
+      <h2>☁️ Extensiones Cloudstream · puente externo</h2>
+      <label>URL del servicio Cloudstream (vacío = desactivado)
+        <input name="cloudstreamBridge" type="url" placeholder="http://192.168.1.20:8789" value="${esc(data.cloudstreamBridge)}">
+      </label>
+      <p class="hint">Omni TV no carga .cs3/DEX. El servicio de confianza ejecuta sus extensiones Cloudstream y responde a POST /resolve.
+        Instala/configura las extensiones en ese servicio, no en el televisor.</p>
+    </div>
+    <div class="card">
+      <h2>🎞️ Compatibilidad multimedia · FFmpeg externo</h2>
+      <label>URL del puente multimedia (vacío = desactivado)
+        <input name="ffmpegBridge" type="url" placeholder="http://192.168.1.20:8790" value="${esc(data.ffmpegBridge)}">
+      </label>
+      <p class="hint">Opcional. Omni TV no incluye FFmpeg en el APK. Si Media3 falla por códec/contenedor,
+        este servicio puede remuxear a HLS y convertir el audio a AAC en otro equipo. Arranca
+        <code>tools/ffmpeg-bridge/bridge.mjs</code> con <code>--allow-origin</code> de tus CDN y, si escucha en la LAN,
+        con <code>--token</code>. Guarda el token abajo como <code>FFMPEG_BRIDGE=tu_token</code>.</p>
     </div>
     <div class="card">
       <h2>🔑 Añadir APIs</h2>
@@ -128,6 +163,9 @@ internal object PairingPortal {
         <textarea name="apis" placeholder="TMDB=tu_api_key&#10;TRAKT=tu_api_key">$apisValue</textarea>
       </label>
       <p class="hint">$storageHint</p>
+      <p class="hint">Saltar intro/créditos ya funciona sin clave. Si tienes cuenta, añade
+        <code>THEINTRODB=tu_clave</code> para subir tu límite de consultas; <code>SKIPDB=…</code> e
+        <code>INTRODB=…</code> quedan guardadas para futuras funciones de envío.</p>
     </div>
     <button type="submit">Guardar en el televisor</button>
   </form>"""

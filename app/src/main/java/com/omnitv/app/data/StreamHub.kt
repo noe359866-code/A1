@@ -7,11 +7,7 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
-import org.json.JSONArray
-import org.json.JSONObject
-import java.net.HttpURLConnection
 import java.net.URL
-import java.net.URLEncoder
 
 /**
  * Enlace de reproducción entregado por un [StreamAddon].
@@ -20,7 +16,8 @@ data class StreamLink(
     val label: String,
     val url: String,
     val quality: String = "",
-    val format: StreamFormat = StreamFormat.MP4
+    val format: StreamFormat = StreamFormat.MP4,
+    val headers: Map<String, String> = emptyMap()
 )
 
 /**
@@ -32,11 +29,10 @@ interface StreamAddon {
     val name: String
 
     /**
-     * @param type "movie" o "series" (convención Stremio).
-     * @param videoId id Stremio del vídeo: `tt1234567`, `tmdb:123` o
-     *   `tt1234567:1:2` / `tmdb:123:1:2` para episodios.
+     * Recibe el título completo para que los puentes que buscan por nombre
+     * (Cloudstream) no pierdan título, año ni episodio.
      */
-    suspend fun resolve(type: String, videoId: String): List<StreamLink>
+    suspend fun resolve(video: Video): List<StreamLink>
 }
 
 /**
@@ -52,92 +48,29 @@ interface StreamAddon {
  *    array directo con el mismo contenido.
  */
 class ProjectStreamAddon(
-    private val baseUrl: String,
-    override val name: String = "Proyecto externo"
+    baseUrl: String,
+    override val name: String = "Proyecto externo",
+    private val manifest: StremioManifest? = null
 ) : StreamAddon {
+    private val base = if (manifest != null) StremioUrl.base(baseUrl) else baseUrl.trimEnd('/')
+    override val id = "project:$base"
 
-    override val id: String = "project:$baseUrl"
-
-    override suspend fun resolve(type: String, videoId: String): List<StreamLink> =
-        withContext(Dispatchers.IO) {
-            val idPath = URLEncoder.encode(videoId, "UTF-8")
-            val base = baseUrl.trimEnd('/')
-            // Forma Stremio primero; si no responde, forma simple
-            val json = httpJson("$base/stream/$type/$idPath.json")
-                ?: httpJson("$base/stream/$type/$idPath")
-                ?: return@withContext emptyList()
-            parseStreams(json)
-        }
-
-    private fun parseStreams(json: JSONObject): List<StreamLink> {
-        val array = json.optJSONArray("streams") ?: json.optJSONArray("videos") ?: return emptyList()
-        return buildList {
-            for (i in 0 until array.length()) {
-                val item = array.optJSONObject(i) ?: continue
-                val url = item.optString("url").ifEmpty { item.optString("externalUrl") }
-                // Sin url (infoHash/torrent) no hay soporte; y los enlaces deben cumplir la
-                // política de red: https, o http solo dentro de la red local
-                if (url.isBlank() || !NetPolicy.isAllowed(url)) continue
-                val rawName = item.optString("name", item.optString("label", name))
-                val title = item.optString("title", "")
-                val quality = item.optString("quality", "").ifEmpty {
-                    listOf("2160p", "1080p", "720p", "480p").firstOrNull { it in "$rawName $title" } ?: ""
-                }
-                val label = listOf(rawName, title.lineSequence().firstOrNull().orEmpty())
-                    .filter { it.isNotBlank() }
-                    .joinToString(" · ")
-                    .take(60)
-                add(
-                    StreamLink(
-                        label = label.ifBlank { name },
-                        url = url,
-                        quality = quality,
-                        format = if (url.contains(".m3u8")) StreamFormat.HLS else StreamFormat.MP4
-                    )
-                )
-            }
-        }
+    override suspend fun resolve(video: Video): List<StreamLink> {
+        val (type, videoId) = StreamHub.stremioId(video) ?: return emptyList()
+        return resolve(type, videoId)
     }
 
-    /**
-     * Descarga [url] como JSON. Primero por el DNS normal; si el nombre no
-     * resuelve, reintenta con el DNS de Cloudflare ([Doh]).
-     */
-    private fun httpJson(url: String): JSONObject? =
-        httpJsonDirect(url) ?: Doh.retry(url)?.let { body ->
-            runCatching { JSONObject(body) }.getOrNull()
-        }
-
-    private fun httpJsonDirect(url: String): JSONObject? = runCatching {
-        val connection = URL(url).openConnection() as HttpURLConnection
-        try {
-            connection.connectTimeout = 6_000
-            connection.readTimeout = 8_000
-            connection.setRequestProperty("User-Agent", "OmniTV/1.0 (Android TV)")
-            connection.setRequestProperty("Accept", "application/json")
-            if (connection.responseCode !in 200..299) return null
-            JSONObject(connection.inputStream.bufferedReader().readText())
-        } finally {
-            connection.disconnect()
-        }
-    }.getOrNull()
-}
-
-/** Addon interno de demostración: los streams públicos de prueba. */
-object DemoStreamAddon : StreamAddon {
-    override val id = "demo"
-    override val name = "Demo Omni TV"
-
-    private val demo = listOf(
-        "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4",
-        "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4",
-        "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/Sintel.mp4"
-    )
-
-    override suspend fun resolve(type: String, videoId: String): List<StreamLink> {
-        val pick = demo[(videoId.hashCode().mod(demo.size))]
-        return listOf(StreamLink(label = "Demo · Servidor 1", url = pick))
+    suspend fun resolve(type: String, videoId: String): List<StreamLink> = withContext(Dispatchers.IO) {
+        if (manifest?.supports("stream", type, videoId) == false) return@withContext emptyList()
+        val standard = StremioUrl.resource(base, "stream", type, videoId)
+        // La alternativa sin .json solo aplica a proyectos simples, no a un
+        // manifest Stremio que ya declara su contrato.
+        val json = AddonHttp.getJson(standard)
+            ?: if (manifest == null) AddonHttp.getJson(standard.removeSuffix(".json")) else null
+        parseStreams(json)
     }
+
+    internal fun parseStreams(json: Any?): List<StreamLink> = StreamResponse.parse(json, name)
 }
 
 /**
@@ -146,7 +79,7 @@ object DemoStreamAddon : StreamAddon {
  * proyectos configurados (StreamFlix Reborn y afines vía
  * [ProjectStreamAddon], addons Stremio de streams, etc.), normaliza los
  * resultados y los pasa al reproductor multi-servidor. Si nadie entrega
- * enlaces, el reproductor cae al flujo demo etiquetado.
+ * enlaces, la app muestra un error sin sustituir el título.
  */
 object StreamHub {
 
@@ -180,19 +113,20 @@ object StreamHub {
      */
     suspend fun resolve(video: Video): List<StreamSource> {
         val (type, id) = stremioId(video) ?: return emptyList()
-        val addons = configuredAddons()
-        if (addons.isEmpty()) {
-            lastStatus.value = "Sin addons de streams configurados"
-            return emptyList()
-        }
-
         resolving.value = true
         try {
+            val addons = configuredAddons()
+            if (addons.isEmpty()) {
+                lastStatus.value = if (SettingsStore.nuvioPlugins.isNotEmpty()) NuvioScraperResolver.lastStatus.value
+                    .ifBlank { "Configura el puente JS en Ajustes → Plugins Nuvio" }
+                else "Sin addons de streams configurados"
+                return emptyList()
+            }
             val perAddon = coroutineScope {
                 addons.map { addon ->
                     async {
                         withTimeoutOrNull(10_000L) {
-                            runCatching { addon.resolve(type, id) }.getOrDefault(emptyList())
+                            runCatching { addon.resolve(video) }.getOrDefault(emptyList())
                         }.orEmpty()
                     }
                 }.awaitAll()
@@ -208,7 +142,8 @@ object StreamHub {
                                 .distinct()
                                 .joinToString(" · "),
                             url = link.url,
-                            format = link.format
+                            format = link.format,
+                            headers = link.headers
                         )
                     }
                 }
@@ -217,7 +152,12 @@ object StreamHub {
                 .take(24)
 
             lastStatus.value = if (sources.isEmpty()) {
-                "Ningún addon entregó enlaces para este título"
+                when {
+                    addons.any { it.id == "cloudstream-bridge" } -> CloudstreamBridge.status.value
+                    addons.any { it.id == "nuvio-plugins" } -> NuvioScraperResolver.lastStatus.value
+                        .ifBlank { "Ningún addon entregó enlaces para este título" }
+                    else -> "Ningún addon entregó enlaces para este título"
+                }
             } else {
                 "${sources.size} enlaces de ${sources.map { it.label.substringBefore(" · ") }.distinct().size} addons"
             }
@@ -227,14 +167,27 @@ object StreamHub {
         }
     }
 
-    /** Addons activos: los proyectos configurados por el usuario. */
-    private fun configuredAddons(): List<StreamAddon> =
-        SettingsStore.streamAddons.map { url ->
-            ProjectStreamAddon(
-                baseUrl = url,
-                name = hostLabel(url)
-            )
+    /** Descubre streams tanto en addons Stremio instalados como en proyectos simples. */
+    internal suspend fun configuredAddons(
+        manifests: List<AddonStatus>? = null,
+        projects: List<String> = SettingsStore.streamAddons,
+        plugins: List<String> = SettingsStore.nuvioPlugins,
+        cloudstreamBridge: String = SettingsStore.cloudstreamBridge
+    ): List<StreamAddon> {
+        val addons = mutableListOf<StreamAddon>()
+        val bases = mutableSetOf<String>()
+        (manifests ?: AddonRegistry.refresh()).filter { it.manifest?.isStreamAddon() == true }.forEach { status ->
+            val base = StremioUrl.base(status.url)
+            if (bases.add(base)) addons += ProjectStreamAddon(base, status.label, status.manifest)
         }
+        projects.forEach { url ->
+            val base = StremioUrl.base(url).trimEnd('/')
+            if (NetPolicy.isAllowed(base) && bases.add(base)) addons += ProjectStreamAddon(base, hostLabel(base))
+        }
+        if (plugins.isNotEmpty()) addons += NuvioStreamAddon()
+        if (CloudstreamBridge.normalize(cloudstreamBridge) != null) addons += CloudstreamStreamAddon()
+        return addons
+    }
 
     private fun hostLabel(url: String): String = runCatching {
         URL(url).host.removePrefix("www.")

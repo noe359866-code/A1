@@ -13,14 +13,18 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.omnitv.app.data.CatalogRepository
 import com.omnitv.app.data.ProfileStore
 import com.omnitv.app.data.RemoteCatalog
+import com.omnitv.app.data.SettingsStore
 import com.omnitv.app.data.Video
 import com.omnitv.app.ui.components.PosterCard
+import com.omnitv.app.ui.components.PillButton
 import com.omnitv.app.ui.theme.AppType
 import com.omnitv.app.ui.theme.Background
 import com.omnitv.app.ui.theme.TextPrimary
@@ -29,14 +33,15 @@ import androidx.compose.material.Text
 
 /**
  * Rejilla con todo el catálogo (pestaña "Películas"): catálogo real
- * (Cinemeta + Nuvio) + títulos demo locales.
+ * (Cinemeta + Nuvio + addons instalados).
  */
 @Composable
 fun MoviesScreen(onOpenDetail: (Video) -> Unit) {
     val profile = ProfileStore.currentProfile
-    LaunchedEffect(Unit) {
-        if (!RemoteCatalog.loaded.value) RemoteCatalog.refresh()
+    LaunchedEffect(SettingsStore.revision) {
+        if (RemoteCatalog.needsReload()) RemoteCatalog.refresh()
     }
+    val scope = rememberCoroutineScope()
 
     val local = CatalogRepository.catalogFor(profile)
     val kidsOnly = profile?.isKids == true
@@ -56,15 +61,32 @@ fun MoviesScreen(onOpenDetail: (Video) -> Unit) {
         Text("Películas", style = AppType.screenTitle, color = TextPrimary)
         Spacer(Modifier.height(6.dp))
         Text(
-            if (RemoteCatalog.loading.value && catalog.size <= local.size) {
-                "Cargando catálogo (Cinemeta · Nuvio)…"
+            if (RemoteCatalog.loading.value && catalog.isEmpty()) {
+                "Cargando catálogo…"
             } else {
                 "${catalog.size} títulos en el catálogo"
             },
             style = AppType.metadata,
             color = TextSecondary
         )
-        Spacer(Modifier.height(28.dp))
+        if (!kidsOnly && RemoteCatalog.canLoadMore.value) {
+            PillButton(
+                text = if (RemoteCatalog.loadingMore.value) "Cargando…" else "Cargar más títulos",
+                primary = false,
+                onClick = { if (!RemoteCatalog.loadingMore.value) scope.launch { RemoteCatalog.loadMore() } }
+            )
+            Spacer(Modifier.height(10.dp))
+        }
+        if (RemoteCatalog.lastError.value.isNotEmpty()) {
+            Text(RemoteCatalog.lastError.value, style = AppType.metadata, color = TextSecondary)
+        }
+        Spacer(Modifier.height(18.dp))
+        if (catalog.isEmpty() && !RemoteCatalog.loading.value) {
+            Text(
+                if (kidsOnly) "No hay películas guardadas con clasificación infantil." else "No hay películas disponibles en este momento.",
+                style = AppType.metadata, color = TextSecondary
+            )
+        }
 
         LazyVerticalGrid(
             // 5 columnas: en 960 dp de ancho, 4 dejan pósters de 220 dp

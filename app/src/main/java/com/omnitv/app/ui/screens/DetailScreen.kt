@@ -1,5 +1,7 @@
 package com.omnitv.app.ui.screens
 
+import androidx.annotation.OptIn
+import androidx.media3.common.util.UnstableApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -40,6 +42,9 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -93,6 +98,7 @@ import com.omnitv.app.ui.theme.TextTertiary
  *   temporada; las fichas remotas se enriquecen con la meta del addon
  *   (episodios, reparto) al abrirse.
  */
+@OptIn(UnstableApi::class)
 @Composable
 fun DetailScreen(
     video: Video,
@@ -150,6 +156,14 @@ fun DetailScreen(
     DisposableEffect(trailerPlayer) {
         onDispose { trailerPlayer?.release() }
     }
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner, trailerPlayer) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_PAUSE) trailerPlayer?.pause()
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
 
     Box(
         Modifier
@@ -168,6 +182,7 @@ fun DetailScreen(
                         // del mando a los botones de la ficha.
                         isFocusable = false
                         isFocusableInTouchMode = false
+                        descendantFocusability = android.view.ViewGroup.FOCUS_BLOCK_DESCENDANTS
                     }
                 },
                 update = { it.player = trailerPlayer },
@@ -305,12 +320,12 @@ fun DetailScreen(
                     }
                 }
 
-                // Aviso honesto para títulos del catálogo real
+                // Ayuda de configuración, sin atribuir el contenido a una fuente.
                 if (full.isRemote) {
                     Spacer(Modifier.height(14.dp))
                     Text(
-                        "Catálogo real de ${full.source} · los addons de catálogo no incluyen " +
-                            "enlaces de reproducción: se reproducirá una demostración",
+                        "Si la reproducción no está disponible, revisa la configuración " +
+                            "en Ajustes → Vincular.",
                         style = AppType.metadata,
                         // No `TextTertiary` (2,5:1 sobre el fondo): es texto real
                         color = TextMuted
@@ -387,9 +402,6 @@ fun DetailScreen(
 
                 // ---------------- Información ----------------
                 SectionLabel("Información")
-                if (full.isRemote) {
-                    InfoRow("Fuente", "${full.source} (${full.remoteType ?: full.type.name.lowercase()})")
-                }
                 if (full.language.isNotEmpty()) {
                     InfoRow("Idioma / país", full.language)
                 }
@@ -431,7 +443,7 @@ fun DetailScreen(
             verticalAlignment = Alignment.CenterVertically
         ) {
             if (full.isRemote) {
-                AccentChip("CATÁLOGO · ${full.source.uppercase()}")
+                AccentChip("CATÁLOGO")
             } else {
                 AccentChip(if (muted) "TRÁILER · SILENCIADO" else "TRÁILER")
             }

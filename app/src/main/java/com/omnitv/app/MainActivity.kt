@@ -1,36 +1,32 @@
 package com.omnitv.app
 
 import android.os.Bundle
-import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import com.omnitv.app.data.PairingServer
 import com.omnitv.app.data.ProfileStore
 import com.omnitv.app.data.SettingsStore
 
-/**
- * Actividad única de Omni TV (solo Android TV / Google TV).
- */
+/** Actividad única de Omni TV (solo Android TV / Google TV). */
 class MainActivity : ComponentActivity() {
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        // La TV no se duerme mientras se navega o se reproduce.
-        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-
-        // Carga perfiles y ajustes (persistidos en SharedPreferences).
         ProfileStore.init(this)
         SettingsStore.init(this)
+        runCatching { com.omnitv.app.network.CronetClient.init(this) }
+        // No mantenemos la TV encendida mientras se navega. Solo el vídeo
+        // activo activa keepScreenOn en PlayerScreen.
+        setContent { OmniTvApp() }
+    }
 
-        // Fix 403 Streamflix: Cronet envía JA3 de Chrome (no OkHttp) para imágenes/streams bloqueados
-        try { com.omnitv.app.network.CronetClient.init(this) } catch (_: Exception) {}
-
-        // Panel de vinculación web (QR de Ajustes): sirve el portal en el
-        // puerto 8080 para enlazar cuentas, addons y APIs desde el móvil.
+    override fun onStart() {
+        super.onStart()
         PairingServer.start()
+    }
 
-        setContent {
-            OmniTvApp()
-        }
+    override fun onStop() {
+        // El puerto de configuración no permanece abierto al volver al launcher.
+        PairingServer.stop()
+        super.onStop()
     }
 }
