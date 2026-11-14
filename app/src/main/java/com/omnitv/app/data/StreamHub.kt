@@ -7,7 +7,6 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
-import org.json.JSONArray
 import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
@@ -24,8 +23,8 @@ data class StreamLink(
 )
 
 /**
- * Un addon de streams: su ÚNICA misión es **entregar enlaces de
- * reproducción** (stream/{type}/{id}) de proyectos externos.
+ * Un addon de streams: su única misión es entregar enlaces de reproducción
+ * (stream/{type}/{id}) de proyectos externos.
  */
 interface StreamAddon {
     val id: String
@@ -40,16 +39,9 @@ interface StreamAddon {
 }
 
 /**
- * Addon que habla con proyectos externos (StreamFlix Reborn y afines):
- * cualquier proyecto puede entregar streams a Omni TV exponiendo un
- * endpoint HTTP con una de las dos formas soportadas (ver
- * `docs/STREAM-ADDON-PROTOCOL.md`):
- *
- * 1. **Protocolo Stremio**: `GET {base}/stream/{type}/{id}.json`
- *    → `{ "streams": [ { "name", "title", "url" | "infoHash" | "ytId" } ] }`
- * 2. **Forma simple**: `GET {base}/stream/{type}/{id}`
- *    → `{ "streams": [ { "name" | "label", "url", "quality" } ] }` o un
- *    array directo con el mismo contenido.
+ * Addon que habla con proyectos externos vía HTTP:
+ *  1. Protocolo Stremio: `GET {base}/stream/{type}/{id}.json`
+ *  2. Forma simple: `GET {base}/stream/{type}/{id}`
  */
 class ProjectStreamAddon(
     private val baseUrl: String,
@@ -62,7 +54,6 @@ class ProjectStreamAddon(
         withContext(Dispatchers.IO) {
             val idPath = URLEncoder.encode(videoId, "UTF-8")
             val base = baseUrl.trimEnd('/')
-            // Forma Stremio primero; si no responde, forma simple
             val json = httpJson("$base/stream/$type/$idPath.json")
                 ?: httpJson("$base/stream/$type/$idPath")
                 ?: return@withContext emptyList()
@@ -75,8 +66,6 @@ class ProjectStreamAddon(
             for (i in 0 until array.length()) {
                 val item = array.optJSONObject(i) ?: continue
                 val url = item.optString("url").ifEmpty { item.optString("externalUrl") }
-                // Sin url (infoHash/torrent) no hay soporte; y los enlaces deben cumplir la
-                // política de red: https, o http solo dentro de la red local
                 if (url.isBlank() || !NetPolicy.isAllowed(url)) continue
                 val rawName = item.optString("name", item.optString("label", name))
                 val title = item.optString("title", "")
@@ -99,10 +88,6 @@ class ProjectStreamAddon(
         }
     }
 
-    /**
-     * Descarga [url] como JSON. Primero por el DNS normal; si el nombre no
-     * resuelve, reintenta con el DNS de Cloudflare ([Doh]).
-     */
     private fun httpJson(url: String): JSONObject? =
         httpJsonDirect(url) ?: Doh.retry(url)?.let { body ->
             runCatching { JSONObject(body) }.getOrNull()
@@ -123,47 +108,25 @@ class ProjectStreamAddon(
     }.getOrNull()
 }
 
-/** Addon interno de demostración: los streams públicos de prueba. */
-object DemoStreamAddon : StreamAddon {
-    override val id = "demo"
-    override val name = "Demo Omni TV"
-
-    private val demo = listOf(
-        "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4",
-        "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4",
-        "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/Sintel.mp4"
-    )
-
-    override suspend fun resolve(type: String, videoId: String): List<StreamLink> {
-        val pick = demo[(videoId.hashCode().mod(demo.size))]
-        return listOf(StreamLink(label = "Demo · Servidor 1", url = pick))
-    }
-}
-
 /**
- * «Omni Streams» — el addon interno de la app. Su única función es
- * **entregar streams de otros proyectos**: consulta en paralelo todos los
- * proyectos configurados (StreamFlix Reborn y afines vía
- * [ProjectStreamAddon], addons Stremio de streams, etc.), normaliza los
- * resultados y los pasa al reproductor multi-servidor. Si nadie entrega
- * enlaces, el reproductor cae al flujo demo etiquetado.
+ * StreamHub — orquestador de streams profesional.
+ *
+ * Consulta en paralelo todos los addons configurados por el usuario,
+ * normaliza los resultados y los entrega al reproductor multi-servidor.
+ * Si ningún addon entrega enlaces, retorna lista vacía y la UI muestra
+ * un mensaje profesional (sin contenido falso).
  */
 object StreamHub {
 
-    /** Se está resolviendo la lista de enlaces. */
     val resolving = mutableStateOf(false)
-
-    /** Estado de la última resolución (para la UI). */
     val lastStatus = mutableStateOf("")
 
-    /**
-     * Id Stremio del vídeo (tipo, id). Los episodios usan su `streamId`
-     * (`tt123:1:2` / `tmdb:123:1:2`); los episodios locales (demo) no se
-     * resuelven remotamente.
-     */
     fun stremioId(video: Video): Pair<String, String>? {
         val raw = video.streamId ?: video.id
-        if (video.streamId == null && '~' in raw) return null // episodio local demo
+        if (video.streamId == null && '~' in raw) {
+            // Episodio local sin streamId: no se puede resolver remotamente
+            return null
+        }
         val type = when {
             video.remoteType == "series" -> "series"
             video.remoteType == "movie" -> "movie"
@@ -173,16 +136,11 @@ object StreamHub {
         return type to raw
     }
 
-    /**
-     * Resuelve los enlaces de un título consultando todos los addons
-     * configurados (en paralelo y con tiempo límite). Devuelve los
-     * [StreamSource] listos para el reproductor (multi-servidor).
-     */
     suspend fun resolve(video: Video): List<StreamSource> {
         val (type, id) = stremioId(video) ?: return emptyList()
         val addons = configuredAddons()
         if (addons.isEmpty()) {
-            lastStatus.value = "Sin addons de streams configurados"
+            lastStatus.value = "Sin addons de streams configurados — añade uno en Ajustes"
             return emptyList()
         }
 
@@ -219,7 +177,7 @@ object StreamHub {
             lastStatus.value = if (sources.isEmpty()) {
                 "Ningún addon entregó enlaces para este título"
             } else {
-                "${sources.size} enlaces de ${sources.map { it.label.substringBefore(" · ") }.distinct().size} addons"
+                "${sources.size} enlaces de ${sources.map { it.label.substringBefore(" · ") }.distinct().size} fuentes"
             }
             return sources
         } finally {
@@ -227,13 +185,9 @@ object StreamHub {
         }
     }
 
-    /** Addons activos: los proyectos configurados por el usuario. */
     private fun configuredAddons(): List<StreamAddon> =
         SettingsStore.streamAddons.map { url ->
-            ProjectStreamAddon(
-                baseUrl = url,
-                name = hostLabel(url)
-            )
+            ProjectStreamAddon(baseUrl = url, name = hostLabel(url))
         }
 
     private fun hostLabel(url: String): String = runCatching {

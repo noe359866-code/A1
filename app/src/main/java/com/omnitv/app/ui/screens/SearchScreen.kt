@@ -59,17 +59,8 @@ import com.omnitv.app.ui.theme.TextPrimary
 import com.omnitv.app.ui.theme.TextSecondary
 
 /**
- * Buscador sobre todo el catálogo: resultados **locales + remotos**
- * (Cinemeta y Nuvio).
- *
- * Al entrar, el foco va al campo y se abre el **teclado en pantalla** de la app
- * (`TvKeyboard`): en Android TV el teclado del sistema no aparece de forma
- * fiable con Compose, así que el buscador trae el suyo para que un mando sin
- * teclados pueda escribir. Se maneja con las flechas y OK, y se cierra con
- * «LISTO», que devuelve el foco al campo y deja ver la lista completa.
- *
- * La búsqueda no distingue acentos ni mayúsculas («accion» encuentra «Acción»),
- * porque el teclado de la tele no tiene tildes.
+ * Buscador profesional: resultados sobre el catálogo real (Cinemeta + Nuvio + caché local).
+ * Teclado en pantalla para Android TV con control por D-pad.
  */
 @Composable
 fun SearchScreen(onOpenDetail: (Video) -> Unit) {
@@ -77,7 +68,6 @@ fun SearchScreen(onOpenDetail: (Video) -> Unit) {
     val kidsOnly = ProfileStore.currentProfile?.isKids == true
     val localResults = remember(query, kidsOnly) { CatalogRepository.search(query, kidsOnly = kidsOnly) }
 
-    // Búsqueda remota (catálogo real) con rebote
     var remoteResults by remember { mutableStateOf<List<Video>>(emptyList()) }
     var searching by remember { mutableStateOf(false) }
     LaunchedEffect(query) {
@@ -91,22 +81,15 @@ fun SearchScreen(onOpenDetail: (Video) -> Unit) {
         }
     }
     val results = (localResults + remoteResults).distinctBy { it.id }
-    val suggestions = listOf("Animación", "Ciencia ficción", "Motor", "Demo", "Fantasía")
+    val suggestions = listOf("Acción", "Animación", "Aventura", "Ciencia ficción", "Comedia", "Drama", "Fantasía", "Familia")
 
-    // Al entrar en la pantalla el foco va al campo: en un mando, tener que
-    // atravesar la barra de pestañas para poder buscar es un peaje innecesario.
     val fieldFocus = remember { FocusRequester() }
     RequestTvFocus(fieldFocus)
 
-    // Teclado en pantalla: se abre al entrar en el campo y se cierra con
-    // «LISTO». Mientras está abierto ocupa el sitio de las sugerencias.
     var keyboardOpen by rememberSaveable { mutableStateOf(false) }
     var keyboardJustClosed by remember { mutableStateOf(false) }
     val firstKeyFocus = remember { FocusRequester() }
 
-    // Cada vez que el teclado se abre, el foco entra en la primera tecla para
-    // que el mando escriba sin pasos intermedios. Depende de `keyboardOpen`: si
-    // fuera `Unit`, al reabrir el foco se quedaría donde estaba.
     LaunchedEffect(keyboardOpen) {
         if (keyboardOpen) {
             withFrameNanos { }
@@ -114,7 +97,6 @@ fun SearchScreen(onOpenDetail: (Video) -> Unit) {
         }
     }
 
-    // «Atrás» con el teclado abierto lo cierra en vez de salir de la pantalla.
     BackHandler(enabled = keyboardOpen) {
         keyboardOpen = false
         keyboardJustClosed = true
@@ -122,7 +104,6 @@ fun SearchScreen(onOpenDetail: (Video) -> Unit) {
     }
 
     Box(Modifier.fillMaxSize().background(Background)) {
-        // ---- Contenido de la pantalla (campo, sugerencias o resultados) ----
         Column(
             Modifier
                 .fillMaxSize()
@@ -138,17 +119,9 @@ fun SearchScreen(onOpenDetail: (Video) -> Unit) {
                 leadingIconRes = R.drawable.ic_search,
                 imeAction = ImeAction.Search,
                 focusRequester = fieldFocus,
-                // El IME del sistema no se pide: el teclado es el de la app.
                 imeOnCenter = false,
-                // Con el teclado abierto el campo no debe poder recuperar el
-                // foco, o el D-pad se sale de las teclas y el mando deja de
-                // escribir sin que se vea por qué.
                 focusable = !keyboardOpen,
-                // Al enfocar el campo se abre el teclado de la app (no el del
-                // sistema): en un televisor el IME no aparece de forma fiable.
                 onFocusChange = { focused ->
-                    // Solo abre al entrar con el mando, no cuando «LISTO»
-                    // devuelve el foco al campo (si no, se reabriría solo).
                     if (focused && !keyboardJustClosed) keyboardOpen = true
                     keyboardJustClosed = false
                 },
@@ -157,10 +130,9 @@ fun SearchScreen(onOpenDetail: (Video) -> Unit) {
 
             Spacer(Modifier.height(16.dp))
 
-            // Las sugerencias solo ocupan sitio cuando el teclado está cerrado.
             if (!keyboardOpen) {
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    suggestions.forEach { suggestion ->
+                    suggestions.take(5).forEach { suggestion ->
                         TvChip(suggestion, onClick = { query = suggestion })
                     }
                 }
@@ -169,14 +141,11 @@ fun SearchScreen(onOpenDetail: (Video) -> Unit) {
 
             Box(Modifier.weight(1f).padding(bottom = 56.dp)) {
                 when {
-                    // Con el teclado abierto el estado vacío grande sobra: se
-                    // queda detrás del teclado y no se lee. La consulta ya se ve
-                    // en el campo, que está encima del teclado.
                     query.isBlank() && keyboardOpen -> Unit
                     query.isBlank() -> EmptyState(
                         iconRes = R.drawable.ic_search,
                         title = "Busca en todo el catálogo",
-                        subtitle = "Cinemeta · Nuvio · contenido demo · escribe un título o género"
+                        subtitle = "Cinemeta · Nuvio · tus plataformas conectadas"
                     )
                     searching -> Text(
                         "Buscando en Cinemeta y Nuvio…",
@@ -187,7 +156,7 @@ fun SearchScreen(onOpenDetail: (Video) -> Unit) {
                     results.isEmpty() -> EmptyState(
                         iconRes = R.drawable.ic_search,
                         title = "Sin resultados para «$query»",
-                        subtitle = "Prueba con otro término o género"
+                        subtitle = "Prueba con otro término o revisa la escritura"
                     )
                     else -> {
                         Text(
@@ -217,19 +186,12 @@ fun SearchScreen(onOpenDetail: (Video) -> Unit) {
             }
         }
 
-        // ---- Teclado en pantalla ----
-        //
-        // Se dibuja **encima** del contenido, anclado abajo: con 4 filas de
-        // teclas no cabe debajo del buscador sin dejar los resultados en una
-        // franja inútil. Así se sigue viendo la consulta y lo que va saliendo
-        // mientras se escribe; «LISTO» lo cierra y deja la lista completa.
         AnimatedVisibility(
             visible = keyboardOpen,
             enter = slideInVertically { it } + fadeIn(),
             exit = slideOutVertically { it } + fadeOut(),
             modifier = Modifier.align(Alignment.BottomCenter)
         ) {
-            // Velo: separa el teclado de los pósters que quedan detrás.
             Column(
                 Modifier
                     .fillMaxWidth()
@@ -245,9 +207,6 @@ fun SearchScreen(onOpenDetail: (Video) -> Unit) {
                 TvKeyboard(
                     onKey = { key -> query = TvKeypad.apply(query, key) },
                     onDone = {
-                        // «LISTO» no lanza la búsqueda: los resultados ya se
-                        // están actualizando mientras se escribe. Solo cierra
-                        // el teclado y devuelve el foco al campo.
                         keyboardOpen = false
                         keyboardJustClosed = true
                         runCatching { fieldFocus.requestFocus() }
@@ -259,7 +218,6 @@ fun SearchScreen(onOpenDetail: (Video) -> Unit) {
     }
 }
 
-/** Estado vacío con icono (sin resultados / búsqueda inicial). */
 @Composable
 private fun EmptyState(iconRes: Int, title: String, subtitle: String) {
     Column(

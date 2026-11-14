@@ -305,14 +305,12 @@ fun DetailScreen(
                     }
                 }
 
-                // Aviso honesto para títulos del catálogo real
+                // Origen del título
                 if (full.isRemote) {
                     Spacer(Modifier.height(14.dp))
                     Text(
-                        "Catálogo real de ${full.source} · los addons de catálogo no incluyen " +
-                            "enlaces de reproducción: se reproducirá una demostración",
+                        "Origen: ${full.source} · ${full.remoteType ?: full.type.label.lowercase()}  ·  Los enlaces se resuelven con los addons configurados en Ajustes",
                         style = AppType.metadata,
-                        // No `TextTertiary` (2,5:1 sobre el fondo): es texto real
                         color = TextMuted
                     )
                 }

@@ -2,13 +2,20 @@ package com.omnitv.app.ui.screens
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.unit.dp
@@ -24,16 +31,18 @@ import com.omnitv.app.ui.components.OnlyOnSection
 import com.omnitv.app.ui.components.RequestTvFocus
 import com.omnitv.app.ui.components.SectionRow
 import com.omnitv.app.ui.components.StudioStripSection
+import com.omnitv.app.ui.theme.AppType
 import com.omnitv.app.ui.theme.Background
+import com.omnitv.app.ui.theme.TextPrimary
+import com.omnitv.app.ui.theme.TextSecondary
+import androidx.compose.material.Text
 
 /**
  * Pantalla de inicio tipo "Watch Now" de Apple TV:
- * banner héroe a pantalla grande + filas horizontales de contenido.
+ * banner héroe + filas horizontales de contenido real.
  *
- * Combina el **catálogo real** (Cinemeta + Nuvio) con las filas propias del
- * perfil («Mi lista», «Continuar viendo»). Los perfiles infantiles solo ven
- * el catálogo local curado (los addons remotos no traen clasificación por
- * edades).
+ * Todo el catálogo proviene de RemoteCatalog (Cinemeta / Nuvio / addons).
+ * Las filas personales ("Mi lista", "Continuar viendo") son del perfil activo.
  */
 @Composable
 fun HomeScreen(
@@ -45,62 +54,138 @@ fun HomeScreen(
 ) {
     val profile = ProfileStore.currentProfile
 
-    // Carga del catálogo real (Cinemeta + Nuvio + addons del panel QR);
-    // se recarga si la configuración cambia desde el panel web
     LaunchedEffect(SettingsStore.revision) {
         if (RemoteCatalog.needsReload()) RemoteCatalog.refresh()
     }
 
     val localRows = CatalogRepository.rowsFor(profile)
     val kidsOnly = profile?.isKids == true
-    val rows = if (kidsOnly) localRows else RemoteCatalog.rows + localRows
-    val featured = if (kidsOnly) {
-        CatalogRepository.featuredFor(profile)
-    } else {
-        RemoteCatalog.featured.value ?: CatalogRepository.featuredFor(profile)
+    val remoteRows = RemoteCatalog.rows
+    val rows = if (kidsOnly) localRows else remoteRows + localRows
+
+    // Héroe: título destacado remoto. Si aún no hay datos, muestra estado vacío.
+    val featured: Video? = RemoteCatalog.featured.value
+
+    // Foco inicial en el héroe cuando existe
+    val heroFocus = remember { FocusRequester() }
+    if (featured != null) {
+        RequestTvFocus(heroFocus, key = featured.id)
     }
 
-    // Foco inicial en «Reproducir» del héroe: con el D-pad, arrancar en la
-    // barra de pestañas obliga a bajar por toda la barra antes de ver algo.
-    val heroFocus = remember { FocusRequester() }
-    RequestTvFocus(heroFocus, key = featured.id)
+    when {
+        // Cargando catálogo inicial
+        RemoteCatalog.loading.value && remoteRows.isEmpty() && localRows.isEmpty() -> {
+            Box(
+                Modifier.fillMaxSize().background(Background),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text("Cargando catálogo…", style = AppType.sectionTitle, color = TextPrimary)
+                    Spacer(Modifier.height(8.dp))
+                    Text("Cinemeta · Nuvio · addons configurados", style = AppType.metadata, color = TextSecondary)
+                }
+            }
+        }
 
-    LazyColumn(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(Background),
-        // 28 dp: las filas se leen como un bloque y no como pantallas
-        // separadas; el héroe ya aporta su propio aire abajo.
-        verticalArrangement = Arrangement.spacedBy(28.dp),
-        contentPadding = PaddingValues(bottom = 56.dp)
+        // Héroe no disponible pero hay filas
+        featured == null -> {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize().background(Background),
+                verticalArrangement = Arrangement.spacedBy(28.dp),
+                contentPadding = PaddingValues(bottom = 56.dp, top = 32.dp)
+            ) {
+                if (rows.isEmpty()) {
+                    item(key = "empty") {
+                        EmptyHomeState()
+                    }
+                } else {
+                    items(rows.take(2), key = { it.title }) { row ->
+                        SectionRow(row = row, onOpenDetail = onOpenDetail)
+                    }
+                    if (!kidsOnly) {
+                        item(key = "onlyOn") {
+                            OnlyOnSection(
+                                onOpenDetail = onOpenDetail,
+                                onSeeAll = onSeeAll,
+                                onOpenPlatforms = onOpenPlatforms
+                            )
+                        }
+                        item(key = "studios") {
+                            StudioStripSection(onOpenStudio = onOpenStudio)
+                        }
+                    }
+                    items(rows.drop(2), key = { it.title }) { row ->
+                        SectionRow(row = row, onOpenDetail = onOpenDetail)
+                    }
+                }
+            }
+        }
+
+        else -> {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize().background(Background),
+                verticalArrangement = Arrangement.spacedBy(28.dp),
+                contentPadding = PaddingValues(bottom = 56.dp)
+            ) {
+                item(key = "hero") {
+                    HeroBanner(
+                        video = featured,
+                        onPlay = { onPlay(featured) },
+                        onInfo = { onOpenDetail(featured) },
+                        playFocusRequester = heroFocus
+                    )
+                }
+                items(rows.take(2), key = { it.title }) { row ->
+                    SectionRow(row = row, onOpenDetail = onOpenDetail)
+                }
+                if (!kidsOnly) {
+                    item(key = "onlyOn") {
+                        OnlyOnSection(
+                            onOpenDetail = onOpenDetail,
+                            onSeeAll = onSeeAll,
+                            onOpenPlatforms = onOpenPlatforms
+                        )
+                    }
+                    item(key = "studios") {
+                        StudioStripSection(onOpenStudio = onOpenStudio)
+                    }
+                }
+                items(rows.drop(2), key = { it.title }) { row ->
+                    SectionRow(row = row, onOpenDetail = onOpenDetail)
+                }
+                if (rows.isEmpty()) {
+                    item(key = "empty-after-hero") {
+                        Box(
+                            Modifier.fillMaxWidth().padding(horizontal = 48.dp, vertical = 24.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                "Añade títulos a tu lista o explora el catálogo",
+                                style = AppType.metadata,
+                                color = TextSecondary
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun EmptyHomeState() {
+    Box(
+        Modifier.fillMaxWidth().padding(horizontal = 48.dp, vertical = 48.dp),
+        contentAlignment = Alignment.Center
     ) {
-        item(key = "hero") {
-            HeroBanner(
-                video = featured,
-                onPlay = { onPlay(featured) },
-                onInfo = { onOpenDetail(featured) },
-                playFocusRequester = heroFocus
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text("Tu catálogo está vacío", style = AppType.sectionTitle, color = TextPrimary)
+            Spacer(Modifier.height(8.dp))
+            Text(
+                "Conecta addons en Ajustes → Vincular cuenta o espera a que cargue el catálogo",
+                style = AppType.metadata,
+                color = TextSecondary
             )
-        }
-        items(rows.take(2), key = { it.title }) { row ->
-            SectionRow(row = row, onOpenDetail = onOpenDetail)
-        }
-        // «Solo en {plataforma}» — como el «Only on Netflix» de flystream.net
-        if (!kidsOnly) {
-            item(key = "onlyOn") {
-                OnlyOnSection(
-                    onOpenDetail = onOpenDetail,
-                    onSeeAll = onSeeAll,
-                    onOpenPlatforms = onOpenPlatforms
-                )
-            }
-            // «Por estudio» — como el «Browse by studio» de sweetfox.app
-            item(key = "studios") {
-                StudioStripSection(onOpenStudio = onOpenStudio)
-            }
-        }
-        items(rows.drop(2), key = { it.title }) { row ->
-            SectionRow(row = row, onOpenDetail = onOpenDetail)
         }
     }
 }
