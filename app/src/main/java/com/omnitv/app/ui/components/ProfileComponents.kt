@@ -9,25 +9,19 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.material.Text
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
@@ -38,23 +32,15 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.material.Text
 import com.omnitv.app.R
 import com.omnitv.app.data.Profile
 import com.omnitv.app.data.avatarRes
-import com.omnitv.app.ui.theme.Accent
-import com.omnitv.app.ui.theme.AppRadius
-import com.omnitv.app.ui.theme.AppType
-import com.omnitv.app.ui.theme.GlassFill
-import com.omnitv.app.ui.theme.GlassFillStrong
-import com.omnitv.app.ui.theme.TextPrimary
-import com.omnitv.app.ui.theme.TextSecondary
+import com.omnitv.app.ui.theme.*
 
-/* -------------------------------------------------------------------------- */
-/*  Avatar ilustrado estilo Netflix (tile cuadrado redondeado)                */
-/* -------------------------------------------------------------------------- */
+// ────────────────────────────────────────────────────────────────────────────
+//  Avatar — forma Netflix (22% radio), con borde interior sutil y sombra
+// ────────────────────────────────────────────────────────────────────────────
 
-/** Radio de esquina proporcional al tamaño, como los tiles de Netflix. */
 private fun avatarShape(size: Dp): RoundedCornerShape = RoundedCornerShape(size * 0.22f)
 
 @Composable
@@ -62,17 +48,17 @@ fun AvatarView(
     avatarIndex: Int,
     size: Dp,
     modifier: Modifier = Modifier,
-    ringColor: Color? = null
+    ringColor: Color? = null,
+    showBorder: Boolean = true
 ) {
     val shape = avatarShape(size)
     Box(
-        modifier = modifier
+        modifier
             .size(size)
+            .shadow(if (ringColor != null) 14.dp else 6.dp, shape, clip = false)
             .clip(shape)
-            .then(
-                if (ringColor != null) Modifier.border(3.dp, ringColor, shape)
-                else Modifier
-            )
+            .then(if (ringColor != null) Modifier.border(3.dp, ringColor, shape) else Modifier)
+            .then(if (showBorder && ringColor == null) Modifier.border(1.dp, Color.White.copy(alpha = 0.10f), shape) else Modifier)
     ) {
         Image(
             painter = painterResource(avatarRes(avatarIndex)),
@@ -80,24 +66,33 @@ fun AvatarView(
             contentScale = ContentScale.Crop,
             modifier = Modifier.fillMaxSize()
         )
+        // Brillo superior sutil — efecto vidrio
+        Box(
+            Modifier.fillMaxSize().background(
+                Brush.verticalGradient(
+                    0f to Color.White.copy(alpha = 0.08f),
+                    0.45f to Color.Transparent
+                )
+            )
+        )
     }
 }
 
 @Composable
-fun KidsChip(modifier: Modifier = Modifier) {
+fun KidsChip(modifier: Modifier = Modifier, compact: Boolean = false) {
     Box(
         modifier
             .clip(AppRadius.xs)
-            .background(Accent)
-            .padding(horizontal = 7.dp, vertical = 2.dp)
+            .background(Brush.linearGradient(listOf(Color(0xFFFFD60A), Color(0xFFFF9F0A))))
+            .padding(horizontal = if (compact) 6.dp else 8.dp, vertical = if (compact) 2.dp else 3.dp)
     ) {
-        Text("KIDS", style = AppType.chip, color = Color.White)
+        Text("KIDS", style = AppType.chip.copy(fontSize = if (compact) 11.sp else 13.sp, letterSpacing = 0.8.sp), color = Color(0xFF1A1A1A))
     }
 }
 
-/* -------------------------------------------------------------------------- */
-/*  Ficha de perfil (selector «¿Quién está viendo?»)                          */
-/* -------------------------------------------------------------------------- */
+// ────────────────────────────────────────────────────────────────────────────
+//  ProfileTile — selector principal, con halo y tipografía premium
+// ────────────────────────────────────────────────────────────────────────────
 
 @Composable
 fun ProfileTile(
@@ -106,43 +101,62 @@ fun ProfileTile(
     modifier: Modifier = Modifier
 ) {
     var focused by remember { mutableStateOf(false) }
-    val scale by animateFloatAsState(if (focused) 1.10f else 1f, tween(160), label = "tileScale")
+    val scale by animateFloatAsState(if (focused) 1.08f else 1f, tween(AppMotion.Normal, easing = AppMotion.Emphasized), label = "tileScale")
+    val labelColor by androidx.compose.animation.animateColorAsState(if (focused) TextPrimary else TextSecondary, tween(120), label = "labelColor")
 
     Column(
-        modifier = modifier
+        modifier
             .graphicsLayer { scaleX = scale; scaleY = scale }
             .clip(AppRadius.lg)
-            .then(if (focused) Modifier.border(3.dp, Color.White, AppRadius.lg) else Modifier)
-            .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onClick)
+            .clickable(remember { MutableInteractionSource() }, null, onClick = onClick)
             .onFocusChanged { focused = it.isFocused }
-            .padding(10.dp),
+            .padding(8.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        AvatarView(
-            avatarIndex = profile.avatarIndex,
-            size = 132.dp,
-            ringColor = if (focused) Color.White else null
-        )
-        Spacer(Modifier.height(14.dp))
+        // Contenedor con halo exterior al enfocar
+        Box(contentAlignment = Alignment.Center) {
+            if (focused) {
+                Box(
+                    Modifier.size(148.dp).clip(avatarShape(148.dp))
+                        .background(Color.White.copy(alpha = 0.08f))
+                        .padding(4.dp)
+                ) {}
+            }
+            AvatarView(
+                avatarIndex = profile.avatarIndex,
+                size = 140.dp,
+                ringColor = if (focused) Color.White else null,
+                showBorder = !focused
+            )
+            // Indicador KIDS sobre avatar
+            if (profile.isKids) {
+                Box(Modifier.align(Alignment.BottomCenter).offset(y = 8.dp)) {
+                    KidsChip(compact = true)
+                }
+            }
+        }
+        Spacer(Modifier.height(16.dp))
         Text(
             profile.name,
-            style = TextStyle(
-                fontFamily = FontFamily.SansSerif,
-                fontWeight = FontWeight.SemiBold,
-                fontSize = 21.sp
-            ),
-            color = if (focused) TextPrimary else TextSecondary
+            style = TextStyle(FontFamily.SansSerif, FontWeight.SemiBold, 20.sp, letterSpacing = 0.1.sp),
+            color = labelColor,
+            maxLines = 1
         )
         if (profile.isKids) {
-            Spacer(Modifier.height(8.dp))
-            KidsChip()
+            Spacer(Modifier.height(4.dp))
+            Text("Infantil", style = AppType.caption, color = if (focused) TextSecondary else TextTertiary)
+        }
+        // Línea de acento sutil bajo el nombre al enfocar
+        if (focused) {
+            Spacer(Modifier.height(6.dp))
+            Box(Modifier.width(24.dp).height(2.dp).clip(AppRadius.pill).background(Accent))
         }
     }
 }
 
-/* -------------------------------------------------------------------------- */
-/*  Ficha para "gestionar perfiles" (superposición de lápiz)                  */
-/* -------------------------------------------------------------------------- */
+// ────────────────────────────────────────────────────────────────────────────
+//  ManageProfileTile — modo edición con velo y lápiz en círculo
+// ────────────────────────────────────────────────────────────────────────────
 
 @Composable
 fun ManageProfileTile(
@@ -151,13 +165,13 @@ fun ManageProfileTile(
     modifier: Modifier = Modifier
 ) {
     var focused by remember { mutableStateOf(false) }
-    val scale by animateFloatAsState(if (focused) 1.08f else 1f, tween(160), label = "manageScale")
-    val shape = avatarShape(118.dp)
+    val scale by animateFloatAsState(if (focused) 1.06f else 1f, tween(AppMotion.Normal, easing = AppMotion.Emphasized), label = "manageScale")
+    val shape = avatarShape(124.dp)
 
     Column(
-        modifier = modifier
+        modifier
             .graphicsLayer { scaleX = scale; scaleY = scale }
-            .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onEdit)
+            .clickable(remember { MutableInteractionSource() }, null, onClick = onEdit)
             .onFocusChanged { focused = it.isFocused }
             .padding(8.dp),
         horizontalAlignment = Alignment.CenterHorizontally
@@ -165,165 +179,189 @@ fun ManageProfileTile(
         Box(contentAlignment = Alignment.Center) {
             AvatarView(
                 avatarIndex = profile.avatarIndex,
-                size = 118.dp,
+                size = 124.dp,
                 ringColor = if (focused) Color.White else null
             )
-            // Velo + lápiz centrado, como el modo edición de Netflix
+            // Velo oscuro permanente en modo gestión + icono lápiz
             Box(
-                Modifier
-                    .size(118.dp)
-                    .clip(shape)
-                    .background(Color.Black.copy(alpha = 0.45f)),
+                Modifier.size(124.dp).clip(shape).background(Color.Black.copy(alpha = 0.52f)),
                 contentAlignment = Alignment.Center
             ) {
-                Image(
-                    painter = painterResource(R.drawable.ic_edit),
-                    contentDescription = "Editar ${profile.name}",
-                    modifier = Modifier.size(38.dp)
-                )
+                Box(
+                    Modifier.size(44.dp).clip(CircleShape)
+                        .background(if (focused) Color.White else Color.White.copy(alpha = 0.92f))
+                        .border(1.dp, Color.White.copy(alpha = 0.20f), CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Image(
+                        painter = painterResource(R.drawable.ic_edit),
+                        contentDescription = "Editar ${profile.name}",
+                        modifier = Modifier.size(20.dp),
+                        colorFilter = androidx.compose.ui.graphics.ColorFilter.tint(Color(0xFF0B0B0F))
+                    )
+                }
+            }
+            // Badge KIDS si aplica
+            if (profile.isKids) {
+                Box(Modifier.align(Alignment.BottomCenter).offset(y = 6.dp)) { KidsChip(compact = true) }
             }
         }
         Spacer(Modifier.height(14.dp))
         Text(
             profile.name,
-            style = TextStyle(
-                fontFamily = FontFamily.SansSerif,
-                fontWeight = FontWeight.SemiBold,
-                fontSize = 21.sp
-            ),
+            style = TextStyle(FontFamily.SansSerif, FontWeight.SemiBold, 18.sp),
             color = if (focused) TextPrimary else TextSecondary
         )
+        Text("Editar", style = AppType.caption, color = if (focused) Accent else TextTertiary)
     }
 }
 
-/* -------------------------------------------------------------------------- */
-/*  Ficha "Añadir perfil"                                                     */
-/* -------------------------------------------------------------------------- */
+// ────────────────────────────────────────────────────────────────────────────
+//  AddProfileTile — minimalista con borde discontinuo simulado
+// ────────────────────────────────────────────────────────────────────────────
 
 @Composable
 fun AddProfileTile(onClick: () -> Unit, modifier: Modifier = Modifier) {
     var focused by remember { mutableStateOf(false) }
-    val scale by animateFloatAsState(if (focused) 1.08f else 1f, tween(160), label = "addScale")
-    val shape = avatarShape(132.dp)
+    val scale by animateFloatAsState(if (focused) 1.06f else 1f, tween(AppMotion.Normal, easing = AppMotion.Emphasized), label = "addScale")
+    val shape = avatarShape(140.dp)
 
     Column(
-        modifier = modifier
+        modifier
             .graphicsLayer { scaleX = scale; scaleY = scale }
-            .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onClick)
+            .clickable(remember { MutableInteractionSource() }, null, onClick = onClick)
             .onFocusChanged { focused = it.isFocused }
-            .padding(10.dp),
+            .padding(8.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Box(
-            Modifier
-                .size(132.dp)
-                .clip(shape)
-                .background(if (focused) GlassFillStrong else GlassFill)
+            Modifier.size(140.dp).clip(shape)
+                .background(
+                    if (focused) Color.White.copy(alpha = 0.10f)
+                    else Brush.verticalGradient(0f to Color.White.copy(alpha = 0.06f), 1f to Color.White.copy(alpha = 0.03f))
+                )
+                .border(
+                    width = if (focused) 3.dp else 1.5.dp,
+                    color = if (focused) Color.White else Color.White.copy(alpha = 0.22f),
+                    shape = shape
+                )
+                // Borde interior punteado simulado con segundo borde
                 .then(
-                    if (focused) Modifier.border(3.dp, Color.White, shape)
-                    else Modifier.border(3.dp, TextSecondary.copy(alpha = 0.4f), shape)
+                    if (!focused) Modifier.border(1.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(140.dp * 0.20f))
+                    else Modifier
                 ),
             contentAlignment = Alignment.Center
         ) {
-            Image(
-                painter = painterResource(R.drawable.ic_add),
-                contentDescription = "Añadir perfil",
-                modifier = Modifier.size(40.dp),
-                colorFilter = androidx.compose.ui.graphics.ColorFilter.tint(
-                    if (focused) TextPrimary else TextSecondary
-                )
-            )
+            Box(
+                Modifier.size(52.dp).clip(CircleShape)
+                    .background(if (focused) Color.White else Color.White.copy(alpha = 0.10f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Text("+", style = TextStyle(FontFamily.SansSerif, FontWeight.Light, 36.sp, lineHeight = 36.sp), color = if (focused) Background else TextSecondary)
+            }
         }
-        Spacer(Modifier.height(14.dp))
-        Text(
-            "Añadir perfil",
-            style = TextStyle(
-                fontFamily = FontFamily.SansSerif,
-                fontWeight = FontWeight.SemiBold,
-                fontSize = 21.sp
-            ),
-            color = if (focused) TextPrimary else TextSecondary
-        )
+        Spacer(Modifier.height(16.dp))
+        Text("Añadir perfil", style = TextStyle(FontFamily.SansSerif, FontWeight.SemiBold, 18.sp), color = if (focused) TextPrimary else TextSecondary)
+        Text("Nuevo", style = AppType.caption, color = TextTertiary)
     }
 }
 
-/* -------------------------------------------------------------------------- */
-/*  Avatar pequeño para la barra superior                                     */
-/* -------------------------------------------------------------------------- */
+// ────────────────────────────────────────────────────────────────────────────
+//  ProfileBadge — avatar compacto para TopBar
+// ────────────────────────────────────────────────────────────────────────────
 
 @Composable
 fun ProfileBadge(profile: Profile?, onClick: () -> Unit, modifier: Modifier = Modifier) {
     var focused by remember { mutableStateOf(false) }
-    val scale by animateFloatAsState(if (focused) 1.10f else 1f, tween(150), label = "badgeScale")
-    // 48 dp: el mínimo que se puede enfocar con un mando sin que cueste acertar.
-    val shape = avatarShape(48.dp)
+    val scale by animateFloatAsState(if (focused) 1.08f else 1f, tween(AppMotion.Fast), label = "badgeScale")
+    val shape = avatarShape(44.dp)
 
-    Box(
-        modifier = modifier
+    Row(
+        modifier
             .graphicsLayer { scaleX = scale; scaleY = scale }
-            .clip(shape)
-            .then(
-                if (focused) Modifier.border(3.dp, Color.White, shape)
-                else Modifier
-            )
-            .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onClick)
+            .clip(RoundedCornerShape(12.dp))
+            .background(if (focused) Color.White.copy(alpha = 0.12f) else Color.Transparent)
+            .border(if (focused) 2.dp else 1.dp, if (focused) Color.White else Color.White.copy(alpha = 0.10f), RoundedCornerShape(12.dp))
+            .clickable(remember { MutableInteractionSource() }, null, onClick = onClick)
             .onFocusChanged { focused = it.isFocused }
+            .padding(horizontal = 8.dp, vertical = 6.dp),
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        if (profile != null) {
-            Image(
-                painter = painterResource(avatarRes(profile.avatarIndex)),
-                contentDescription = "Perfil ${profile.name}",
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.size(48.dp)
-            )
-        } else {
-            Box(
-                Modifier
-                    .size(42.dp)
-                    .clip(shape)
-                    .background(GlassFillStrong),
-                contentAlignment = Alignment.Center
-            ) {
-                Text("?", style = AppType.cardTitle, color = TextPrimary)
+        Box(
+            Modifier.size(36.dp).clip(shape)
+                .border(1.5.dp, Color.White.copy(alpha = 0.18f), shape)
+        ) {
+            if (profile != null) {
+                Image(
+                    painter = painterResource(avatarRes(profile.avatarIndex)),
+                    contentDescription = "Perfil ${profile.name}",
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize()
+                )
+            } else {
+                Box(Modifier.fillMaxSize().background(GlassFillStrong), contentAlignment = Alignment.Center) {
+                    Text("?", style = AppType.caption, color = TextPrimary)
+                }
             }
+        }
+        if (profile != null) {
+            Spacer(Modifier.width(8.dp))
+            Column {
+                Text(profile.name, style = TextStyle(FontFamily.SansSerif, FontWeight.SemiBold, 14.sp), color = TextPrimary, maxLines = 1)
+                if (profile.isKids) Text("KIDS", style = TextStyle(FontFamily.SansSerif, FontWeight.Bold, 10.sp, letterSpacing = 0.8.sp), color = Accent)
+            }
+            Spacer(Modifier.width(6.dp))
+            Text("▾", style = TextStyle(FontFamily.SansSerif, FontWeight.Bold, 10.sp), color = TextTertiary)
         }
     }
 }
 
-/* -------------------------------------------------------------------------- */
-/*  Selector de avatar para el editor de perfiles                              */
-/* -------------------------------------------------------------------------- */
+// ────────────────────────────────────────────────────────────────────────────
+//  AvatarOption — selector de avatar en editor
+// ────────────────────────────────────────────────────────────────────────────
 
 @Composable
 fun AvatarOption(resId: Int, selected: Boolean, onClick: () -> Unit, modifier: Modifier = Modifier) {
     var focused by remember { mutableStateOf(false) }
-    val scale by animateFloatAsState(if (focused) 1.15f else 1f, tween(140), label = "optionScale")
-    val shape = AppRadius.md
+    val scale by animateFloatAsState(if (focused) 1.12f else 1f, tween(AppMotion.Fast), label = "optionScale")
+    val shape = RoundedCornerShape(14.dp)
 
     Box(
-        modifier = modifier
+        modifier
             .graphicsLayer { scaleX = scale; scaleY = scale }
-            .size(64.dp)
+            .size(72.dp)
+            .shadow(if (selected || focused) 8.dp else 0.dp, shape, clip = false)
             .clip(shape)
-            .then(
-                if (selected || focused) Modifier.border(3.dp, Color.White, shape)
-                else Modifier
+            .border(
+                width = when { focused -> 3.dp; selected -> 2.dp; else -> 0.dp },
+                color = when { focused -> Color.White; selected -> Accent; else -> Color.Transparent },
+                shape = shape
             )
-            .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onClick)
+            .clickable(remember { MutableInteractionSource() }, null, onClick = onClick)
             .onFocusChanged { focused = it.isFocused }
     ) {
-        Image(
-            painter = painterResource(resId),
-            contentDescription = null,
-            contentScale = ContentScale.Crop,
-            modifier = Modifier.fillMaxSize()
-        )
+        Image(painter = painterResource(resId), contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+        if (selected) {
+            Box(
+                Modifier.fillMaxSize().background(Brush.verticalGradient(0f to Color.Transparent, 1f to Accent.copy(alpha = 0.35f)))
+            )
+            Box(
+                Modifier.align(Alignment.BottomEnd).padding(6.dp).size(20.dp).clip(CircleShape)
+                    .background(Accent).border(1.5.dp, Color.White, CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Text("✓", style = TextStyle(FontFamily.SansSerif, FontWeight.Bold, 11.sp), color = Color.White)
+            }
+        }
+        if (focused && !selected) {
+            Box(Modifier.fillMaxSize().background(Color.White.copy(alpha = 0.08f)))
+        }
     }
 }
 
-/* -------------------------------------------------------------------------- */
-/*  Campo de nombre (estilo campo de búsqueda)                                */
-/* -------------------------------------------------------------------------- */
+// ────────────────────────────────────────────────────────────────────────────
+//  NameField — campo de texto para TV, con focus y placeholder premium
+// ────────────────────────────────────────────────────────────────────────────
 
 @Composable
 fun NameField(
@@ -332,18 +370,12 @@ fun NameField(
     modifier: Modifier = Modifier,
     focusRequester: FocusRequester? = null
 ) {
-    // Mismo tratamiento que la búsqueda: el mando abre el teclado en pantalla
-    // con OK. Sin eso, en un televisor no se puede escribir el nombre.
-    // Se crea siempre (no solo cuando falta el del llamante) para no hacer un
-    // `remember` condicional, que rompe la composición si el parámetro cambia.
     val ownRequester = remember { FocusRequester() }
     TvTextField(
         value = value,
         onValueChange = onValueChange,
         placeholder = "Nombre del perfil",
         modifier = modifier,
-        // El `FocusRequester` tiene que ir al campo (nodo enfocable), no al Row
-        // que lo envuelve: si va al Row, `requestFocus` no mueve nada.
         focusRequester = focusRequester ?: ownRequester
     )
 }

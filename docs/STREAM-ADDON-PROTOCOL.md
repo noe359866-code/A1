@@ -85,9 +85,9 @@ También se acepta un array directo `[{ "label", "url" }]` sin envoltorio.
 2. Normaliza y deduplica los enlaces y los pasa al **reproductor
    multi-servidor** (menú de servidores, fallback automático si un enlace
    cae, calidad/audio/subtítulos cuando Media3 los detecta).
-3. Si ningún proyecto entrega enlaces, el reproductor reproduce el
-   contenido **demo etiquetado** (chip `DEMO`) — la app nunca se queda
-   sin funcionar.
+3. Si ningún proyecto entrega enlaces, el reproductor muestra un mensaje profesional
+   **"Sin fuentes disponibles"** y sugiere configurar un addon en Ajustes — la app
+   nunca reproduce contenido falso ni inventa streams.
 
 ## Ejemplo con StreamFlix Reborn y afines
 

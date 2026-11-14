@@ -2,7 +2,11 @@ package com.omnitv.app
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -11,6 +15,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -27,9 +32,6 @@ import com.omnitv.app.data.Studios
 import com.omnitv.app.data.StreamHub
 import com.omnitv.app.data.StremioClient
 import com.omnitv.app.data.Video
-import com.omnitv.app.ui.theme.AppType
-import com.omnitv.app.ui.theme.Background
-import com.omnitv.app.ui.theme.TextSecondary
 import com.omnitv.app.player.PlayerScreen
 import com.omnitv.app.ui.components.ProfileBadge
 import com.omnitv.app.ui.components.TabItem
@@ -45,6 +47,10 @@ import com.omnitv.app.ui.screens.ProfileSelectScreen
 import com.omnitv.app.ui.screens.SearchScreen
 import com.omnitv.app.ui.screens.SettingsScreen
 import com.omnitv.app.ui.screens.StudioCatalogScreen
+import com.omnitv.app.ui.theme.AppType
+import com.omnitv.app.ui.theme.Background
+import com.omnitv.app.ui.theme.TextPrimary
+import com.omnitv.app.ui.theme.TextSecondary
 
 /** Rutas de navegación. */
 object Routes {
@@ -79,9 +85,8 @@ private val appTabs = listOf(
 /**
  * Raíz de la app: tema Omni TV + navegación.
  *
- * Flujo estilo Netflix: al arrancar se muestra «¿Quién está viendo?»;
- * tras elegir perfil se entra a las pestañas principales. El avatar del
- * perfil siempre está accesible en la esquina superior derecha.
+ * Flujo profesional: puerta de perfiles → navegación por pestañas tvOS.
+ * El avatar del perfil siempre está accesible en la esquina superior derecha.
  */
 @Composable
 fun OmniTvApp() {
@@ -108,7 +113,7 @@ fun OmniTvApp() {
                     onSelected = { profile ->
                         ProfileStore.select(profile.id)
                         navController.navigate(Routes.HOME) {
-                            popUpTo(Routes.HOME) { inclusive = false }
+                            popUpTo(Routes.PROFILES) { inclusive = false }
                             launchSingleTop = true
                         }
                     },
@@ -215,10 +220,11 @@ fun OmniTvApp() {
             ) { entry ->
                 val videoId = entry.arguments?.getString("videoId").orEmpty()
                 var video by remember { mutableStateOf(CatalogRepository.find(videoId)) }
-                // Título del catálogo real aún sin cachear: se pide la ficha remota
                 if (video == null) {
                     Box(Modifier.fillMaxSize().background(Background), contentAlignment = Alignment.Center) {
-                        Text("Cargando…", style = AppType.metadata, color = TextSecondary)
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("Cargando…", style = AppType.metadata, color = TextSecondary)
+                        }
                     }
                     LaunchedEffect(videoId) {
                         video = RemoteCatalog.fetchDetail(
@@ -229,7 +235,6 @@ fun OmniTvApp() {
                                 quality = "HD", genres = emptyList(), videoUrl = "",
                                 isRemote = true,
                                 source = if (videoId.startsWith("tt")) StremioClient.CINEMETA_NAME else StremioClient.NUVIO_NAME,
-                                // Tipo desconocido: fetchDetail prueba movie y series
                                 remoteType = null
                             )
                         )
@@ -250,43 +255,73 @@ fun OmniTvApp() {
             ) { entry ->
                 val videoId = entry.arguments?.getString("videoId").orEmpty()
                 val raw = remember(videoId) { CatalogRepository.find(videoId) }
-                // Los títulos remotos se resuelven con el addon interno
-                // «Omni Streams» (proyectos externos); si nadie entrega
-                // enlaces, se reproduce el flujo demo etiquetado
-                var resolved by remember {
-                    mutableStateOf(if (raw != null && !raw.isRemote) raw else null)
-                }
+
                 when {
                     raw == null -> LaunchedEffect(Unit) { navController.popBackStack() }
-                    resolved == null -> {
-                        Box(Modifier.fillMaxSize().background(Background), contentAlignment = Alignment.Center) {
-                            Text("Buscando enlaces…", style = AppType.metadata, color = TextSecondary)
-                        }
-                        LaunchedEffect(videoId) {
-                            val streams = StreamHub.resolve(raw)
-                            resolved = if (streams.isNotEmpty()) {
-                                raw.copy(
-                                    sources = streams,
-                                    videoUrl = streams.first().url,
-                                    streamFormat = streams.first().format,
-                                    badge = null
-                                )
-                            } else {
-                                CatalogRepository.withDemoFallback(raw)
-                            }
-                        }
-                    }
+
+                    // Todo el contenido es remoto: resolver siempre vía addons configurados.
+                    // Sin enlaces no hay reproducción silenciosa con demo.
                     else -> {
-                        PlayerScreen(
-                            video = resolved!!,
-                            onBack = { navController.popBackStack() },
-                            onPlayNext = { next ->
-                                // Auto-next: sustituye el reproductor actual por el siguiente
-                                navController.navigate(Routes.player(next.id)) {
-                                    popUpTo(Routes.PLAYER) { inclusive = true }
+                        var resolved by remember { mutableStateOf<Video?>(null) }
+                        var error by remember { mutableStateOf<String?>(null) }
+
+                        if (resolved == null && error == null) {
+                            Box(Modifier.fillMaxSize().background(Background), contentAlignment = Alignment.Center) {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Text("Buscando enlaces…", style = AppType.metadata, color = TextSecondary)
                                 }
                             }
-                        )
+                            LaunchedEffect(videoId) {
+                                val streams = StreamHub.resolve(raw)
+                                if (streams.isNotEmpty()) {
+                                    resolved = raw.copy(
+                                        sources = streams,
+                                        videoUrl = streams.first().url,
+                                        streamFormat = streams.first().format,
+                                        badge = null
+                                    )
+                                } else {
+                                    // Si el vídeo trae URL directa (p.ej. HLS de proveedor), úsala
+                                    if (raw.videoUrl.isNotEmpty()) {
+                                        resolved = raw
+                                    } else {
+                                        error = StreamHub.lastStatus.value.ifEmpty {
+                                            "No hay fuentes disponibles. Configura un addon de streams en Ajustes."
+                                        }
+                                    }
+                                }
+                            }
+                        } else if (error != null) {
+                            Box(Modifier.fillMaxSize().background(Background), contentAlignment = Alignment.Center) {
+                                Column(
+                                    Modifier.padding(horizontal = 48.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally
+                                ) {
+                                    Text("Sin fuentes disponibles", style = AppType.sectionTitle, color = TextPrimary)
+                                    Spacer(Modifier.height(12.dp))
+                                    Text(error!!, style = AppType.metadata, color = TextSecondary)
+                                    Spacer(Modifier.height(24.dp))
+                                    androidx.compose.foundation.layout.Row {
+                                        com.omnitv.app.ui.components.PillButton(
+                                            text = "Volver",
+                                            iconRes = R.drawable.ic_back,
+                                            primary = false,
+                                            onClick = { navController.popBackStack() }
+                                        )
+                                    }
+                                }
+                            }
+                        } else {
+                            PlayerScreen(
+                                video = resolved!!,
+                                onBack = { navController.popBackStack() },
+                                onPlayNext = { next ->
+                                    navController.navigate(Routes.player(next.id)) {
+                                        popUpTo(Routes.PLAYER) { inclusive = true }
+                                    }
+                                }
+                            )
+                        }
                     }
                 }
             }

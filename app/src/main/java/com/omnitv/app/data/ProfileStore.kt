@@ -12,8 +12,9 @@ import java.util.UUID
 /**
  * Almacén de perfiles, persistido en SharedPreferences como JSON.
  *
- * Sin dependencias externas: usa org.json del SDK de Android.
- * El estado es observable por Compose ([profiles] / [currentProfileId]).
+ * Versión profesional: sin contenido de demostración precargado.
+ * Cada perfil comienza vacío (sin progreso ni Mi Lista); el contenido
+ * se construye a partir del uso real del catálogo remoto.
  */
 object ProfileStore {
 
@@ -40,9 +41,31 @@ object ProfileStore {
         if (json != null) {
             runCatching { profiles = parse(json) }
                 .onFailure { profiles = defaultProfiles() }
+            // Migración: limpia referencias a contenido demo inexistente
+            sanitizeProfiles()
         }
         currentProfileId = prefs!!.getString(KEY_CURRENT, null)
             ?.takeIf { id -> profiles.any { it.id == id } }
+    }
+
+    /** Elimina progreso/miLista que apunten a ids demo inexistentes. */
+    private fun sanitizeProfiles() {
+        val demoIds = setOf(
+            "sintel", "big-buck-bunny", "tears-of-steel", "elephants-dream",
+            "blazes", "escapes", "fun", "joyrides", "meltdowns", "subaru",
+            "gti", "bullrun", "grand", "apple-hls", "mux-hls",
+            "conejo-rebelde", "cronicas-sintel"
+        )
+        var changed = false
+        profiles = profiles.map { profile ->
+            val cleanProgress = profile.progress.filterKeys { it !in demoIds }
+            val cleanList = profile.myList.filterNot { it in demoIds }.toSet()
+            if (cleanProgress.size != profile.progress.size || cleanList.size != profile.myList.size) {
+                changed = true
+                profile.copy(progress = cleanProgress, myList = cleanList)
+            } else profile
+        }
+        if (changed) persist()
     }
 
     fun select(id: String) {
@@ -54,7 +77,7 @@ object ProfileStore {
         profiles = profiles + Profile(
             id = UUID.randomUUID().toString(),
             name = name.ifBlank { "Perfil" },
-            avatarIndex = avatarIndex,
+            avatarIndex = avatarIndex.coerceIn(0, 7),
             isKids = isKids
         )
         persist()
@@ -84,7 +107,7 @@ object ProfileStore {
         if (fraction >= 0.95f || fraction < 0.02f) {
             progress.remove(videoId)
         } else {
-            progress[videoId] = fraction
+            progress[videoId] = fraction.coerceIn(0f, 1f)
         }
         update(current.copy(progress = progress))
     }
@@ -96,6 +119,10 @@ object ProfileStore {
         if (!list.add(videoId)) list.remove(videoId)
         update(current.copy(myList = list))
     }
+
+    /** ¿El perfil está viendo este título? */
+    fun isInMyList(videoId: String): Boolean =
+        currentProfile?.myList?.contains(videoId) == true
 
     /* ------------------------------------------------------------------ */
     /*  Persistencia                                                      */
@@ -145,7 +172,7 @@ object ProfileStore {
                     Profile(
                         id = obj.getString("id"),
                         name = obj.getString("name"),
-                        avatarIndex = obj.optInt("avatarIndex", 0),
+                        avatarIndex = obj.optInt("avatarIndex", 0).coerceIn(0, 7),
                         isKids = obj.optBoolean("isKids", false),
                         progress = progress,
                         myList = myList
@@ -157,34 +184,20 @@ object ProfileStore {
 
     private fun defaultProfiles(): List<Profile> = listOf(
         Profile(
-            id = "sofia",
-            name = "Sofía",
-            avatarIndex = 6,
-            progress = mapOf(
-                "sintel" to 0.35f,
-                "big-buck-bunny" to 0.72f,
-                "blazes" to 0.18f
-            ),
-            myList = setOf("tears-of-steel", "joyrides")
+            id = "principal",
+            name = "Principal",
+            avatarIndex = 0
         ),
         Profile(
-            id = "marco",
-            name = "Marco",
-            avatarIndex = 5,
-            progress = mapOf(
-                "bullrun" to 0.40f,
-                "gti" to 0.22f
-            )
+            id = "invitado",
+            name = "Invitado",
+            avatarIndex = 1
         ),
         Profile(
-            id = "peques",
-            name = "Peques",
+            id = "infantil",
+            name = "Infantil",
             avatarIndex = 3,
-            isKids = true,
-            progress = mapOf(
-                "big-buck-bunny" to 0.55f,
-                "fun" to 0.30f
-            )
+            isKids = true
         )
     )
 }
