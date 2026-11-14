@@ -75,9 +75,10 @@ object NuvioPluginManager {
         manifest
     }
 
-    /** Refresca todos los repos configurados (SettingsStore.nuvioPlugins). */
+    /** Refresca todos los repos configurados. */
     suspend fun refreshAll(): List<NuvioPluginManifest> {
-        val urls = SettingsStore.nuvioPlugins
+        // TODO: integrar con SettingsStore cuando exista nuvioPlugins (mantener compilable con base 47b2116)
+        val urls: List<String> = emptyList()
         if (urls.isEmpty()) return emptyList()
         return urls.mapNotNull { fetchRepo(it) }
     }
