@@ -6,6 +6,7 @@ internal class PanelData(
     val account: String,
     val addons: List<String>,
     val streamAddons: List<String>,
+    val nuvioPlugins: List<String>,
     val apiKeys: Map<String, String>,
     val secretsEncrypted: Boolean
 )
@@ -72,8 +73,8 @@ internal object PairingPortal {
     private fun lockedForm(): String = """
   <form method="GET" action="/">
     <div class="card">
-      <h2>🔒 Código de emparejamiento</h2>
-      <label>Está en el televisor: Ajustes → Vincular
+      <h2>Código de emparejamiento</h2>
+      <label>Está en el televisor: Ajustes - Vincular
         <input name="code" placeholder="6 caracteres" autocomplete="off" autocapitalize="characters"
           maxlength="12" required>
       </label>
@@ -86,6 +87,7 @@ internal object PairingPortal {
     private fun settingsForm(data: PanelData): String {
         val addonsValue = esc(data.addons.joinToString("\n"))
         val streamsValue = esc(data.streamAddons.joinToString("\n"))
+        val nuvioValue = esc(data.nuvioPlugins.joinToString("\n"))
         val apisValue = esc(data.apiKeys.entries.joinToString("\n") { "${it.key}=${it.value}" })
         val storageHint = if (data.secretsEncrypted) {
             "Se guardan cifradas en el televisor (Android Keystore) y no se incluyen en copias de seguridad."
@@ -97,34 +99,40 @@ internal object PairingPortal {
         return """
   <form method="POST" action="/save">
     <input type="hidden" name="code" value="${esc(data.code)}">
-    <p class="ok">Código verificado ✓</p>
+    <p class="ok">Código verificado</p>
     <div class="card">
-      <h2>👤 Enlazar cuenta</h2>
+      <h2>Enlazar cuenta</h2>
       <label>Email de tu cuenta Omni TV
         <input name="account" type="email" placeholder="tu@email.com" value="${esc(data.account)}">
       </label>
     </div>
     <div class="card">
-      <h2>🧩 Añadir addons</h2>
-      <label>URLs de manifest.json (una por línea)
+      <h2>Añadir addons</h2>
+      <label>URLs de manifest.json (una por linea)
         <textarea name="addons" placeholder="https://v3-cinemeta.strem.io/manifest.json">$addonsValue</textarea>
       </label>
-      <p class="hint">Cualquier addon de Stremio compatible (catálogo/meta). Aparecerá como filas nuevas en el Inicio.</p>
+      <p class="hint">Cualquier addon de Stremio compatible (catalogo/meta). Aparecera como filas nuevas en el Inicio.</p>
     </div>
     <div class="card">
-      <h2>🎬 Añadir addons de streams</h2>
-      <label>Proyectos que entregan enlaces de reproducción (una URL por línea)
+      <h2>Añadir addons de streams</h2>
+      <label>Proyectos que entregan enlaces de reproduccion (una URL por linea)
         <textarea name="streamAddons" placeholder="https://tu-proyecto.ejemplo">$streamsValue</textarea>
       </label>
       <p class="hint">El addon interno «Omni Streams» les pide los streams con el protocolo
         <code>stream/{tipo}/{id}</code> (Stremio). Compatible con proyectos tipo
-        StreamFlix Reborn, Torrentio, Comet… que expongan su API de enlaces.</p>
-      <p class="hint">Se admite <code>https://</code> siempre, y <code>http://</code> solo si es una IP de tu
-        red local (p. ej. <code>http://192.168.1.20:8787</code>, el puente en tu PC o móvil).</p>
+        StreamFlix Reborn, Torrentio, Comet...</p>
     </div>
     <div class="card">
-      <h2>🔑 Añadir APIs</h2>
-      <label>Una por línea con el formato NOMBRE=clave
+      <h2>Plugins Nuvio (All-in-One)</h2>
+      <label>Repositorios de scrapers Nuvio (manifest con <code>scrapers[]</code>) — una URL por linea
+        <textarea name="nuvioPlugins" placeholder="https://raw.githubusercontent.com/D3adlyRocket/All-in-One-Nuvio/refs/heads/main/manifest.json">$nuvioValue</textarea>
+      </label>
+      <p class="hint">68 scrapers (HiAnime, VidSrc, Torrentio, HDHub4u...) via <code>providers/*.js</code>. Con bridge local <code>http://192.168.x:8787/scrape/{id}</code> resuelve streams directos sin debrid.</p>
+      <p class="hint">Repos conocidos: All-in-One-Nuvio y Yoru Providers — ambos en <code>raw.githubusercontent.com</code>.</p>
+    </div>
+    <div class="card">
+      <h2>Añadir APIs</h2>
+      <label>Una por linea con el formato NOMBRE=clave
         <textarea name="apis" placeholder="TMDB=tu_api_key&#10;TRAKT=tu_api_key">$apisValue</textarea>
       </label>
       <p class="hint">$storageHint</p>

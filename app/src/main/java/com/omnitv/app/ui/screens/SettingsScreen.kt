@@ -23,6 +23,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.material.Text
 import com.omnitv.app.R
+import com.omnitv.app.data.NuvioPluginManager
 import com.omnitv.app.data.PairingServer
 import com.omnitv.app.data.ProfileStore
 import com.omnitv.app.data.SettingsStore
@@ -101,12 +102,25 @@ fun SettingsScreen(onSwitchProfile: () -> Unit) {
         }
         Spacer(Modifier.height(16.dp))
 
+        SettingsCard(R.drawable.ic_server, "Fuentes y plugins") {
+            SettingRow("Catálogos (Stremio)", "${SettingsStore.customAddons.size} instalados — Cinemeta/Nuvio + addons", trailing = { ValuePill("${SettingsStore.customAddons.size}") })
+            DividerThin()
+            SettingRow("Streams (Stremio)", "${SettingsStore.streamAddons.size} fuentes — Torrentio/Comet/AIOStreams", trailing = { ValuePill("${SettingsStore.streamAddons.size}") })
+            DividerThin()
+            SettingRow("Plugins Nuvio", "${SettingsStore.nuvioPlugins.size} repos · ${com.omnitv.app.data.NuvioPluginManager.totalScrapers} scrapers (All-in-One)", trailing = { ValuePill("${SettingsStore.nuvioPlugins.size}") })
+            DividerThin()
+            Box(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp)) {
+                Text("Añade repos Nuvio (https://raw.githubusercontent.com/…/manifest.json con scrapers[]) desde el QR. Cada repo trae 20-68 scrapers (HiAnime, VidSrc, HDHub4u, VegaMovies, Torrentio). Con bridge local http://192.168.x:8787/scrape/{id} resuelven HTTP directo sin debrid.", style = AppType.caption, color = TextMuted)
+            }
+        }
+        Spacer(Modifier.height(16.dp))
+
         SettingsCard(R.drawable.ic_server, "Red y sistema") {
             SettingRow("DNS de Cloudflare", "Resuelve nombres por HTTPS cuando el router falla", trailing = { TvToggle(SettingsStore.cloudflareDns) { SettingsStore.saveCloudflareDns(it) } })
             DividerThin()
-            SettingRow("Motor", "Media3 ExoPlayer · MP4 · HLS · 4K", trailing = { ValuePill("Media3") })
+            SettingRow("Motor", "Media3 ExoPlayer · MP4 · HLS · 4K · DASH (mpd)", trailing = { ValuePill("Media3") })
             DividerThin()
-            SettingRow("Versión", "Omni TV para Android TV", trailing = { ValuePill("1.1.0") })
+            SettingRow("Versión", "Omni TV para Android TV", trailing = { ValuePill("1.2.0-nuvio") })
         }
         Spacer(Modifier.height(48.dp))
     }
