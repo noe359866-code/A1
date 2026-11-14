@@ -66,13 +66,14 @@ class StremioIntegrationTest {
         val addons = StreamHub.configuredAddons(
             manifests = listOf(AddonStatus("https://addon.example/manifest.json", m)),
             projects = listOf("https://addon.example", "http://192.168.1.5:8787"),
-            plugins = emptyList()
+            plugins = emptyList(),
+            cloudstreamBridge = ""
         )
         assertEquals(2, addons.size)
         assertTrue(addons.first() is ProjectStreamAddon)
-        val withNuvio = StreamHub.configuredAddons(emptyList(), emptyList(), listOf("https://repo.example/manifest.json"))
+        val withNuvio = StreamHub.configuredAddons(emptyList(), emptyList(), listOf("https://repo.example/manifest.json"), "")
         assertEquals("nuvio-plugins", withNuvio.single().id)
-        assertTrue(StreamHub.configuredAddons(emptyList(), emptyList(), emptyList()).isEmpty())
+        assertTrue(StreamHub.configuredAddons(emptyList(), emptyList(), emptyList(), "").isEmpty())
     }
 
     @Test

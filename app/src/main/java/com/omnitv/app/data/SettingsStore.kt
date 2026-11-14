@@ -85,6 +85,10 @@ object SettingsStore {
     var nuvioBridge by mutableStateOf("")
         private set
 
+    /** Servicio externo que ejecuta extensiones Cloudstream; vacío = desactivado. */
+    var cloudstreamBridge by mutableStateOf("")
+        private set
+
     /** APIs añadidas desde el panel (nombre → clave). */
     var apiKeys by mutableStateOf<Map<String, String>>(emptyMap())
         private set
@@ -129,6 +133,7 @@ object SettingsStore {
         streamAddons = parseStringList(p.getString("streamAddons", "[]")).filter { NetPolicy.isAllowed(it) }
         nuvioPlugins = parseStringList(p.getString("nuvioPlugins", "[]")).filter { NetPolicy.isAllowed(it) }
         nuvioBridge = (p.getString("nuvioBridge", "") ?: "").takeIf { NetPolicy.isAllowed(it) }.orEmpty()
+        cloudstreamBridge = CloudstreamBridge.normalize(p.getString("cloudstreamBridge", "") ?: "").orEmpty()
         loadApiKeys(p)
     }
 
@@ -242,6 +247,13 @@ object SettingsStore {
         }.orEmpty()
         update { putString("nuvioBridge", cleaned) }
         nuvioBridge = cleaned
+        revision++
+    }
+
+    fun saveCloudstreamBridge(url: String) {
+        val cleaned = CloudstreamBridge.normalize(url).orEmpty()
+        update { putString("cloudstreamBridge", cleaned) }
+        cloudstreamBridge = cleaned
         revision++
     }
 

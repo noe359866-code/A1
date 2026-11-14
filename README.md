@@ -17,13 +17,13 @@
 
 ## Visión
 
-Omni TV es una aplicación **exclusiva para Android TV / Google TV** con estándares de producción: sin contenido de demostración, sin datos falsos y sin atajos. Todo el catálogo proviene de fuentes reales (Cinemeta, Nuvio, cinejoy, sweetfox) y los enlaces de reproducción se resuelven exclusivamente a través de addons configurados por el usuario.
+Omni TV es una aplicación **exclusiva para Android TV / Google TV** con estándares de producción: sin catálogo de demostración ni datos falsos. El catálogo proviene de fuentes reales (Cinemeta, Nuvio, cinejoy, sweetfox) y los enlaces de reproducción se resuelven exclusivamente a través de addons configurados por el usuario.
 
-> **Estado revisado:** consulta la [auditoría Android TV](docs/ANDROID_TV_REVIEW.md) para ver correcciones, validación y límites pendientes. El catálogo local actual todavía contiene muestras heredadas; no debe confundirse con un catálogo de producción.
+> **Estado revisado:** consulta la [auditoría Android TV](docs/ANDROID_TV_REVIEW.md). El catálogo demo fue retirado; si no hay fuentes configuradas/disponibles, la app muestra estados vacíos.
 
 **Principios de diseño:**
 
-- **Objetivo sin demo:** el flujo remoto no sustituye títulos por vídeos de prueba; las muestras locales heredadas siguen pendientes de retirar.
+- **Sin demo:** no se sustituyen títulos por vídeos de prueba ni se muestran servidores inventados.
 - **Diseño tvOS:** fondo #0B0B0F, acento #0A84FF, tipografía de 10 pies, foco D-pad de 3dp.
 - **Privacidad local:** addons y claves nunca salen del televisor; backups excluidos por sistema.
 - **Red honesta:** HTTPS siempre; HTTP solo en LAN; DoH opcional con validación de certificado.
@@ -120,7 +120,7 @@ Basado en Media3 ExoPlayer con investigación de Xuper TV:
 - **Política de red:** solo `https://` hacia internet; `http://` únicamente en LAN privada — validado por `NetPolicy`
 - **Sin fallback demo:** si no hay enlaces, mensaje claro "Sin fuentes disponibles · configura un addon"
 
-Puente de streams simples: `tools/omni-stream-bridge/` (Python + Kotlin). Puente de plugins Nuvio: `tools/nuvio-bridge/` (Node 20+, ejecución JS externa). Guía completa: [Stremio y Nuvio](docs/NUVIO_INVESTIGACION.md). Los repositorios Nuvio sin puente no ejecutan scrapers.
+Puente Cloudstream: `tools/cloudstream-bridge/` (runtime externo). Puente de streams simples: `tools/omni-stream-bridge/` (Python + Kotlin). Puente de plugins Nuvio: `tools/nuvio-bridge/` (Node 20+, ejecución JS externa). Guía completa: [Stremio y Nuvio](docs/NUVIO_INVESTIGACION.md). Los repositorios Nuvio sin puente no ejecutan scrapers.
 
 ---
 

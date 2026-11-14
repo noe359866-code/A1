@@ -67,3 +67,8 @@ Se deja `ExtractorBridge` para que Nuvio scrapers JS (All-in-One 68) puedan dele
 
 Próximo paso: añadir `jsoup` + 1 provider real (CB01) cuando se tenga mirror accesible.
 
+
+
+## Estado actualizado
+
+Este análisis era histórico. `ProviderRegistry` y su provider plantilla fueron eliminados. La reproducción usa `StreamHub`; las extensiones Cloudstream se delegan a un runtime externo mediante `tools/cloudstream-bridge`, no a este registro local.

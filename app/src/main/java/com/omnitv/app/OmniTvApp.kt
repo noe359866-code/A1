@@ -26,6 +26,8 @@ import androidx.navigation.navArgument
 import androidx.compose.material.Text
 import com.omnitv.app.data.CatalogRepository
 import com.omnitv.app.data.ProfileStore
+import com.omnitv.app.data.PlaybackResolver
+import com.omnitv.app.data.PlaybackResolution
 import com.omnitv.app.data.Providers
 import com.omnitv.app.data.RemoteCatalog
 import com.omnitv.app.data.Studios
@@ -75,6 +77,12 @@ object Routes {
     fun editProfile(profileId: String) = "editProfile/${arg(profileId)}"
     fun detail(videoId: String) = "detail/${arg(videoId)}"
     fun player(videoId: String) = "player/${arg(videoId)}"
+
+    /** El título ya resuelto viaja al reproductor aunque la caché LRU haya evictado el id. */
+    fun openPlayer(nav: NavHostController, video: Video) {
+        CatalogRepository.registerNavigation(video)
+        nav.navigate(player(video.id)) { launchSingleTop = true }
+    }
     fun platform(providerId: Int) = "platform/$providerId"
     fun studio(studioId: Int) = "studio/$studioId"
 }
@@ -118,7 +126,7 @@ fun OmniTvApp() {
                     onSelected = { profile ->
                         ProfileStore.select(profile.id)
                         navController.navigate(Routes.HOME) {
-                            popUpTo(Routes.PROFILES) { inclusive = false }
+                            popUpTo(Routes.PROFILES) { inclusive = true }
                             launchSingleTop = true
                         }
                     },
@@ -149,7 +157,7 @@ fun OmniTvApp() {
                 TvScaffold(appTabs, currentRoute, navController::selectTab, trailing = profileBadge) {
                     HomeScreen(
                         onOpenDetail = { navController.navigate(Routes.detail(it.id.substringBefore('~'))) },
-                        onPlay = { navController.navigate(Routes.player(it.id)) },
+                        onPlay = { Routes.openPlayer(navController, it) },
                         onSeeAll = { navController.navigate(Routes.platform(it.id)) },
                         onOpenPlatforms = { navController.navigate(Routes.PLATFORMS) },
                         onOpenStudio = { navController.navigate(Routes.studio(it.id)) }
@@ -224,15 +232,16 @@ fun OmniTvApp() {
                 arguments = listOf(navArgument("videoId") { type = NavType.StringType })
             ) { entry ->
                 val videoId = entry.arguments?.getString("videoId").orEmpty()
-                var video by remember { mutableStateOf(CatalogRepository.find(videoId)) }
-                if (video == null) {
+                var video by remember(videoId) { mutableStateOf(CatalogRepository.find(videoId)) }
+                var detailError by remember(videoId) { mutableStateOf(false) }
+                if (video == null && !detailError) {
                     Box(Modifier.fillMaxSize().background(Background), contentAlignment = Alignment.Center) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Text("Cargando…", style = AppType.metadata, color = TextSecondary)
                         }
                     }
                     LaunchedEffect(videoId) {
-                        video = RemoteCatalog.fetchDetail(
+                        val loaded = runCatching { RemoteCatalog.fetchDetail(
                             Video(
                                 id = videoId, title = "", description = "",
                                 backdropUrl = "", cardUrl = "", year = 0,
@@ -242,14 +251,23 @@ fun OmniTvApp() {
                                 source = if (videoId.startsWith("tt")) StremioClient.CINEMETA_NAME else StremioClient.NUVIO_NAME,
                                 remoteType = null
                             )
-                        )
-                        if (video == null) navController.popBackStack()
+                        ) }.getOrNull()
+                        video = loaded
+                        detailError = loaded == null
+                    }
+                } else if (detailError) {
+                    Box(Modifier.fillMaxSize().background(Background), contentAlignment = Alignment.Center) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("No se pudo cargar la ficha", style = AppType.sectionTitle, color = TextPrimary)
+                            Spacer(Modifier.height(16.dp))
+                            com.omnitv.app.ui.components.PillButton("Volver", primary = false, onClick = { navController.popBackStack() })
+                        }
                     }
                 } else {
                     DetailScreen(
                         video = video!!,
                         onBack = { navController.popBackStack() },
-                        onPlay = { navController.navigate(Routes.player(it.id)) },
+                        onPlay = { Routes.openPlayer(navController, it) },
                         onOpenDetail = { navController.navigate(Routes.detail(it.id.substringBefore('~'))) }
                     )
                 }
@@ -260,67 +278,45 @@ fun OmniTvApp() {
             ) { entry ->
                 val videoId = entry.arguments?.getString("videoId").orEmpty()
                 val raw = remember(videoId) { CatalogRepository.find(videoId) }
-
-                when {
-                    raw == null -> LaunchedEffect(Unit) { navController.popBackStack() }
-
-                    // Todo el contenido es remoto: resolver siempre vía addons configurados.
-                    // Sin enlaces no hay reproducción silenciosa con demo.
-                    else -> {
-                        var resolved by remember { mutableStateOf<Video?>(null) }
-                        var error by remember { mutableStateOf<String?>(null) }
-
-                        if (resolved == null && error == null) {
-                            Box(Modifier.fillMaxSize().background(Background), contentAlignment = Alignment.Center) {
-                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                    Text("Buscando enlaces…", style = AppType.metadata, color = TextSecondary)
+                if (raw == null) {
+                    LaunchedEffect(videoId) { navController.popBackStack() }
+                } else {
+                    var resolution by remember(videoId) { mutableStateOf<PlaybackResolution?>(null) }
+                    var attempt by remember(videoId) { mutableStateOf(0) }
+                    LaunchedEffect(videoId, attempt) {
+                        resolution = null
+                        resolution = runCatching { PlaybackResolver.resolve(raw) }.getOrElse {
+                            PlaybackResolution(emptyList(), "No se pudieron consultar las fuentes. Comprueba la red y reintenta.")
+                        }
+                    }
+                    val result = resolution
+                    when {
+                        result == null -> Box(Modifier.fillMaxSize().background(Background), contentAlignment = Alignment.Center) {
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text("Buscando enlaces…", style = AppType.sectionTitle, color = TextPrimary)
+                                Spacer(Modifier.height(16.dp))
+                                com.omnitv.app.ui.components.PillButton("Cancelar", primary = false, onClick = { navController.popBackStack() })
+                            }
+                        }
+                        result.sources.isEmpty() -> Box(Modifier.fillMaxSize().background(Background), contentAlignment = Alignment.Center) {
+                            Column(Modifier.padding(horizontal = 48.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text("Sin fuentes disponibles", style = AppType.sectionTitle, color = TextPrimary)
+                                Spacer(Modifier.height(12.dp))
+                                Text(result.message, style = AppType.metadata, color = TextSecondary)
+                                Spacer(Modifier.height(24.dp))
+                                androidx.compose.foundation.layout.Row(horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(14.dp)) {
+                                    com.omnitv.app.ui.components.PillButton("Reintentar", onClick = { attempt++ })
+                                    com.omnitv.app.ui.components.PillButton("Volver", primary = false, onClick = { navController.popBackStack() })
                                 }
                             }
-                            LaunchedEffect(videoId) {
-                                val streams = StreamHub.resolve(raw)
-                                if (streams.isNotEmpty()) {
-                                    resolved = raw.copy(
-                                        sources = streams,
-                                        videoUrl = streams.first().url,
-                                        streamFormat = streams.first().format,
-                                        badge = null
-                                    )
-                                } else {
-                                    // Si el vídeo trae URL directa (p.ej. HLS de proveedor), úsala
-                                    if (raw.videoUrl.isNotEmpty()) {
-                                        resolved = raw
-                                    } else {
-                                        error = StreamHub.lastStatus.value.ifEmpty {
-                                            "No hay fuentes disponibles. Configura un addon de streams en Ajustes."
-                                        }
-                                    }
-                                }
-                            }
-                        } else if (error != null) {
-                            Box(Modifier.fillMaxSize().background(Background), contentAlignment = Alignment.Center) {
-                                Column(
-                                    Modifier.padding(horizontal = 48.dp),
-                                    horizontalAlignment = Alignment.CenterHorizontally
-                                ) {
-                                    Text("Sin fuentes disponibles", style = AppType.sectionTitle, color = TextPrimary)
-                                    Spacer(Modifier.height(12.dp))
-                                    Text(error!!, style = AppType.metadata, color = TextSecondary)
-                                    Spacer(Modifier.height(24.dp))
-                                    androidx.compose.foundation.layout.Row {
-                                        com.omnitv.app.ui.components.PillButton(
-                                            text = "Volver",
-                                            iconRes = R.drawable.ic_back,
-                                            primary = false,
-                                            onClick = { navController.popBackStack() }
-                                        )
-                                    }
-                                }
-                            }
-                        } else {
+                        }
+                        else -> {
+                            val first = result.sources.first()
                             PlayerScreen(
-                                video = resolved!!,
+                                video = raw.copy(sources = result.sources, videoUrl = first.url, streamFormat = first.format, badge = null),
                                 onBack = { navController.popBackStack() },
                                 onPlayNext = { next ->
+                                    CatalogRepository.registerNavigation(next)
                                     navController.navigate(Routes.player(next.id)) {
                                         popUpTo(Routes.PLAYER) { inclusive = true }
                                     }

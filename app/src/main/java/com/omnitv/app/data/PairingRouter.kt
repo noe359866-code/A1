@@ -15,6 +15,7 @@ internal interface PanelStore {
     fun setStreamAddons(urls: List<String>)
     fun setNuvioPlugins(urls: List<String>)
     fun setNuvioBridge(url: String)
+    fun setCloudstreamBridge(url: String)
     fun setApiKeys(keys: Map<String, String>)
 }
 
@@ -95,7 +96,7 @@ internal class PairingRouter(
                 val data = store.data()
                 PanelResponse(
                     200,
-                    """{"account":${jsonString(data.account)},"addons":${data.addons.size},"streams":${data.streamAddons.size},"plugins":${data.nuvioPlugins.size},"apis":${data.apiKeys.size}}""",
+                    """{"account":${jsonString(data.account)},"addons":${data.addons.size},"streams":${data.streamAddons.size},"plugins":${data.nuvioPlugins.size},"cloudstream":${if (data.cloudstreamBridge.isBlank()) 0 else 1},"apis":${data.apiKeys.size}}""",
                     jsonType
                 )
             }
@@ -130,6 +131,11 @@ internal class PairingRouter(
             val value = text.trim()
             val valid = runCatching { val uri = java.net.URI(value); uri.rawQuery == null && uri.rawFragment == null }.getOrDefault(false)
             if (value.isEmpty() || (NetPolicy.isAllowed(value) && valid)) store.setNuvioBridge(value)
+            else rejectedUrls++
+        }
+        form["cloudstreamBridge"]?.let { text ->
+            val value = text.trim()
+            if (value.isEmpty() || CloudstreamBridge.normalize(value) != null) store.setCloudstreamBridge(value)
             else rejectedUrls++
         }
         form["apis"]?.let { text ->

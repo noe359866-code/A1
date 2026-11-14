@@ -3,6 +3,15 @@ package com.omnitv.app.ui.screens
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
+import androidx.compose.material.Text
+import androidx.compose.ui.Alignment
+import com.omnitv.app.ui.theme.AppType
+import com.omnitv.app.ui.theme.TextPrimary
+import com.omnitv.app.ui.theme.TextSecondary
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -31,9 +40,8 @@ import com.omnitv.app.ui.theme.Background
  * banner héroe a pantalla grande + filas horizontales de contenido.
  *
  * Combina el **catálogo real** (Cinemeta + Nuvio) con las filas propias del
- * perfil («Mi lista», «Continuar viendo»). Los perfiles infantiles solo ven
- * el catálogo local curado (los addons remotos no traen clasificación por
- * edades).
+ * perfil («Mi lista», «Continuar viendo»). Sin catálogo inventado: si no hay
+ * títulos remotos se muestra un estado vacío.
  */
 @Composable
 fun HomeScreen(
@@ -54,16 +62,13 @@ fun HomeScreen(
     val localRows = CatalogRepository.rowsFor(profile)
     val kidsOnly = profile?.isKids == true
     val rows = if (kidsOnly) localRows else RemoteCatalog.rows + localRows
-    val featured = if (kidsOnly) {
-        CatalogRepository.featuredFor(profile)
-    } else {
-        RemoteCatalog.featured.value ?: CatalogRepository.featuredFor(profile)
-    }
+    val featured = if (kidsOnly) CatalogRepository.featuredFor(profile)
+        else RemoteCatalog.featured.value ?: CatalogRepository.featuredFor(profile)
 
     // Foco inicial en «Reproducir» del héroe: con el D-pad, arrancar en la
     // barra de pestañas obliga a bajar por toda la barra antes de ver algo.
     val heroFocus = remember { FocusRequester() }
-    RequestTvFocus(heroFocus, key = featured.id)
+    RequestTvFocus(heroFocus, key = featured?.id ?: "empty")
 
     LazyColumn(
         modifier = Modifier
@@ -75,12 +80,29 @@ fun HomeScreen(
         contentPadding = PaddingValues(bottom = 56.dp)
     ) {
         item(key = "hero") {
-            HeroBanner(
-                video = featured,
-                onPlay = { onPlay(featured) },
-                onInfo = { onOpenDetail(featured) },
-                playFocusRequester = heroFocus
-            )
+            if (featured != null) {
+                HeroBanner(
+                    video = featured,
+                    onPlay = { onPlay(featured) },
+                    onInfo = { onOpenDetail(featured) },
+                    playFocusRequester = heroFocus
+                )
+            } else {
+                Box(Modifier.fillParentMaxWidth().height(260.dp), contentAlignment = Alignment.Center) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                            if (RemoteCatalog.loading.value) "Cargando catálogo…" else "No hay títulos disponibles",
+                            style = AppType.sectionTitle, color = TextPrimary
+                        )
+                        Spacer(Modifier.height(12.dp))
+                        Text(
+                            if (kidsOnly) "El perfil infantil no carga catálogos remotos sin clasificación."
+                            else "Añade addons en Ajustes o comprueba la conexión.",
+                            style = AppType.metadata, color = TextSecondary
+                        )
+                    }
+                }
+            }
         }
         items(rows.take(2), key = { it.key }) { row ->
             SectionRow(row = row, onOpenDetail = onOpenDetail)

@@ -29,11 +29,10 @@ interface StreamAddon {
     val name: String
 
     /**
-     * @param type "movie" o "series" (convención Stremio).
-     * @param videoId id Stremio del vídeo: `tt1234567`, `tmdb:123` o
-     *   `tt1234567:1:2` / `tmdb:123:1:2` para episodios.
+     * Recibe el título completo para que los puentes que buscan por nombre
+     * (Cloudstream) no pierdan título, año ni episodio.
      */
-    suspend fun resolve(type: String, videoId: String): List<StreamLink>
+    suspend fun resolve(video: Video): List<StreamLink>
 }
 
 /**
@@ -56,7 +55,12 @@ class ProjectStreamAddon(
     private val base = if (manifest != null) StremioUrl.base(baseUrl) else baseUrl.trimEnd('/')
     override val id = "project:$base"
 
-    override suspend fun resolve(type: String, videoId: String): List<StreamLink> = withContext(Dispatchers.IO) {
+    override suspend fun resolve(video: Video): List<StreamLink> {
+        val (type, videoId) = StreamHub.stremioId(video) ?: return emptyList()
+        return resolve(type, videoId)
+    }
+
+    suspend fun resolve(type: String, videoId: String): List<StreamLink> = withContext(Dispatchers.IO) {
         if (manifest?.supports("stream", type, videoId) == false) return@withContext emptyList()
         val standard = StremioUrl.resource(base, "stream", type, videoId)
         // La alternativa sin .json solo aplica a proyectos simples, no a un
@@ -122,7 +126,7 @@ object StreamHub {
                 addons.map { addon ->
                     async {
                         withTimeoutOrNull(10_000L) {
-                            runCatching { addon.resolve(type, id) }.getOrDefault(emptyList())
+                            runCatching { addon.resolve(video) }.getOrDefault(emptyList())
                         }.orEmpty()
                     }
                 }.awaitAll()
@@ -148,9 +152,12 @@ object StreamHub {
                 .take(24)
 
             lastStatus.value = if (sources.isEmpty()) {
-                if (addons.any { it.id == "nuvio-plugins" }) NuvioScraperResolver.lastStatus.value
-                    .ifBlank { "Ningún addon entregó enlaces para este título" }
-                else "Ningún addon entregó enlaces para este título"
+                when {
+                    addons.any { it.id == "cloudstream-bridge" } -> CloudstreamBridge.status.value
+                    addons.any { it.id == "nuvio-plugins" } -> NuvioScraperResolver.lastStatus.value
+                        .ifBlank { "Ningún addon entregó enlaces para este título" }
+                    else -> "Ningún addon entregó enlaces para este título"
+                }
             } else {
                 "${sources.size} enlaces de ${sources.map { it.label.substringBefore(" · ") }.distinct().size} addons"
             }
@@ -164,7 +171,8 @@ object StreamHub {
     internal suspend fun configuredAddons(
         manifests: List<AddonStatus>? = null,
         projects: List<String> = SettingsStore.streamAddons,
-        plugins: List<String> = SettingsStore.nuvioPlugins
+        plugins: List<String> = SettingsStore.nuvioPlugins,
+        cloudstreamBridge: String = SettingsStore.cloudstreamBridge
     ): List<StreamAddon> {
         val addons = mutableListOf<StreamAddon>()
         val bases = mutableSetOf<String>()
@@ -177,6 +185,7 @@ object StreamHub {
             if (NetPolicy.isAllowed(base) && bases.add(base)) addons += ProjectStreamAddon(base, hostLabel(base))
         }
         if (plugins.isNotEmpty()) addons += NuvioStreamAddon()
+        if (CloudstreamBridge.normalize(cloudstreamBridge) != null) addons += CloudstreamStreamAddon()
         return addons
     }
 

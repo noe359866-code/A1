@@ -234,5 +234,8 @@ object NuvioScraperResolver {
 internal class NuvioStreamAddon : StreamAddon {
     override val id = "nuvio-plugins"
     override val name = "Plugins Nuvio"
-    override suspend fun resolve(type: String, videoId: String): List<StreamLink> = NuvioScraperResolver.resolve(type, videoId)
+    override suspend fun resolve(video: Video): List<StreamLink> {
+        val (type, videoId) = StreamHub.stremioId(video) ?: return emptyList()
+        return NuvioScraperResolver.resolve(type, videoId)
+    }
 }

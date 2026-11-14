@@ -127,6 +127,7 @@ object PairingServer {
             streamAddons = SettingsStore.streamAddons,
             nuvioPlugins = SettingsStore.nuvioPlugins,
             nuvioBridge = SettingsStore.nuvioBridge,
+            cloudstreamBridge = SettingsStore.cloudstreamBridge,
             apiKeys = SettingsStore.apiKeys,
             secretsEncrypted = SettingsStore.secretsEncrypted
         )
@@ -141,6 +142,7 @@ object PairingServer {
 
         override fun setNuvioPlugins(urls: List<String>) = SettingsStore.saveNuvioPlugins(urls)
         override fun setNuvioBridge(url: String) = SettingsStore.saveNuvioBridge(url)
+        override fun setCloudstreamBridge(url: String) = SettingsStore.saveCloudstreamBridge(url)
         override fun setApiKeys(keys: Map<String, String>) = SettingsStore.saveApiKeys(keys)
     }
 

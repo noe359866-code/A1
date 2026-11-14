@@ -8,6 +8,7 @@ internal class PanelData(
     val streamAddons: List<String>,
     val nuvioPlugins: List<String>,
     val nuvioBridge: String,
+    val cloudstreamBridge: String,
     val apiKeys: Map<String, String>,
     val secretsEncrypted: Boolean
 )
@@ -136,6 +137,14 @@ internal object PairingPortal {
       </label>
       <p class="hint">El puente debe implementar POST /scrape/{id} y GET /health. Omni TV no ejecuta los JS en el televisor.
         Guarda solo repositorios de confianza: el equipo del puente ejecutará su código.</p>
+    </div>
+    <div class="card">
+      <h2>☁️ Extensiones Cloudstream · puente externo</h2>
+      <label>URL del servicio Cloudstream (vacío = desactivado)
+        <input name="cloudstreamBridge" type="url" placeholder="http://192.168.1.20:8789" value="${esc(data.cloudstreamBridge)}">
+      </label>
+      <p class="hint">Omni TV no carga .cs3/DEX. El servicio de confianza ejecuta sus extensiones Cloudstream y responde a POST /resolve.
+        Instala/configura las extensiones en ese servicio, no en el televisor.</p>
     </div>
     <div class="card">
       <h2>🔑 Añadir APIs</h2>

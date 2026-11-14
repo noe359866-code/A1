@@ -156,35 +156,6 @@ object ProfileStore {
     }
 
     private fun defaultProfiles(): List<Profile> = listOf(
-        Profile(
-            id = "sofia",
-            name = "Sofía",
-            avatarIndex = 6,
-            progress = mapOf(
-                "sintel" to 0.35f,
-                "big-buck-bunny" to 0.72f,
-                "blazes" to 0.18f
-            ),
-            myList = setOf("tears-of-steel", "joyrides")
-        ),
-        Profile(
-            id = "marco",
-            name = "Marco",
-            avatarIndex = 5,
-            progress = mapOf(
-                "bullrun" to 0.40f,
-                "gti" to 0.22f
-            )
-        ),
-        Profile(
-            id = "peques",
-            name = "Peques",
-            avatarIndex = 3,
-            isKids = true,
-            progress = mapOf(
-                "big-buck-bunny" to 0.55f,
-                "fun" to 0.30f
-            )
-        )
+        Profile(id = "perfil-1", name = "Perfil 1", avatarIndex = 0)
     )
 }

@@ -125,11 +125,22 @@ fun PlayerScreen(
     onPlayNext: (Video) -> Unit = {}
 ) {
     val context = LocalContext.current
-    val sources = video.playbackSources
-    val nextVideo = remember(video.id) { CatalogRepository.related(video.id).firstOrNull() }
+    val sources = remember(video.id) { video.playbackSources }
+    val nextVideo = remember(video.id) { CatalogRepository.nextEpisode(video.id) }
+    if (sources.isEmpty()) {
+        BackHandler(onBack = onBack)
+        Box(Modifier.fillMaxSize().background(Color.Black), contentAlignment = Alignment.Center) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text("Este título no tiene una fuente reproducible", style = AppType.body, color = Color.White)
+                Spacer(Modifier.height(18.dp))
+                PillButton("Volver", primary = false, onClick = onBack)
+            }
+        }
+        return
+    }
 
-    val trackSelector = remember { DefaultTrackSelector(context) }
-    val player = remember {
+    val trackSelector = remember(video.id) { DefaultTrackSelector(context) }
+    val player = remember(video.id) {
         ExoPlayer.Builder(context)
             .setTrackSelector(trackSelector)
             .build()
@@ -202,14 +213,19 @@ fun PlayerScreen(
         trackSelector.setParameters(builder.build())
     }
 
+    val failedServers = remember(video.id) { mutableSetOf<Int>() }
     val switchServer: (Int) -> Unit = { index ->
-        val position = player.currentPosition
-        serverIndex = index
-        player.setMediaSource(streamMediaSource(context, sources[index]), position)
-        player.prepare()
-        player.playWhenReady = true
-        hasError = null
-        toast = "Reproduciendo desde ${sources[index].label}"
+        if (index in sources.indices) {
+            val position = player.currentPosition.coerceAtLeast(0)
+            serverIndex = index
+            preferenceApplied = false
+            videoChoice = null; audioChoice = null; textChoice = null; subtitlesOn = false
+            player.setMediaSource(streamMediaSource(context, sources[index]), position)
+            player.prepare()
+            player.playWhenReady = true
+            hasError = null
+            toast = "Reproduciendo desde ${sources[index].label}"
+        }
     }
 
     // ---------------- Ciclo de vida del reproductor ----------------
@@ -296,13 +312,15 @@ fun PlayerScreen(
             }
 
             override fun onPlayerError(error: PlaybackException) {
-                // Multi-servidor: si falla, se conmuta automáticamente al siguiente
-                val next = serverIndex + 1
-                if (next < sources.size) {
-                    toast = "Error · cambiando a ${sources[next].label}…"
+                failedServers.add(serverIndex)
+                val next = (serverIndex + 1 until sources.size).firstOrNull { it !in failedServers }
+                    ?: sources.indices.firstOrNull { it !in failedServers }
+                if (next != null) {
+                    toast = "Fuente no disponible · probando ${sources[next].label}…"
                     switchServer(next)
                 } else {
                     hasError = error.errorCodeName
+                    controlsVisible = true
                 }
             }
         }
@@ -315,15 +333,13 @@ fun PlayerScreen(
             } else {
                 0f
             }
-            if (watched > 0f && hasError == null) {
-                ProfileStore.setProgress(video.id, watched)
-            }
+            if (watched > 0f) ProfileStore.setProgress(video.id, watched)
             player.release()
         }
     }
 
     fun saveProgress() {
-        if (player.duration > 0 && hasError == null) {
+        if (player.duration > 0) {
             ProfileStore.setProgress(video.id, player.currentPosition.toFloat() / player.duration)
         }
     }
@@ -343,12 +359,14 @@ fun PlayerScreen(
     }
 
     // Sondeo de posición + reloj
-    LaunchedEffect(player) {
+    LaunchedEffect(player, video.id) {
+        var ticks = 0
         while (true) {
             positionMs = player.currentPosition.coerceAtLeast(0)
             bufferedMs = player.bufferedPosition.coerceAtLeast(0)
             if (player.duration > 0) durationMs = player.duration
             clock = nowClock()
+            if (++ticks % 20 == 0 && player.isPlaying) saveProgress()
             delay(500)
         }
     }
@@ -506,7 +524,7 @@ fun PlayerScreen(
 
     val serverOptions = sources.mapIndexed { index, source ->
         PlayerOption(
-            label = "${source.label} · ${if (source.format == StreamFormat.HLS) "HLS" else "MP4"}",
+            label = "${source.label} · ${when (source.format) { StreamFormat.HLS -> "HLS"; StreamFormat.DASH -> "DASH"; StreamFormat.MP4 -> "MP4" }}",
             selected = index == serverIndex
         ) {
             menu = MenuKind.NONE
@@ -698,10 +716,8 @@ fun PlayerScreen(
                             primary = true,
                             modifier = Modifier.focusRequester(retryFocus),
                             onClick = {
-                                hasError = null
-                                player.setMediaSource(streamMediaSource(context, sources[serverIndex]), positionMs)
-                                player.prepare()
-                                player.playWhenReady = true
+                                failedServers.clear()
+                                switchServer(serverIndex)
                             }
                         )
                         PillButton(

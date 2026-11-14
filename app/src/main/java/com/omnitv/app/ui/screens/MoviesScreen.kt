@@ -33,7 +33,7 @@ import androidx.compose.material.Text
 
 /**
  * Rejilla con todo el catálogo (pestaña "Películas"): catálogo real
- * (Cinemeta + Nuvio) + títulos demo locales.
+ * (Cinemeta + Nuvio + addons instalados).
  */
 @Composable
 fun MoviesScreen(onOpenDetail: (Video) -> Unit) {
@@ -61,7 +61,7 @@ fun MoviesScreen(onOpenDetail: (Video) -> Unit) {
         Text("Películas", style = AppType.screenTitle, color = TextPrimary)
         Spacer(Modifier.height(6.dp))
         Text(
-            if (RemoteCatalog.loading.value && catalog.size <= local.size) {
+            if (RemoteCatalog.loading.value && catalog.isEmpty()) {
                 "Cargando catálogo (Cinemeta · Nuvio)…"
             } else {
                 "${catalog.size} títulos en el catálogo"
@@ -81,6 +81,12 @@ fun MoviesScreen(onOpenDetail: (Video) -> Unit) {
             Text(RemoteCatalog.lastError.value, style = AppType.metadata, color = TextSecondary)
         }
         Spacer(Modifier.height(18.dp))
+        if (catalog.isEmpty() && !RemoteCatalog.loading.value) {
+            Text(
+                if (kidsOnly) "No hay películas guardadas con clasificación infantil." else "No hay películas disponibles. Revisa tus addons en Ajustes.",
+                style = AppType.metadata, color = TextSecondary
+            )
+        }
 
         LazyVerticalGrid(
             // 5 columnas: en 960 dp de ancho, 4 dejan pósters de 220 dp

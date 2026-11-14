@@ -14,6 +14,7 @@ class PairingRouterTest {
         const val STREAM_ADDON = "http://192.168.1.77:8787"
         const val NUVIO_REPO = "https://plugins.ejemplo/manifest.json"
         const val NUVIO_BRIDGE = "http://192.168.1.77:8788"
+        const val CS_BRIDGE = "http://192.168.1.77:8789"
         const val API_KEY = "s3cr3t-tmdb-key"
     }
 
@@ -25,13 +26,14 @@ class PairingRouterTest {
         var savedStreams = listOf(STREAM_ADDON)
         var savedPlugins = listOf(NUVIO_REPO)
         var savedBridge = NUVIO_BRIDGE
+        var savedCloudstream = CS_BRIDGE
         var savedApiKeys = mapOf("TMDB" to API_KEY)
         var reads = 0
         var writes = 0
 
         override fun data(): PanelData {
             reads++
-            return PanelData(pairingCode, savedAccount, savedAddons, savedStreams, savedPlugins, savedBridge, savedApiKeys, secretsEncrypted = true)
+            return PanelData(pairingCode, savedAccount, savedAddons, savedStreams, savedPlugins, savedBridge, savedCloudstream, savedApiKeys, secretsEncrypted = true)
         }
 
         override fun setAccount(email: String) { writes++; savedAccount = email }
@@ -39,6 +41,7 @@ class PairingRouterTest {
         override fun setStreamAddons(urls: List<String>) { writes++; savedStreams = urls }
         override fun setNuvioPlugins(urls: List<String>) { writes++; savedPlugins = urls }
         override fun setNuvioBridge(url: String) { writes++; savedBridge = url }
+        override fun setCloudstreamBridge(url: String) { writes++; savedCloudstream = url }
         override fun setApiKeys(keys: Map<String, String>) { writes++; savedApiKeys = keys }
     }
 
@@ -61,7 +64,7 @@ class PairingRouterTest {
 
     /** La respuesta no revela nada del televisor: ni el código ni los datos guardados. */
     private fun assertNoSecrets(response: PanelResponse) {
-        for (secret in listOf(CODE, ACCOUNT, ADDON, STREAM_ADDON, NUVIO_REPO, NUVIO_BRIDGE, API_KEY, "192.168.1.77")) {
+        for (secret in listOf(CODE, ACCOUNT, ADDON, STREAM_ADDON, NUVIO_REPO, NUVIO_BRIDGE, CS_BRIDGE, API_KEY, "192.168.1.77")) {
             assertFalse("la respuesta filtra «$secret»", response.body.contains(secret, ignoreCase = true))
         }
         assertEquals("se leyeron los ajustes sin código válido", 0, store.reads)
@@ -143,7 +146,7 @@ class PairingRouterTest {
     fun `el codigo correcto abre el panel con los datos`() {
         val response = get("/?code=$CODE")
         assertEquals(200, response.status)
-        for (expected in listOf(ACCOUNT, ADDON, STREAM_ADDON, NUVIO_REPO, NUVIO_BRIDGE, "TMDB=$API_KEY")) {
+        for (expected in listOf(ACCOUNT, ADDON, STREAM_ADDON, NUVIO_REPO, NUVIO_BRIDGE, CS_BRIDGE, "TMDB=$API_KEY")) {
             assertTrue("falta «$expected» en el panel", response.body.contains(expected))
         }
         assertTrue(response.body.contains("action=\"/save\""))
@@ -160,7 +163,7 @@ class PairingRouterTest {
         val response = get("/status?code=$CODE")
         assertEquals(200, response.status)
         assertEquals(
-            """{"account":"$ACCOUNT","addons":1,"streams":1,"plugins":1,"apis":1}""",
+            """{"account":"$ACCOUNT","addons":1,"streams":1,"plugins":1,"cloudstream":1,"apis":1}""",
             response.body
         )
     }
@@ -173,6 +176,7 @@ class PairingRouterTest {
             "&streamAddons=http%3A%2F%2F10.0.0.5%3A8787" +
             "&nuvioPlugins=https%3A%2F%2Fplugins.ejemplo%2Fmanifest.json" +
             "&nuvioBridge=http%3A%2F%2F10.0.0.5%3A8788" +
+            "&cloudstreamBridge=http%3A%2F%2F10.0.0.5%3A8789" +
             "&apis=tmdb%3Dabc123%0D%0ATRAKT+%3D+xyz%3D%3D%0D%0Alinea+sin+igual"
         val response = post("/save", body)
 
@@ -182,6 +186,7 @@ class PairingRouterTest {
         assertEquals(listOf("http://10.0.0.5:8787"), store.savedStreams)
         assertEquals(listOf("https://plugins.ejemplo/manifest.json"), store.savedPlugins)
         assertEquals("http://10.0.0.5:8788", store.savedBridge)
+        assertEquals("http://10.0.0.5:8789", store.savedCloudstream)
         assertEquals(mapOf("TMDB" to "abc123", "TRAKT" to "xyz=="), store.savedApiKeys)
         assertTrue(response.body.contains("Guardado"))
         assertFalse(response.body.contains("descartaron"))
@@ -274,8 +279,8 @@ class PairingRouterTest {
 
     @Test
     fun `el aviso de cifrado refleja el estado real`() {
-        val encrypted = PairingPortal.html(PanelData(CODE, "", emptyList(), emptyList(), emptyList(), "", emptyMap(), secretsEncrypted = true))
-        val plain = PairingPortal.html(PanelData(CODE, "", emptyList(), emptyList(), emptyList(), "", emptyMap(), secretsEncrypted = false))
+        val encrypted = PairingPortal.html(PanelData(CODE, "", emptyList(), emptyList(), emptyList(), "", "", emptyMap(), secretsEncrypted = true))
+        val plain = PairingPortal.html(PanelData(CODE, "", emptyList(), emptyList(), emptyList(), "", "", emptyMap(), secretsEncrypted = false))
 
         assertTrue(encrypted.contains("cifradas"))
         assertFalse(encrypted.contains("sin cifrar"))

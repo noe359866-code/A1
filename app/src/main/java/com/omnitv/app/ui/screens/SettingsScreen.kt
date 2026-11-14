@@ -42,6 +42,7 @@ import com.omnitv.app.data.PairingServer
 import com.omnitv.app.data.AddonRegistry
 import com.omnitv.app.data.NuvioPluginManager
 import com.omnitv.app.data.NuvioScraperResolver
+import com.omnitv.app.data.CloudstreamBridge
 import com.omnitv.app.data.ProfileStore
 import com.omnitv.app.data.SettingsStore
 import com.omnitv.app.ui.components.AvatarView
@@ -79,6 +80,7 @@ fun SettingsScreen(onSwitchProfile: () -> Unit) {
     RequestTvFocus(firstFocus)
     val scope = rememberCoroutineScope()
     var bridgeStatus by remember { mutableStateOf("Comprobando puente…") }
+    var cloudstreamStatus by remember { mutableStateOf("Comprobando Cloudstream…") }
     var refreshing by remember { mutableStateOf(false) }
     suspend fun checkIntegrations() {
         refreshing = true
@@ -86,6 +88,7 @@ fun SettingsScreen(onSwitchProfile: () -> Unit) {
             AddonRegistry.refresh(force = true)
             NuvioPluginManager.refreshAll(force = true)
             bridgeStatus = NuvioScraperResolver.checkBridge()
+            cloudstreamStatus = CloudstreamBridge.check()
         } finally { refreshing = false }
     }
     LaunchedEffect(SettingsStore.revision) { checkIntegrations() }
@@ -226,6 +229,7 @@ fun SettingsScreen(onSwitchProfile: () -> Unit) {
                     StatusLine("Nuvio", "Sin repositorios guardados")
                 } else NuvioPluginManager.repositories.value.forEach { StatusLine(it.label, it.summary) }
                 StatusLine("Puente JS", bridgeStatus)
+                StatusLine("Cloudstream", cloudstreamStatus)
                 Text(
                     "Los repositorios Nuvio no se ejecutan en el televisor. Sin puente solo quedan guardados. " +
                         "Los torrents/P2P no se reproducen.",
@@ -233,7 +237,7 @@ fun SettingsScreen(onSwitchProfile: () -> Unit) {
                 )
                 Spacer(Modifier.height(12.dp))
                 PillButton(
-                    text = if (refreshing) "Comprobando…" else "Comprobar manifests y puente",
+                    text = if (refreshing) "Comprobando…" else "Comprobar manifests y puentes",
                     primary = false,
                     onClick = { if (!refreshing) scope.launch { checkIntegrations() } }
                 )

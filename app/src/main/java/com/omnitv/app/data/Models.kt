@@ -111,9 +111,9 @@ data class Video(
     /** Fuentes de reproducción (al menos «Servidor 1»). */
     val playbackSources: List<StreamSource>
         get() = if (sources.isEmpty()) {
-            listOf(StreamSource("Servidor 1", videoUrl, streamFormat))
+            if (videoUrl.isNotBlank() && NetPolicy.isAllowed(videoUrl)) listOf(StreamSource("Servidor 1", videoUrl, streamFormat)) else emptyList()
         } else {
-            sources
+            sources.filter { NetPolicy.isAllowed(it.url) }
         }
 }
 

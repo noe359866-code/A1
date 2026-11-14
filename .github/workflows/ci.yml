@@ -59,6 +59,9 @@ jobs:
       - name: Puente Nuvio (HTTP y worker JS)
         run: node --test tools/nuvio-bridge/bridge.test.mjs
 
+      - name: Puente Cloudstream (runtime externo)
+        run: node --test tools/cloudstream-bridge/bridge.test.mjs
+
       - name: Tests unitarios
         run: |
           set -o pipefail
