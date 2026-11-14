@@ -107,7 +107,7 @@ object CinejoyClient {
                 certification = "",
                 quality = "HD",
                 genres = emptyList(),
-                videoUrl = "", // los catálogos no traen streams → demo en el reproductor
+                videoUrl = "", // los catálogos no traen streams → los resuelve StreamHub
                 type = type,
                 isRemote = true,
                 source = "Cinejoy",

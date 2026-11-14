@@ -55,6 +55,34 @@ object TvKeypad {
         }
     }
 
+    /** Fila inferior del teclado, en el mismo orden que su interfaz. */
+    val actions: List<String> = listOf(SPACE, BACKSPACE, DONE)
+
+    data class Position(val row: Int, val column: Int)
+    enum class Direction { UP, DOWN, LEFT, RIGHT }
+
+    /**
+     * Navegación explícita del D-pad. Los bordes se mantienen dentro del
+     * teclado: Compose no debe saltar a las pestañas ni a los resultados
+     * que quedan detrás. Las filas cortas conservan la posición relativa.
+     */
+    fun move(current: Position, direction: Direction): Position {
+        val lengths = rows.map { it.length } + listOf(actions.size)
+        val row = current.row.coerceIn(0, lengths.lastIndex)
+        val column = current.column.coerceIn(0, lengths[row] - 1)
+        return when (direction) {
+            Direction.LEFT -> Position(row, (column - 1).coerceAtLeast(0))
+            Direction.RIGHT -> Position(row, (column + 1).coerceAtMost(lengths[row] - 1))
+            Direction.UP, Direction.DOWN -> {
+                val nextRow = (row + if (direction == Direction.UP) -1 else 1)
+                    .coerceIn(0, lengths.lastIndex)
+                val nextColumn = if (nextRow == row) column else
+                    column * (lengths[nextRow] - 1) / (lengths[row] - 1)
+                Position(nextRow, nextColumn)
+            }
+        }
+    }
+
     /** Teclas que cierran o confirman, no escriben. */
     fun isAction(key: String): Boolean = key == DONE
 

@@ -16,9 +16,13 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
@@ -30,6 +34,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
@@ -39,6 +45,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.text.style.TextOverflow
+import com.omnitv.app.ui.components.RequestTvFocus
 import androidx.compose.material.Text
 import com.omnitv.app.ui.theme.Accent
 import com.omnitv.app.ui.theme.AppRadius
@@ -96,6 +104,7 @@ fun ControlPill(
     Row(
         modifier = modifier
             .height(52.dp)
+            .widthIn(max = 180.dp)
             .graphicsLayer { scaleX = scale; scaleY = scale }
             .clip(AppRadius.pill)
             .background(background)
@@ -124,7 +133,10 @@ fun ControlPill(
                 fontWeight = FontWeight.SemiBold,
                 fontSize = 19.sp
             ),
-            color = contentColor
+            color = contentColor,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f, fill = false)
         )
     }
 }
@@ -154,6 +166,7 @@ fun TransportButton(
             .graphicsLayer { scaleX = scale; scaleY = scale }
             .clip(CircleShape)
             .background(background)
+            .then(if (focused) Modifier.border(3.dp, Color.White, CircleShape) else Modifier)
             .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onClick)
             .onFocusChanged { focused = it.isFocused },
         contentAlignment = Alignment.Center
@@ -185,8 +198,13 @@ fun OptionMenu(
     options: List<PlayerOption>,
     modifier: Modifier = Modifier
 ) {
-    GlassPanel(modifier = modifier.width(320.dp)) {
-        Column(Modifier.padding(vertical = 14.dp)) {
+    val initialFocus = remember(title) { FocusRequester() }
+    val initialIndex = options.indexOfFirst { it.selected }.coerceAtLeast(0)
+    RequestTvFocus(initialFocus, key = title)
+    GlassPanel(modifier = modifier.width(360.dp)) {
+        Column(
+            Modifier.heightIn(max = 220.dp).verticalScroll(rememberScrollState()).padding(vertical = 14.dp)
+        ) {
             Text(
                 title.uppercase(),
                 style = androidx.compose.ui.text.TextStyle(
@@ -198,23 +216,24 @@ fun OptionMenu(
                 color = TextSecondary,
                 modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)
             )
-            options.forEach { option ->
-                OptionRow(option)
+            options.forEachIndexed { index, option ->
+                OptionRow(option, if (index == initialIndex) Modifier.focusRequester(initialFocus) else Modifier)
             }
         }
     }
 }
 
 @Composable
-private fun OptionRow(option: PlayerOption) {
+private fun OptionRow(option: PlayerOption, modifier: Modifier = Modifier) {
     var focused by remember { mutableStateOf(false) }
 
     Row(
-        modifier = Modifier
+        modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = 10.dp, vertical = 2.dp)
             .clip(AppRadius.sm)
             .background(if (focused) Color.White.copy(alpha = 0.18f) else Color.Transparent)
+            .then(if (focused) Modifier.border(3.dp, Color.White, AppRadius.sm) else Modifier)
             .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = option.onSelect)
             .onFocusChanged { focused = it.isFocused }
             .padding(horizontal = 12.dp, vertical = 12.dp),

@@ -54,6 +54,11 @@ import com.omnitv.app.ui.theme.TextSecondary
 
 /** Rutas de navegación. */
 object Routes {
+    // Un id de addon puede contener /, :, ~ o caracteres no ASCII. Un segmento
+    // de Navigation debe llevarlos escapados; NavType.StringType los decodifica.
+    private fun arg(value: String): String =
+        java.net.URLEncoder.encode(value, "UTF-8").replace("+", "%20")
+
     const val PROFILES = "profiles"
     const val MANAGE_PROFILES = "manageProfiles"
     const val EDIT_PROFILE = "editProfile/{profileId}"
@@ -67,9 +72,9 @@ object Routes {
     const val PLATFORM = "platform/{providerId}"
     const val STUDIO = "studio/{studioId}"
 
-    fun editProfile(profileId: String) = "editProfile/$profileId"
-    fun detail(videoId: String) = "detail/$videoId"
-    fun player(videoId: String) = "player/$videoId"
+    fun editProfile(profileId: String) = "editProfile/${arg(profileId)}"
+    fun detail(videoId: String) = "detail/${arg(videoId)}"
+    fun player(videoId: String) = "player/${arg(videoId)}"
     fun platform(providerId: Int) = "platform/$providerId"
     fun studio(studioId: Int) = "studio/$studioId"
 }

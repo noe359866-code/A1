@@ -30,6 +30,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.omnitv.app.BuildConfig
 import com.omnitv.app.R
 import com.omnitv.app.data.PairingServer
 import com.omnitv.app.data.ProfileStore
@@ -57,6 +58,10 @@ import androidx.compose.material.Text
 @Composable
 fun SettingsScreen(onSwitchProfile: () -> Unit) {
     val profile = ProfileStore.currentProfile
+    val panelUrl = remember(PairingServer.running.value) { PairingServer.panelUrl() }
+    val pairingUrl = remember(panelUrl, SettingsStore.pairingCode) {
+        if (panelUrl.isEmpty()) "" else "$panelUrl?code=${SettingsStore.pairingCode}"
+    }
 
     // Foco inicial en «Calidad preferida», la primera fila pulsable del
     // listado: el mando entra en el contenido y no tiene que recorrer la
@@ -117,15 +122,17 @@ fun SettingsScreen(onSwitchProfile: () -> Unit) {
             ) {
                 // QR con la URL debajo (como el ejemplo del panel)
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    QrCode(
-                        data = PairingServer.pairingUrl(),
-                        modifier = Modifier
-                            .size(176.dp)
-                            .clip(AppRadius.md)
-                    )
+                    if (pairingUrl.isNotEmpty()) {
+                        QrCode(
+                            data = pairingUrl,
+                            modifier = Modifier.size(176.dp).clip(AppRadius.md)
+                        )
+                    } else {
+                        Text("Sin red local", style = AppType.metadata, color = TextSecondary)
+                    }
                     Spacer(Modifier.height(12.dp))
                     Text(
-                        PairingServer.panelUrl(),
+                        panelUrl.ifEmpty { "Conecta el televisor a la red local" },
                         style = AppType.metadata,
                         color = Accent,
                         fontFamily = FontFamily.Monospace
@@ -153,7 +160,14 @@ fun SettingsScreen(onSwitchProfile: () -> Unit) {
                         fontFamily = FontFamily.Monospace
                     )
                     Spacer(Modifier.height(12.dp))
-                    StatusLine("Servidor", if (PairingServer.running.value) "Activo en ${PairingServer.localIpv4()}:8080" else "Iniciando…")
+                    StatusLine(
+                        "Servidor",
+                        when {
+                            PairingServer.running.value -> "Activo · solo mientras la app está visible"
+                            PairingServer.lastError.value.isNotEmpty() -> PairingServer.lastError.value
+                            else -> "Detenido"
+                        }
+                    )
                     StatusLine("Cuenta enlazada", SettingsStore.linkedAccount.ifEmpty { "Sin enlazar" })
                     StatusLine("Addons añadidos", "${SettingsStore.customAddons.size}")
                     StatusLine("Addons de streams", "${SettingsStore.streamAddons.size}")
@@ -259,7 +273,7 @@ fun SettingsScreen(onSwitchProfile: () -> Unit) {
             SettingRow(
                 title = "Acerca de",
                 subtitle = "Omni TV · diseñado para Android TV",
-                trailing = { ValueText("1.0.0") }
+                trailing = { ValueText(BuildConfig.VERSION_NAME) }
             )
         }
 

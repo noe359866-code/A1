@@ -69,8 +69,13 @@ class ProjectStreamAddon(
             parseStreams(json)
         }
 
-    private fun parseStreams(json: JSONObject): List<StreamLink> {
-        val array = json.optJSONArray("streams") ?: json.optJSONArray("videos") ?: return emptyList()
+    internal fun parseStreams(json: Any?): List<StreamLink> {
+        // La forma simple del protocolo también permite un array en la raíz.
+        val array = when (json) {
+            is JSONArray -> json
+            is JSONObject -> json.optJSONArray("streams") ?: json.optJSONArray("videos")
+            else -> null
+        } ?: return emptyList()
         return buildList {
             for (i in 0 until array.length()) {
                 val item = array.optJSONObject(i) ?: continue
@@ -103,12 +108,12 @@ class ProjectStreamAddon(
      * Descarga [url] como JSON. Primero por el DNS normal; si el nombre no
      * resuelve, reintenta con el DNS de Cloudflare ([Doh]).
      */
-    private fun httpJson(url: String): JSONObject? =
+    private fun httpJson(url: String): Any? =
         httpJsonDirect(url) ?: Doh.retry(url)?.let { body ->
-            runCatching { JSONObject(body) }.getOrNull()
+            runCatching { org.json.JSONTokener(body).nextValue() }.getOrNull()
         }
 
-    private fun httpJsonDirect(url: String): JSONObject? = runCatching {
+    private fun httpJsonDirect(url: String): Any? = runCatching {
         val connection = URL(url).openConnection() as HttpURLConnection
         try {
             connection.connectTimeout = 6_000
@@ -116,7 +121,7 @@ class ProjectStreamAddon(
             connection.setRequestProperty("User-Agent", "OmniTV/1.0 (Android TV)")
             connection.setRequestProperty("Accept", "application/json")
             if (connection.responseCode !in 200..299) return null
-            JSONObject(connection.inputStream.bufferedReader().readText())
+            org.json.JSONTokener(connection.inputStream.bufferedReader().readText()).nextValue()
         } finally {
             connection.disconnect()
         }
@@ -146,7 +151,7 @@ object DemoStreamAddon : StreamAddon {
  * proyectos configurados (StreamFlix Reborn y afines vía
  * [ProjectStreamAddon], addons Stremio de streams, etc.), normaliza los
  * resultados y los pasa al reproductor multi-servidor. Si nadie entrega
- * enlaces, el reproductor cae al flujo demo etiquetado.
+ * enlaces, la app muestra un error sin sustituir el título.
  */
 object StreamHub {
 

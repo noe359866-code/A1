@@ -36,32 +36,67 @@ object PairingServer {
     /** El servidor está escuchando. */
     val running = mutableStateOf(false)
 
+    /** Error de apertura visible en Ajustes (no un «Iniciando…» eterno). */
+    val lastError = mutableStateOf("")
+
     /** Última acción recibida desde el panel (se muestra en Ajustes). */
     val lastAction = mutableStateOf("")
 
     /** Reglas del panel (código, límite de intentos, guardado) sobre los ajustes reales. */
     private val router = PairingRouter(SettingsPanelStore, onEvent = { lastAction.value = it })
 
+    @Synchronized
     fun start() {
         if (serverSocket != null) return
+        lastError.value = ""
+        val host = localIpv4()
+        if (host.isEmpty()) {
+            lastError.value = "Conecta el televisor a tu red local para usar la vinculación."
+            return
+        }
+        val ss = try {
+            ServerSocket().apply {
+                reuseAddress = true
+                bind(InetSocketAddress(host, PORT))
+            }
+        } catch (_: java.io.IOException) {
+            running.value = false
+            lastError.value = "No se pudo abrir el puerto 8080. Vuelve a abrir la app."
+            return
+        }
+        serverSocket = ss
+        running.value = true
         thread(name = "omni-tv-pairing", isDaemon = true) {
-            runCatching {
-                val ss = ServerSocket().apply {
-                    reuseAddress = true
-                    bind(InetSocketAddress(PORT))
-                }
-                serverSocket = ss
-                running.value = true
-                while (true) {
+            try {
+                while (!ss.isClosed) {
                     val socket = ss.accept()
                     thread(name = "omni-tv-pairing-req", isDaemon = true) {
-                        runCatching { handle(socket) }
+                        try {
+                            runCatching { handle(socket) }
+                        } finally {
+                            runCatching { socket.close() }
+                        }
                     }
                 }
-            }.onFailure {
-                running.value = false
+            } catch (_: java.io.IOException) {
+                // accept también falla al cerrar el socket desde onStop: es normal.
+            } finally {
+                runCatching { ss.close() }
+                synchronized(this@PairingServer) {
+                    if (serverSocket === ss) {
+                        serverSocket = null
+                        running.value = false
+                    }
+                }
             }
         }
+    }
+
+    @Synchronized
+    fun stop() {
+        running.value = false
+        runCatching { serverSocket?.close() }
+        serverSocket = null
     }
 
     /** IP local del televisor en la LAN. */
@@ -70,14 +105,16 @@ object PairingServer {
             .filter { it.isUp && !it.isLoopback }
             .flatMap { it.inetAddresses.toList() }
             .filterIsInstance<Inet4Address>()
-            .firstOrNull()?.hostAddress ?: "0.0.0.0"
-    }.getOrDefault("0.0.0.0")
+            .filter { !it.isLoopbackAddress && !it.isLinkLocalAddress }
+            .sortedByDescending { it.isSiteLocalAddress }
+            .firstOrNull()?.hostAddress ?: ""
+    }.getOrDefault("")
 
     /** URL del panel (se muestra debajo del QR, como el ejemplo del usuario). */
-    fun panelUrl(): String = "http://${localIpv4()}:$PORT/"
+    fun panelUrl(): String = localIpv4().takeIf { it.isNotEmpty() }?.let { "http://$it:$PORT/" }.orEmpty()
 
     /** URL de emparejamiento con código (la que codifica el QR). */
-    fun pairingUrl(): String = "${panelUrl()}?code=${SettingsStore.pairingCode}"
+    fun pairingUrl(): String = panelUrl().takeIf { it.isNotEmpty() }?.let { "$it?code=${SettingsStore.pairingCode}" }.orEmpty()
 
     /** Los ajustes reales del televisor, vistos desde el panel. */
     private object SettingsPanelStore : PanelStore {

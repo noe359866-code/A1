@@ -40,6 +40,9 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -150,6 +153,14 @@ fun DetailScreen(
     DisposableEffect(trailerPlayer) {
         onDispose { trailerPlayer?.release() }
     }
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner, trailerPlayer) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_PAUSE) trailerPlayer?.pause()
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
 
     Box(
         Modifier
@@ -168,6 +179,7 @@ fun DetailScreen(
                         // del mando a los botones de la ficha.
                         isFocusable = false
                         isFocusableInTouchMode = false
+                        descendantFocusability = android.view.ViewGroup.FOCUS_BLOCK_DESCENDANTS
                     }
                 },
                 update = { it.player = trailerPlayer },
@@ -309,8 +321,8 @@ fun DetailScreen(
                 if (full.isRemote) {
                     Spacer(Modifier.height(14.dp))
                     Text(
-                        "Catálogo real de ${full.source} · los addons de catálogo no incluyen " +
-                            "enlaces de reproducción: se reproducirá una demostración",
+                        "Catálogo de ${full.source} · la reproducción requiere un addon " +
+                            "de streams configurado en Ajustes → Vincular.",
                         style = AppType.metadata,
                         // No `TextTertiary` (2,5:1 sobre el fondo): es texto real
                         color = TextMuted

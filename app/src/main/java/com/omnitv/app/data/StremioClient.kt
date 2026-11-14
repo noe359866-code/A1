@@ -157,7 +157,7 @@ object StremioClient {
             certification = meta.optString("certification", meta.optString("ageRating", "")),
             quality = "HD",
             genres = genres,
-            videoUrl = "", // sin stream: el reproductor usa la demo con aviso
+            videoUrl = "", // sin stream: StreamHub consulta los addons del usuario
             cast = meta.optJSONArray("cast").toStringList(),
             language = meta.optString("country", "").ifEmpty { "—" },
             type = type,

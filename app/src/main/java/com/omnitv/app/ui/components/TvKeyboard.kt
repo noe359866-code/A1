@@ -1,5 +1,3 @@
-@file:OptIn(ExperimentalComposeUiApi::class)
-
 package com.omnitv.app.ui.components
 
 import androidx.compose.foundation.Image
@@ -24,14 +22,19 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.omnitv.app.R
 import com.omnitv.app.data.TvKeypad
@@ -45,33 +48,34 @@ import com.omnitv.app.ui.theme.SurfaceElevated
 import com.omnitv.app.ui.theme.TextPrimary
 
 /**
- * Teclado en pantalla para el buscador, pensado para un mando de TV.
+ * Teclado propio para Android TV. No depende del IME del receptor.
  *
- * Por qué no el teclado del sistema: en Android TV, un `BasicTextField` enfocado
- * abre el IME *leanback* solo si el receptor lo soporta, y con Compose el
- * resultado cambia según el fabricante. En muchos televisores el campo se queda
- * con el foco y **no aparece nada**, así que el usuario acaba pulsando «Atrás» a
- * ciegas. Este teclado es nuestro: siempre se ve, siempre responde al D-pad y no
- * depende de ningún IME del sistema.
- *
- * Cómo se usa con el mando: cuatro flechas para moverse, **OK** para escribir la
- * tecla enfocada, y «LISTO» para cerrarlo. No se capturan teclas de forma
- * global: el foco está dentro del teclado mientras está abierto, así que las
- * flechas mueven de tecla en tecla y un teclado físico (o el del móvil, por
- * Bluetooth) sigue escribiendo en el campo sin que este componente estorbe.
+ * [compact] se usa en un panel lateral: el campo y los resultados siguen
+ * visibles a su izquierda. Una pulsación de flecha mueve UNA tecla y nunca
+ * abandona el panel; OK activa la tecla enfocada y Atrás lo cierra la pantalla.
+ * Los objetivos de 42 dp son para mando, no para una pantalla táctil.
  */
 @Composable
 fun TvKeyboard(
     onKey: (String) -> Unit,
     onDone: () -> Unit,
     modifier: Modifier = Modifier,
-    firstKeyFocus: FocusRequester = remember { FocusRequester() }
+    firstKeyFocus: FocusRequester = remember { FocusRequester() },
+    compact: Boolean = false
 ) {
-    // Panel de 54 dp por tecla con 8 dp de hueco: por encima del mínimo de 48 dp
-    // para un objetivo de mando, y lo bastante compacto (342 dp de alto) para
-    // superponerse a la mitad inferior de un lienzo de 540 dp sin tapar el campo
-    // de búsqueda, que se queda arriba.
-    val rows = TvKeypad.rows
+    val keySize = if (compact) 42.dp else 54.dp
+    val gap = if (compact) 4.dp else 8.dp
+    val padding = if (compact) 12.dp else 18.dp
+    val labels = TvKeypad.rows.map { row -> row.map { it.toString() } } +
+        listOf(TvKeypad.actions)
+    val focusTargets = remember(firstKeyFocus) {
+        labels.mapIndexed { rowIndex, row ->
+            row.mapIndexed { colIndex, _ ->
+                if (rowIndex == 0 && colIndex == 0) firstKeyFocus else FocusRequester()
+            }
+        }
+    }
+    var current by remember { mutableStateOf(TvKeypad.Position(0, 0)) }
 
     Column(
         modifier = modifier
@@ -79,100 +83,92 @@ fun TvKeyboard(
             .clip(AppRadius.lg)
             .background(SurfaceElevated)
             .border(2.dp, Color.White.copy(alpha = 0.12f), AppRadius.lg)
-            .padding(18.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+            .onPreviewKeyEvent { event ->
+                if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                val direction = when (event.key) {
+                    Key.DirectionUp -> TvKeypad.Direction.UP
+                    Key.DirectionDown -> TvKeypad.Direction.DOWN
+                    Key.DirectionLeft -> TvKeypad.Direction.LEFT
+                    Key.DirectionRight -> TvKeypad.Direction.RIGHT
+                    else -> return@onPreviewKeyEvent false
+                }
+                current = TvKeypad.move(current, direction)
+                focusTargets[current.row][current.column].requestFocus()
+                true
+            }
+            .padding(padding),
+        verticalArrangement = Arrangement.spacedBy(gap)
     ) {
-        // Todas las filas centradas con el mismo ancho de tecla: las de 10, 9
-        // y 7 letras quedan en columna (como en un teclado de verdad), así el
-        // D-pad baja en vertical y no en diagonal.
-        rows.forEachIndexed { rowIndex, letters ->
+        TvKeypad.rows.forEachIndexed { rowIndex, letters ->
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                horizontalArrangement = Arrangement.spacedBy(gap, Alignment.CenterHorizontally),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Dos muelles a los lados centran la fila sin romper el
-                // espaciado entre teclas.
-                Spacer(Modifier.weight(1f))
                 letters.forEachIndexed { colIndex, char ->
                     KeyButton(
                         label = char.toString(),
-                        onClick = { onKey(char.toString()) },
-                        modifier = if (rowIndex == 0 && colIndex == 0) {
-                            Modifier.focusRequester(firstKeyFocus)
-                        } else {
-                            Modifier
-                        }
+                        size = keySize,
+                        onClick = {
+                            current = TvKeypad.Position(rowIndex, colIndex)
+                            onKey(char.toString())
+                        },
+                        modifier = Modifier.focusRequester(focusTargets[rowIndex][colIndex])
                     )
                 }
-                Spacer(Modifier.weight(1f))
             }
         }
-
-        // Fila de acciones: espacio, borrar y listo. Se queda pegada a la
-        // izquierda para que no se mueva bajo el dedo al reordenar el foco.
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            horizontalArrangement = Arrangement.spacedBy(gap)
         ) {
-            ActionKey(
-                label = TvKeypad.SPACE,
-                onClick = { onKey(TvKeypad.SPACE) },
-                modifier = Modifier.weight(1f)
-            )
-            ActionKey(
-                label = "BORRAR",
-                iconRes = R.drawable.ic_backspace,
-                onClick = { onKey(TvKeypad.BACKSPACE) }
-            )
-            ActionKey(
-                label = TvKeypad.DONE,
-                onClick = onDone,
-                primary = true
-            )
+            TvKeypad.actions.forEachIndexed { colIndex, action ->
+                val rowIndex = TvKeypad.rows.size
+                ActionKey(
+                    label = if (action == TvKeypad.BACKSPACE) "BORRAR" else action,
+                    iconRes = if (action == TvKeypad.BACKSPACE) R.drawable.ic_backspace else null,
+                    primary = action == TvKeypad.DONE,
+                    height = keySize,
+                    compact = compact,
+                    onClick = {
+                        current = TvKeypad.Position(rowIndex, colIndex)
+                        if (action == TvKeypad.DONE) onDone() else onKey(action)
+                    },
+                    modifier = Modifier
+                        .then(if (action == TvKeypad.SPACE) Modifier.weight(1f) else Modifier)
+                        .focusRequester(focusTargets[rowIndex][colIndex])
+                )
+            }
         }
     }
 }
 
-/** Tecla cuadrada de un carácter. */
 @Composable
-private fun KeyButton(label: String, onClick: () -> Unit, modifier: Modifier = Modifier) {
+private fun KeyButton(label: String, size: Dp, onClick: () -> Unit, modifier: Modifier = Modifier) {
     var focused by remember { mutableStateOf(false) }
-
     Box(
         modifier = modifier
-            .size(54.dp)
+            .size(size)
             .clip(AppRadius.sm)
-            // GlassFillStrong y no GlassFill: sobre el panel, el relleno tenue
-            // casi no se distingue y las teclas se leían como texto suelto.
             .background(if (focused) Color.White else GlassFillStrong)
-            // El foco ya cambia el relleno a blanco; el anillo va oscuro para
-            // que se siga viendo (regla del sistema: relleno claro → aro oscuro).
             .then(if (focused) Modifier.border(3.dp, Background, AppRadius.sm) else Modifier)
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null,
-                onClick = onClick
-            )
+            .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onClick)
             .onFocusChanged { focused = it.isFocused },
         contentAlignment = Alignment.Center
     ) {
-        Text(
-            label,
-            style = AppType.body,
-            color = if (focused) OnLight else TextPrimary
-        )
+        Text(label, style = AppType.body, color = if (focused) OnLight else TextPrimary)
     }
 }
 
-/** Tecla ancha de acción (espacio, borrar, listo). */
 @Composable
 private fun ActionKey(
     label: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     iconRes: Int? = null,
-    primary: Boolean = false
+    primary: Boolean = false,
+    height: Dp = 54.dp,
+    compact: Boolean = false
 ) {
     var focused by remember { mutableStateOf(false) }
     val background = when {
@@ -180,24 +176,16 @@ private fun ActionKey(
         primary -> Accent
         else -> GlassFillStrong
     }
-    val content = when {
-        focused -> OnLight
-        else -> Color.White
-    }
-
+    val content = if (focused) OnLight else Color.White
     Row(
         modifier = modifier
-            .height(54.dp)
+            .height(height)
             .clip(AppRadius.sm)
             .background(background)
             .then(if (focused) Modifier.border(3.dp, Background, AppRadius.sm) else Modifier)
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null,
-                onClick = onClick
-            )
+            .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onClick)
             .onFocusChanged { focused = it.isFocused }
-            .padding(horizontal = 20.dp),
+            .padding(horizontal = if (compact) 10.dp else 20.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.Center
     ) {
@@ -205,11 +193,11 @@ private fun ActionKey(
             Image(
                 painter = painterResource(iconRes),
                 contentDescription = null,
-                modifier = Modifier.size(22.dp),
+                modifier = Modifier.size(20.dp),
                 colorFilter = androidx.compose.ui.graphics.ColorFilter.tint(content)
             )
-            Spacer(Modifier.width(10.dp))
+            Spacer(Modifier.width(6.dp))
         }
-        Text(label, style = AppType.button, color = content)
+        Text(label, style = if (compact) AppType.metadata else AppType.button, color = content, maxLines = 1)
     }
 }

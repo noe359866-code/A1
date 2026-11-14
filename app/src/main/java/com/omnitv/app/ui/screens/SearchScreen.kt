@@ -4,15 +4,14 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -37,10 +36,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.delay
 import com.omnitv.app.R
 import com.omnitv.app.data.CatalogRepository
 import com.omnitv.app.data.ProfileStore
@@ -49,7 +48,6 @@ import com.omnitv.app.data.TvKeypad
 import com.omnitv.app.data.Video
 import com.omnitv.app.ui.components.PosterCard
 import com.omnitv.app.ui.components.RequestTvFocus
-import com.omnitv.app.ui.components.TvChip
 import com.omnitv.app.ui.components.TvKeyboard
 import com.omnitv.app.ui.components.TvTextField
 import com.omnitv.app.ui.theme.AppType
@@ -80,18 +78,19 @@ fun SearchScreen(onOpenDetail: (Video) -> Unit) {
     // Búsqueda remota (catálogo real) con rebote
     var remoteResults by remember { mutableStateOf<List<Video>>(emptyList()) }
     var searching by remember { mutableStateOf(false) }
-    LaunchedEffect(query) {
+    LaunchedEffect(query, kidsOnly) {
         val q = query.trim()
         if (q.length >= 2 && !kidsOnly) {
+            delay(350)
             searching = true
             remoteResults = RemoteCatalog.search(q)
             searching = false
         } else {
+            searching = false
             remoteResults = emptyList()
         }
     }
     val results = (localResults + remoteResults).distinctBy { it.id }
-    val suggestions = listOf("Animación", "Ciencia ficción", "Motor", "Demo", "Fantasía")
 
     // Al entrar en la pantalla el foco va al campo: en un mando, tener que
     // atravesar la barra de pestañas para poder buscar es un peaje innecesario.
@@ -99,7 +98,7 @@ fun SearchScreen(onOpenDetail: (Video) -> Unit) {
     RequestTvFocus(fieldFocus)
 
     // Teclado en pantalla: se abre al entrar en el campo y se cierra con
-    // «LISTO». Mientras está abierto ocupa el sitio de las sugerencias.
+    // «LISTO». Se coloca a la derecha, sin tapar el campo ni los resultados.
     var keyboardOpen by rememberSaveable { mutableStateOf(false) }
     var keyboardJustClosed by remember { mutableStateOf(false) }
     val firstKeyFocus = remember { FocusRequester() }
@@ -121,12 +120,16 @@ fun SearchScreen(onOpenDetail: (Video) -> Unit) {
         runCatching { fieldFocus.requestFocus() }
     }
 
+    // Lienzo TV de referencia: 960 × 540 dp. El panel lateral deja 320 dp
+    // para la consulta y dos columnas de resultados, también con el foco visible.
+    val keyboardWidth = 496.dp
+
     Box(Modifier.fillMaxSize().background(Background)) {
         // ---- Contenido de la pantalla (campo, sugerencias o resultados) ----
         Column(
             Modifier
                 .fillMaxSize()
-                .padding(horizontal = 48.dp)
+                .padding(start = 48.dp, end = if (keyboardOpen) keyboardWidth + 96.dp else 48.dp)
         ) {
             Spacer(Modifier.height(12.dp))
             Text("Buscar", style = AppType.screenTitle, color = TextPrimary)
@@ -152,22 +155,12 @@ fun SearchScreen(onOpenDetail: (Video) -> Unit) {
                     if (focused && !keyboardJustClosed) keyboardOpen = true
                     keyboardJustClosed = false
                 },
-                modifier = Modifier.width(620.dp)
+                modifier = Modifier.fillMaxWidth()
             )
 
             Spacer(Modifier.height(16.dp))
 
-            // Las sugerencias solo ocupan sitio cuando el teclado está cerrado.
-            if (!keyboardOpen) {
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    suggestions.forEach { suggestion ->
-                        TvChip(suggestion, onClick = { query = suggestion })
-                    }
-                }
-                Spacer(Modifier.height(24.dp))
-            }
-
-            Box(Modifier.weight(1f).padding(bottom = 56.dp)) {
+            Box(Modifier.weight(1f).padding(bottom = 24.dp)) {
                 when {
                     // Con el teclado abierto el estado vacío grande sobra: se
                     // queda detrás del teclado y no se lee. La consulta ya se ve
@@ -176,7 +169,7 @@ fun SearchScreen(onOpenDetail: (Video) -> Unit) {
                     query.isBlank() -> EmptyState(
                         iconRes = R.drawable.ic_search,
                         title = "Busca en todo el catálogo",
-                        subtitle = "Cinemeta · Nuvio · contenido demo · escribe un título o género"
+                        subtitle = "Escribe un título o género"
                     )
                     searching -> Text(
                         "Buscando en Cinemeta y Nuvio…",
@@ -189,7 +182,7 @@ fun SearchScreen(onOpenDetail: (Video) -> Unit) {
                         title = "Sin resultados para «$query»",
                         subtitle = "Prueba con otro término o género"
                     )
-                    else -> {
+                    else -> Column(Modifier.fillMaxSize()) {
                         Text(
                             "${results.size} resultados",
                             style = AppType.metadata,
@@ -197,7 +190,8 @@ fun SearchScreen(onOpenDetail: (Video) -> Unit) {
                             modifier = Modifier.padding(bottom = 18.dp)
                         )
                         LazyVerticalGrid(
-                            columns = GridCells.Fixed(5),
+                            modifier = Modifier.weight(1f),
+                            columns = GridCells.Fixed(if (keyboardOpen) 2 else 5),
                             contentPadding = PaddingValues(bottom = 56.dp),
                             horizontalArrangement = Arrangement.spacedBy(20.dp),
                             verticalArrangement = Arrangement.spacedBy(24.dp)
@@ -208,7 +202,7 @@ fun SearchScreen(onOpenDetail: (Video) -> Unit) {
                                     onClick = { onOpenDetail(video) },
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .height(210.dp)
+                                        .height(if (keyboardOpen) 150.dp else 210.dp)
                                 )
                             }
                         }
@@ -217,39 +211,21 @@ fun SearchScreen(onOpenDetail: (Video) -> Unit) {
             }
         }
 
-        // ---- Teclado en pantalla ----
-        //
-        // Se dibuja **encima** del contenido, anclado abajo: con 4 filas de
-        // teclas no cabe debajo del buscador sin dejar los resultados en una
-        // franja inútil. Así se sigue viendo la consulta y lo que va saliendo
-        // mientras se escribe; «LISTO» lo cierra y deja la lista completa.
+        // Panel lateral: ninguna tecla tapa el campo. Las flechas están
+        // capturadas por TvKeyboard y no pueden saltar a la barra superior.
         AnimatedVisibility(
             visible = keyboardOpen,
-            enter = slideInVertically { it } + fadeIn(),
-            exit = slideOutVertically { it } + fadeOut(),
-            modifier = Modifier.align(Alignment.BottomCenter)
+            enter = slideInHorizontally { it } + fadeIn(),
+            exit = slideOutHorizontally { it } + fadeOut(),
+            modifier = Modifier.align(Alignment.CenterEnd).padding(end = 48.dp)
         ) {
-            // Velo: separa el teclado de los pósters que quedan detrás.
-            Column(
-                Modifier
-                    .fillMaxWidth()
-                    .background(
-                        Brush.verticalGradient(
-                            0f to Background.copy(alpha = 0f),
-                            0.28f to Background.copy(alpha = 0.92f),
-                            1f to Background
-                        )
-                    )
-                    .padding(start = 48.dp, end = 48.dp, top = 40.dp, bottom = 24.dp)
-            ) {
+            Box(Modifier.width(keyboardWidth)) {
                 TvKeyboard(
+                    compact = true,
                     onKey = { key -> query = TvKeypad.apply(query, key) },
                     onDone = {
-                        // «LISTO» no lanza la búsqueda: los resultados ya se
-                        // están actualizando mientras se escribe. Solo cierra
-                        // el teclado y devuelve el foco al campo.
-                        keyboardOpen = false
                         keyboardJustClosed = true
+                        keyboardOpen = false
                         runCatching { fieldFocus.requestFocus() }
                     },
                     firstKeyFocus = firstKeyFocus

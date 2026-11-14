@@ -40,7 +40,8 @@ jobs:
       - name: Build APK release
         run: |
           set -o pipefail
-          ./gradlew --no-daemon :app:assembleRelease 2>&1 | tee build-release.log
+          python3 tools/check_android_tv.py
+          ./gradlew --no-daemon :app:testDebugUnitTest :app:lintDebug :app:assembleRelease 2>&1 | tee build-release.log
 
       - name: Mostrar errores si falla
         if: failure()

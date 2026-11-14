@@ -26,9 +26,12 @@ object CronetClient {
     @Volatile private var engine: CronetEngine? = null
     private val executor: Executor = Executors.newCachedThreadPool()
 
+    @Synchronized
     fun init(context: Context) {
         if (engine != null) return
-        engine = CronetEngine.Builder(context)
+        val storage = java.io.File(context.applicationContext.cacheDir, "cronet").apply { mkdirs() }
+        engine = CronetEngine.Builder(context.applicationContext)
+            .setStoragePath(storage.absolutePath)
             .enableHttp2(true)
             .enableBrotli(true)
             .enableHttpCache(CronetEngine.Builder.HTTP_CACHE_DISK, (10 * 1024 * 1024).toLong())
@@ -72,7 +75,7 @@ object CronetClient {
                         status = info.httpStatusCode
                         respHeaders = info.allHeaders
                         // guarda Set-Cookie → CookieManager (para cf_clearance)
-                        info.allHeaders["set-cookie"]?.forEach { CookieManager.getInstance().setCookie(url, it) }
+                        info.allHeaders["set-cookie"]?.forEach { CookieManager.getInstance().setCookie(info.url, it) }
                         request.read(buffer)
                     }
                     override fun onReadCompleted(request: UrlRequest, info: UrlResponseInfo, byteBuffer: ByteBuffer) {
@@ -136,15 +139,9 @@ object CronetClient {
         }.getOrNull()
     }
 
-    fun promoteClearanceCookies(sourceUrl: String) {
-        val mgr = CookieManager.getInstance()
-        val cookie = mgr.getCookie(sourceUrl) ?: return
-        if ("cf_clearance" in cookie) {
-            // propaga a dominios base relacionados
-            listOf("https://ww3.animeonline.ninja/", "https://image.tmdb.org/").forEach {
-                mgr.setCookie(it, cookie)
-            }
-            mgr.flush()
-        }
+    fun persistCookies() {
+        // Las cookies de clearance pertenecen a su dominio. Nunca se copian a
+        // otro proveedor ni a un CDN de imágenes aparentemente relacionado.
+        CookieManager.getInstance().flush()
     }
 }
