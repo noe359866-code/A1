@@ -1,0 +1,89 @@
+name: Release APK
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag para el release (ej: v1.2.0)"
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+
+jobs:
+  build-release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: JDK 17
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Preparar Gradle
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          cache-provider: basic
+
+      - name: Aceptar licencias Android
+        run: |
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          if [ -x "$SDKMANAGER" ]; then yes | "$SDKMANAGER" --licenses > /dev/null; fi
+
+      - name: Generar keystore de respaldo si no hay firma configurada
+        run: |
+          if [ -z "$OMNITV_STORE_FILE" ]; then
+            echo "Usando firma debug para el APK de Release (sideload)"
+            mkdir -p ~/.android
+            if [ ! -f ~/.android/debug.keystore ]; then
+              keytool -genkey -v -keystore ~/.android/debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=OmniTV, OU=Dev, O=OmniTV, L=NI, S=Managua, C=NI" 2>&1 | tail -n 5
+            fi
+            ls -lh ~/.android/debug.keystore
+          fi
+
+      - name: Build APK release
+        run: |
+          set -o pipefail
+          ./gradlew --no-daemon :app:assembleRelease 2>&1 | tee build-release.log
+
+      - name: Renombrar APK
+        run: |
+          APK=$(ls app/build/outputs/apk/release/*.apk | head -n1)
+          VERSION=$(grep 'versionName' app/build.gradle.kts | sed -E 's/.*"([^"]+)".*/\1/')
+          TAG="${{ github.ref_name }}"
+          if [ -z "$TAG" ] || [ "$TAG" = "" ]; then TAG="v${VERSION}"; fi
+          if [ -n "${{ inputs.tag }}" ]; then TAG="${{ inputs.tag }}"; fi
+          OUT="OmniTV-${TAG}.apk"
+          cp "$APK" "$OUT"
+          ls -lh "$OUT" "$APK"
+          echo "APK_OUT=$OUT" >> $GITHUB_ENV
+          echo "APK_TAG=$TAG" >> $GITHUB_ENV
+
+      - name: Crear Release en GitHub
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.APK_TAG }}
+          name: OmniTV ${{ env.APK_TAG }}
+          generate_release_notes: true
+          files: ${{ env.APK_OUT }}
+          body: |
+            ### OmniTV ${{ env.APK_TAG }} — Android TV
+
+            **Instalación (sideload):**
+            1. Descarga `OmniTV-${{ env.APK_TAG }}.apk`
+            2. Envía a la TV con `adb install` o gestor de archivos (X-plore, Send Files to TV)
+            3. En la TV: Ajustes → Seguridad → permitir orígenes desconocidos
+
+            **Novedades:**
+            - Reproductor cinemático premium (scrims, timeline 3m, EPG LIVE, auto-next 10s)
+            - Fix 403 imágenes/streams (Cronet JA3 + WebView clearance)
+            - Plugins Streamflix-compat + Nuvio All-in-One + Stremio
+
+            _APK firmado con keystore debug para sideload. Para Play Store se requiere firma de producción._

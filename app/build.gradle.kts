@@ -13,12 +13,42 @@ android {
         // Android TV: API 22+ (Media3 y Compose soportan 21, pero casi ningún televisor es 21).
         minSdk = 22
         targetSdk = 34
-        versionCode = 2
-        versionName = "1.1.0"
+        versionCode = 3
+        versionName = "1.2.0"
+    }
+
+    signingConfigs {
+        getByName("debug")
+        create("release") {
+            // Release firmado con keystore de debug para distribución por GitHub Releases
+            // (sideload en TV). Para Play Store, definir OMNITV_STORE_* en secrets.
+            val storeFileEnv = System.getenv("OMNITV_STORE_FILE")
+            if (storeFileEnv != null) {
+                storeFile = file(storeFileEnv)
+                storePassword = System.getenv("OMNITV_STORE_PASSWORD")
+                keyAlias = System.getenv("OMNITV_KEY_ALIAS")
+                keyPassword = System.getenv("OMNITV_KEY_PASSWORD")
+            } else {
+                // Fallback: reutiliza debug keystore (generado automáticamente por AGP)
+                storeFile = file(System.getProperty("user.home") + "/.android/debug.keystore")
+                // Si no existe aún en CI/local limpio, AGP lo crea al compilar debug;
+                // usamos el del proyecto como respaldo
+                if (!storeFile!!.exists()) {
+                    // keystore de respaldo incluido en el repo sería ideal, pero
+                    // referenciamos el debug por defecto; Gradle lo generará
+                    storeFile = file("${projectDir}/../.tmp-debug.keystore")
+                }
+                storePassword = "android"
+                keyAlias = "androiddebugkey"
+                keyPassword = "android"
+            }
+        }
     }
 
     buildTypes {
         release {
+            // Sin keystore de producción configurado, firma con debug para poder publicar APK en Releases
+            signingConfig = signingConfigs.getByName(if (System.getenv("OMNITV_STORE_FILE") != null) "release" else "debug")
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(
