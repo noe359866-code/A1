@@ -63,7 +63,9 @@ La revisión encontró diferencias importantes entre esa intención y la impleme
 - `python3 tools/check_android_tv.py`: **correcto** localmente.
 - `python3 -m py_compile tools/check_android_tv.py tools/omni-stream-bridge/bridge.py`: correcto.
 - `git diff --check`: correcto.
-- Primera ejecución de CI de las correcciones: **98 tests, 0 fallos; assembleDebug correcto**. Lint se añadió en esta revisión y está pendiente de cerrar sus hallazgos; el informe se actualizará con el resultado final.
+- CI final del código corregido (`03719b4`): **[ejecución 43554360259](https://github.com/noe359866-code/A1/actions/runs/43554360259), correcta**. Contrato TV, **98 tests / 0 fallos**, `assembleDebug` y `lintDebug` pasan. Los errores de lint detectados durante la revisión (API 24 y opt-in de Media3) se corrigieron; no se creó un baseline para ocultarlos.
+- Puente Python: prueba local de `/health`, `/stream/movie/tt1375666.json` y `/stream/series/tt0944947:1:2` contra un servidor temporal en loopback; las tres respuestas fueron correctas. Sigue siendo un puente de ejemplo, no un resolver de producción.
+- CI conserva avisos de mantenimiento (por ejemplo, Gradle 8.9 antiguo); no son errores de compilación.
 - El entorno local no tiene Java ni Android SDK, por eso la compilación y los tests Android se ejecutan en GitHub Actions, no se simulan localmente.
 - No se ha probado reproducción con servicios externos ni se garantiza disponibilidad de cinejoy/sweetfox/Nuvio/addons de terceros.
 
