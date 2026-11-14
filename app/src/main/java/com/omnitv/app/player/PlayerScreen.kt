@@ -53,7 +53,13 @@ import com.omnitv.app.data.Video
 import com.omnitv.app.ui.components.LoadingSpinner
 import com.omnitv.app.ui.components.MetaLine
 import com.omnitv.app.ui.components.PillButton
-import com.omnitv.app.ui.theme.*
+import com.omnitv.app.ui.theme.Accent
+import com.omnitv.app.ui.theme.AppRadius
+import com.omnitv.app.ui.theme.AppSpacing
+import com.omnitv.app.ui.theme.AppType
+import com.omnitv.app.ui.theme.LiveAccent
+import com.omnitv.app.ui.theme.OnLight
+import com.omnitv.app.ui.theme.TextSecondary
 import kotlinx.coroutines.delay
 import java.text.SimpleDateFormat
 import java.util.Date

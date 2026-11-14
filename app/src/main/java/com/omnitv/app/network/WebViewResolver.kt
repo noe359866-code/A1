@@ -37,9 +37,9 @@ class WebViewResolver(private val context: Context) {
         val start = System.currentTimeMillis()
         webView.webViewClient = object : WebViewClient() {
             @Suppress("OVERRIDE_DEPRECATION")
-            override fun shouldOverrideUrlRequest(view: WebView?, request: WebResourceRequest?): Boolean = false
+            override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean = false
             @Suppress("OVERRIDE_DEPRECATION")
-            override fun shouldOverrideUrlRequest(view: WebView?, url: String?): Boolean = false
+            override fun shouldOverrideUrlLoading(view: WebView?, url: String?): Boolean = false
 
             override fun onPageFinished(view: WebView, urlFinished: String) {
                 view.evaluateJavascript("(function(){return document.documentElement.outerHTML})()") { htmlRaw ->
