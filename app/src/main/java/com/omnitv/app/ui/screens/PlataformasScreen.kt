@@ -224,6 +224,13 @@ fun PlatformCatalogScreen(
         ) {
             Spacer(Modifier.height(12.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
+                CircleIconButton(
+                    iconRes = R.drawable.ic_back,
+                    contentDescription = "Volver",
+                    size = 48.dp,
+                    onClick = onBack
+                )
+                Spacer(Modifier.width(16.dp))
                 AsyncImage(
                     model = provider.logoUrl,
                     contentDescription = provider.name,
@@ -295,13 +302,5 @@ fun PlatformCatalogScreen(
             }
         }
 
-        CircleIconButton(
-            iconRes = R.drawable.ic_back,
-            contentDescription = "Volver",
-            onClick = onBack,
-            modifier = Modifier
-                .align(Alignment.TopStart)
-                .padding(48.dp)
-        )
     }
 }

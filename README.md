@@ -19,9 +19,11 @@
 
 Omni TV es una aplicación **exclusiva para Android TV / Google TV** con estándares de producción: sin contenido de demostración, sin datos falsos y sin atajos. Todo el catálogo proviene de fuentes reales (Cinemeta, Nuvio, cinejoy, sweetfox) y los enlaces de reproducción se resuelven exclusivamente a través de addons configurados por el usuario.
 
-**Principios:**
+> **Estado revisado:** consulta la [auditoría Android TV](docs/ANDROID_TV_REVIEW.md) para ver correcciones, validación y límites pendientes. El catálogo local actual todavía contiene muestras heredadas; no debe confundirse con un catálogo de producción.
 
-- **Cero demo:** ningún vídeo, imagen o texto de prueba en la app instalada.
+**Principios de diseño:**
+
+- **Objetivo sin demo:** el flujo remoto no sustituye títulos por vídeos de prueba; las muestras locales heredadas siguen pendientes de retirar.
 - **Diseño tvOS:** fondo #0B0B0F, acento #0A84FF, tipografía de 10 pies, foco D-pad de 3dp.
 - **Privacidad local:** addons y claves nunca salen del televisor; backups excluidos por sistema.
 - **Red honesta:** HTTPS siempre; HTTP solo en LAN; DoH opcional con validación de certificado.
@@ -36,9 +38,9 @@ Omni TV es una aplicación **exclusiva para Android TV / Google TV** con estánd
 | **Diseño Apple TV** | Superficies #16161C, tarjetas con escala 1.08 y borde blanco, botones píldora, velos degradados |
 | **Navegación D-pad** | Pestañas tvOS, `focusRestorer`, foco inicial inteligente en cada pantalla |
 | **Perfiles Netflix** | Selector con avatares ilustrados, modo infantil, Mi Lista y Continuar viendo por perfil |
-| **Reproductor Xuper TV** | EPG Ahora/A continuación, multi-servidor, ABR HLS, audio/subs/calidad, zoom, ±10s, sleep timer |
+| **Reproductor Xuper TV** | Información del título/siguiente, multi-servidor, ABR HLS, audio/subs/calidad, zoom, ±10s, temporizador de pausa |
 | **Catálogo real** | Cinemeta + Nuvio + addons del usuario + cinejoy (plataformas) + sweetfox (estudios) |
-| **Búsqueda con mando** | Teclado en pantalla propio (37 teclas), sin acentos, búsqueda insensible a mayúsculas |
+| **Búsqueda con mando** | Teclado propio lateral (37 teclas), también para nombres de perfil; búsqueda sin distinguir acentos/mayúsculas |
 | **Vinculación segura** | Servidor :8080 + QR + código de 6 caracteres, rate-limit, cifrado Keystore AES-GCM |
 
 ---
@@ -73,14 +75,14 @@ Omni TV es una aplicación **exclusiva para Android TV / Google TV** con estánd
 
 Basado en Media3 ExoPlayer con investigación de Xuper TV:
 
-- **EPG:** Franja AHORA / A CONTINUACIÓN con programa siguiente
+- **Información:** título actual y siguiente episodio/relacionado; no es una guía EPG con horarios
 - **Multi-servidor:** Conmutación automática conservando posición
 - **Adaptativo:** HLS ABR + selector manual (Auto / 1080p / 720p...)
 - **Pistas:** Audio, subtítulos, calidad vía `DefaultTrackSelector`
 - **Aspecto:** Ajustar / Llenar / Zoom / 16:9 / 4:3 / 21:9
 - **Transporte:** ⏪10s / 10s⏩, barra con buffer, D-pad directo
 - **Autoplay / Auto-next:** Cuenta atrás 10s con miniatura, botón Siguiente
-- **Extras:** Velocidad (0.75×–2×), sleep timer (15/30/60m), calidad preferida
+- **Extras:** velocidad (0.75×–2×), temporizador de pausa (15/30/60m), calidad preferida
 
 ---
 
@@ -88,7 +90,7 @@ Basado en Media3 ExoPlayer con investigación de Xuper TV:
 
 - Selector obligatorio al iniciar
 - Estado aislado por perfil: progreso (95% = visto, <2% = descartado) y Mi Lista
-- Infantil: filtra solo TP/7+ automáticamente (sin contenido externo en modo kids hasta que el catálogo traiga clasificación)
+- Infantil: filtra el catálogo local TP/7+ y bloquea secciones remotas; **no hay PIN**, se puede cambiar de perfil
 - CRUD completo con validación, persistido en `SharedPreferences` JSON
 - 8 avatares vectoriales originales · cambio rápido desde barra superior
 
@@ -156,9 +158,9 @@ Problema: el IME de Android TV no se abre de forma fiable desde Compose.
 
 Solución: teclado propio superpuesto:
 
-- 37 teclas (0-9, QWERTY+Ñ, Espacio/Borrar/Listo), 54dp mínimo táctil
-- Apertura automática al enfocar Buscar, cierre con Listo/Atrás
-- Superpuesto (no empuja contenido), animación desde abajo
+- 37 teclas (0-9, QWERTY+Ñ, Espacio/Borrar/Listo), objetivos pensados para mando
+- Panel lateral: no tapa la consulta ni el nombre del perfil
+- Foco contenido en las teclas; cierre con Listo/Atrás
 - Búsqueda normalizada: "accion" → "Acción" (SearchText sin acentos)
 
 ---
@@ -209,7 +211,7 @@ A1/
 ./gradlew lint                  # Lint leanback
 ```
 
-CI (`.github/workflows/ci.yml`): tests + assembleDebug en cada push/PR.
+CI (`.github/workflows/ci.yml`): contrato TV + tests + assembleDebug + lint en cada push/PR. Ver también `docs/ANDROID_TV_REVIEW.md`.
 
 > **Emulador:** AVD Android TV (1080p), API 34 recomendado. App solo en launcher TV (`LEANBACK_LAUNCHER`).
 

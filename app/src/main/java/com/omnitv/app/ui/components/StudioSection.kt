@@ -32,6 +32,7 @@ import coil.compose.AsyncImage
 import com.omnitv.app.data.Studio
 import com.omnitv.app.data.Studios
 import com.omnitv.app.ui.theme.AppRadius
+import com.omnitv.app.ui.theme.AppSpacing
 import com.omnitv.app.ui.theme.AppType
 import com.omnitv.app.ui.theme.GlassFill
 import com.omnitv.app.ui.theme.TextPrimary
@@ -46,7 +47,7 @@ import com.omnitv.app.ui.theme.TextSecondary
 fun StudioStripSection(
     onOpenStudio: (Studio) -> Unit
 ) {
-    Column(Modifier.fillMaxWidth()) {
+    Column(Modifier.fillMaxWidth().padding(horizontal = AppSpacing.screenMargin)) {
         Text("Por estudio", style = AppType.sectionTitle, color = TextPrimary)
         Spacer(Modifier.height(6.dp))
         Text(

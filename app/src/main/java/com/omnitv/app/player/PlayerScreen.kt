@@ -16,7 +16,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
@@ -46,7 +45,6 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
@@ -764,14 +762,15 @@ fun PlayerScreen(
                             }
                         }
                         Spacer(Modifier.height(8.dp))
-                        // Franja EPG estilo Xuper TV: qué se emite ahora y después
+                        // Franja informativa del vídeo y del siguiente título/episodio.
+                        // No es una guía EPG: no hay datos XMLTV ni horarios de emisión.
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            EpgChip("AHORA", LiveAccent)
+                            EpgChip("REPRODUCIENDO", LiveAccent)
                             Spacer(Modifier.width(8.dp))
                             Text(video.title, style = fontSize13(), color = TextPrimary)
                             nextVideo?.let {
                                 Spacer(Modifier.width(16.dp))
-                                EpgChip("A CONTINUACIÓN", TextMuted)
+                                EpgChip(if ('~' in video.id) "SIGUIENTE" else "RELACIONADO", TextMuted)
                                 Spacer(Modifier.width(8.dp))
                                 Text(it.title, style = fontSize13(), color = TextSecondary)
                             }

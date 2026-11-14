@@ -71,6 +71,24 @@ jobs:
           set -o pipefail
           ./gradlew --no-daemon :app:lintDebug 2>&1 | tee build-lint.log
 
+      - name: Anotar los errores de lint
+        if: always()
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import xml.etree.ElementTree as ET
+          path = Path('app/build/reports/lint-results-debug.xml')
+          if path.exists():
+              for issue in ET.parse(path).getroot().findall('issue'):
+                  if issue.get('severity') not in ('Error', 'Fatal'):
+                      continue
+                  loc = issue.find('location')
+                  file = loc.get('file', '') if loc is not None else ''
+                  line = loc.get('line', '1') if loc is not None else '1'
+                  message = issue.get('message', '').replace('\n', ' ')
+                  print(f'::error file={file},line={line}::[{issue.get("id")}] {message}')
+          PY
+
       # Los avisos del compilador (w:) quedan como anotación del job.
       - name: Avisos del compilador
         if: always()
@@ -150,4 +168,5 @@ jobs:
             app/build/reports/tests/
             app/build/reports/lint-results-debug.html
             app/build/reports/lint-results-debug.xml
+            build-lint.log
           if-no-files-found: ignore

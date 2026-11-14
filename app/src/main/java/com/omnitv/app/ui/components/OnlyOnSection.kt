@@ -42,6 +42,7 @@ import com.omnitv.app.data.StreamingProvider
 import com.omnitv.app.data.Video
 import com.omnitv.app.ui.theme.Accent
 import com.omnitv.app.ui.theme.AppRadius
+import com.omnitv.app.ui.theme.AppSpacing
 import com.omnitv.app.ui.theme.AppType
 import com.omnitv.app.ui.theme.GlassFill
 import com.omnitv.app.ui.theme.TextPrimary
@@ -72,7 +73,7 @@ fun OnlyOnSection(
         loading = false
     }
 
-    Column(Modifier.fillMaxWidth()) {
+    Column(Modifier.fillMaxWidth().padding(horizontal = AppSpacing.screenMargin)) {
         // Título dinámico
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("Solo en ", style = AppType.sectionTitle, color = TextPrimary)

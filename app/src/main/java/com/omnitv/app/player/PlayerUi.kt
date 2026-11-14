@@ -263,7 +263,7 @@ private fun OptionRow(option: PlayerOption, modifier: Modifier = Modifier) {
 }
 
 /* -------------------------------------------------------------------------- */
-/*  Franja EPG «AHORA / A CONTINUACIÓN»                                       */
+/*  Franja informativa (no EPG XMLTV)                                        */
 /* -------------------------------------------------------------------------- */
 
 @Composable
