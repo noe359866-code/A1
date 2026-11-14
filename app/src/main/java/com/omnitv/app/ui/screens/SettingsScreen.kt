@@ -3,7 +3,16 @@ package com.omnitv.app.ui.screens
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
@@ -21,152 +30,351 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.material.Text
 import com.omnitv.app.R
-import com.omnitv.app.data.NuvioPluginManager
 import com.omnitv.app.data.PairingServer
 import com.omnitv.app.data.ProfileStore
 import com.omnitv.app.data.SettingsStore
-import com.omnitv.app.ui.components.*
-import com.omnitv.app.ui.theme.*
+import com.omnitv.app.ui.components.AvatarView
+import com.omnitv.app.ui.components.KidsChip
+import com.omnitv.app.ui.components.PillButton
+import com.omnitv.app.ui.components.RequestTvFocus
+import com.omnitv.app.ui.components.SettingRow
+import com.omnitv.app.ui.components.TvToggle
+import com.omnitv.app.ui.theme.Accent
+import com.omnitv.app.ui.theme.AppRadius
+import com.omnitv.app.ui.theme.AppType
+import com.omnitv.app.ui.theme.Background
+import com.omnitv.app.ui.theme.SurfaceCard
+import com.omnitv.app.ui.theme.TextPrimary
+import com.omnitv.app.ui.theme.TextSecondary
+import androidx.compose.material.Text
 
+/**
+ * Ajustes de Omni TV: tarjetas con iconos, interruptores tipo iOS y
+ * valores ciclables (calidad preferida, velocidad) persistidos en
+ * [SettingsStore].
+ */
 @Composable
 fun SettingsScreen(onSwitchProfile: () -> Unit) {
     val profile = ProfileStore.currentProfile
+
+    // Foco inicial en «Calidad preferida», la primera fila pulsable del
+    // listado: el mando entra en el contenido y no tiene que recorrer la
+    // tarjeta de perfil para empezar a ajustar cosas.
     val firstFocus = remember { FocusRequester() }
     RequestTvFocus(firstFocus)
-    Column(Modifier.fillMaxSize().background(Background).verticalScroll(rememberScrollState()).padding(horizontal = AppSpacing.screenMargin)) {
-        Spacer(Modifier.height(16.dp))
-        Text("AJUSTES", style = AppType.overline, color = TextMuted)
-        Spacer(Modifier.height(6.dp))
+
+    Column(
+        Modifier
+            .fillMaxSize()
+            .background(Background)
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 48.dp)
+    ) {
+        Spacer(Modifier.height(12.dp))
         Text("Ajustes", style = AppType.screenTitle, color = TextPrimary)
-        Spacer(Modifier.height(4.dp))
-        Text("Gestiona tu perfil, reproducción y conexiones", style = AppType.metadata, color = TextMuted)
         Spacer(Modifier.height(28.dp))
 
-        SettingsCard(R.drawable.ic_settings, "Perfil") {
-            Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+        /* ---------------- Perfil ---------------- */
+        SettingsCard(iconRes = R.drawable.ic_settings, title = "Perfil") {
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 22.dp, vertical = 18.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 if (profile != null) {
-                    AvatarView(profile.avatarIndex, 52.dp)
-                    Spacer(Modifier.width(16.dp))
-                    Column(Modifier.weight(1f)) {
-                        Text(profile.name, style = AppType.bodyStrong, color = TextPrimary)
-                        Spacer(Modifier.height(2.dp))
-                        if (profile.isKids) KidsChip() else Text("Perfil estándar · Desliza para cambiar", style = AppType.caption, color = TextMuted)
+                    AvatarView(avatarIndex = profile.avatarIndex, size = 56.dp)
+                    Spacer(Modifier.width(18.dp))
+                    Column {
+                        Text(profile.name, style = AppType.body, color = TextPrimary)
+                        Spacer(Modifier.height(6.dp))
+                        if (profile.isKids) KidsChip() else Text(
+                            "Perfil estándar",
+                            style = AppType.metadata,
+                            color = TextSecondary
+                        )
                     }
                 }
-                PillButton("Cambiar", primary = false, onClick = onSwitchProfile)
+                Spacer(Modifier.weight(1f))
+                PillButton(
+                    text = "Cambiar de perfil",
+                    primary = false,
+                    onClick = onSwitchProfile
+                )
             }
         }
-        Spacer(Modifier.height(16.dp))
 
-        SettingsCard(R.drawable.ic_link, "Vinculación") {
-            Row(Modifier.fillMaxWidth().padding(20.dp), verticalAlignment = Alignment.Top) {
+        Spacer(Modifier.height(20.dp))
+
+        /* ---------------- Vincular (QR) ---------------- */
+        SettingsCard(iconRes = R.drawable.ic_link, title = "Vincular cuenta · Addons · APIs") {
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 22.dp, vertical = 18.dp),
+                verticalAlignment = Alignment.Top
+            ) {
+                // QR con la URL debajo (como el ejemplo del panel)
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    QrCode(PairingServer.pairingUrl(), Modifier.size(168.dp).clip(AppRadius.md).border(1.dp, GlassBorder, AppRadius.md))
-                    Spacer(Modifier.height(10.dp))
-                    Text(PairingServer.panelUrl(), style = AppType.caption, color = Accent, fontFamily = FontFamily.Monospace)
-                    Spacer(Modifier.height(4.dp))
-                    Box(Modifier.clip(AppRadius.pill).background(Accent.copy(alpha = 0.14f)).padding(horizontal = 10.dp, vertical = 4.dp)) {
-                        Text("CÓDIGO  ${SettingsStore.pairingCode}", style = AppType.chip, color = Accent)
+                    QrCode(
+                        data = PairingServer.pairingUrl(),
+                        modifier = Modifier
+                            .size(176.dp)
+                            .clip(AppRadius.md)
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    Text(
+                        PairingServer.panelUrl(),
+                        style = AppType.metadata,
+                        color = Accent,
+                        fontFamily = FontFamily.Monospace
+                    )
+                }
+
+                Spacer(Modifier.width(30.dp))
+
+                // Información e instrucciones
+                Column(Modifier.weight(1f)) {
+                    Text("Escanea el QR con tu móvil", style = AppType.sectionTitle, color = TextPrimary)
+                    Spacer(Modifier.height(8.dp))
+                    Text(
+                        "El QR abre el panel web ya desbloqueado; si escribes la dirección a mano, " +
+                            "te pedirá el código de abajo. Solo entonces podrás enlazar tu cuenta, " +
+                            "añadir addons (manifest.json de Stremio) y registrar APIs.",
+                        style = AppType.metadata,
+                        color = TextSecondary
+                    )
+                    Spacer(Modifier.height(14.dp))
+                    Text(
+                        "Código de emparejamiento: ${SettingsStore.pairingCode}",
+                        style = AppType.metadata,
+                        color = TextPrimary,
+                        fontFamily = FontFamily.Monospace
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    StatusLine("Servidor", if (PairingServer.running.value) "Activo en ${PairingServer.localIpv4()}:8080" else "Iniciando…")
+                    StatusLine("Cuenta enlazada", SettingsStore.linkedAccount.ifEmpty { "Sin enlazar" })
+                    StatusLine("Addons añadidos", "${SettingsStore.customAddons.size}")
+                    StatusLine("Addons de streams", "${SettingsStore.streamAddons.size}")
+                    StatusLine("APIs añadidas", "${SettingsStore.apiKeys.size}")
+                    StatusLine(
+                        "Claves de API",
+                        if (SettingsStore.apiKeys.isEmpty()) {
+                            "Sin claves"
+                        } else if (SettingsStore.secretsEncrypted) {
+                            "Cifradas en el televisor"
+                        } else {
+                            "Sin cifrar (Android 5.1 no admite el cifrado)"
+                        }
+                    )
+                    if (PairingServer.lastAction.value.isNotEmpty()) {
+                        Spacer(Modifier.height(10.dp))
+                        Text(PairingServer.lastAction.value, style = AppType.metadata, color = Accent)
                     }
                 }
-                Spacer(Modifier.width(24.dp))
-                Column(Modifier.weight(1f)) {
-                    Text("Conecta tu móvil", style = AppType.sectionTitle, color = TextPrimary)
-                    Spacer(Modifier.height(6.dp))
-                    Text("Escanea el QR para abrir el panel web. Desde allí podrás añadir catálogos, fuentes de reproducción y claves API sin tocar el mando.", style = AppType.caption, color = TextSecondary)
-                    Spacer(Modifier.height(16.dp))
-                    StatusGrid()
-                    if (PairingServer.lastAction.value.isNotEmpty()) { Spacer(Modifier.height(10.dp)); Text(PairingServer.lastAction.value, style = AppType.caption, color = Accent) }
+            }
+        }
+
+        Spacer(Modifier.height(20.dp))
+
+        /* ---------------- Reproducción ---------------- */
+        SettingsCard(iconRes = R.drawable.ic_play, title = "Reproducción") {
+            SettingRow(
+                title = "Autoplay",
+                subtitle = "Los vídeos empiezan a reproducirse solos al abrirlos",
+                trailing = { TvToggle(SettingsStore.autoplay, onCheckedChange = { SettingsStore.setAutoplayEnabled(it) }) }
+            )
+            SettingRow(
+                title = "Siguiente automático",
+                subtitle = "Al terminar, reproduce el siguiente título con cuenta atrás de 10 s",
+                trailing = { TvToggle(SettingsStore.autoNext, onCheckedChange = { SettingsStore.setAutoNextEnabled(it) }) }
+            )
+            SettingRow(
+                title = "Iniciar silenciado",
+                subtitle = "Los vídeos empiezan sin audio",
+                trailing = { TvToggle(SettingsStore.mutedStart, onCheckedChange = { SettingsStore.setMutedStartEnabled(it) }) }
+            )
+        }
+
+        Spacer(Modifier.height(20.dp))
+
+        /* ---------------- Calidad y velocidad ---------------- */
+        SettingsCard(iconRes = R.drawable.ic_quality, title = "Calidad y velocidad") {
+            SettingRow(
+                title = "Calidad preferida",
+                subtitle = "Se aplica automáticamente al iniciar cada vídeo",
+                trailing = { ValueText(SettingsStore.preferredQuality) },
+                modifier = Modifier.focusRequester(firstFocus),
+                onClick = {
+                    val presets = SettingsStore.QUALITY_PRESETS
+                    val next = presets[(presets.indexOf(SettingsStore.preferredQuality) + 1) % presets.size]
+                    SettingsStore.savePreferredQuality(next)
                 }
-            }
+            )
+            SettingRow(
+                title = "Velocidad de reproducción",
+                subtitle = "Se recuerda entre vídeos · pulsa para cambiar",
+                trailing = { ValueText(SettingsStore.speedLabel()) },
+                onClick = {
+                    val presets = SettingsStore.SPEED_PRESETS
+                    val next = presets[(presets.indexOf(SettingsStore.playbackSpeed) + 1) % presets.size]
+                    SettingsStore.savePlaybackSpeed(next)
+                }
+            )
+            SettingRow(
+                title = "Subtítulos por defecto",
+                subtitle = "Activa los subtítulos automáticamente si hay pistas",
+                trailing = { TvToggle(SettingsStore.subtitlesDefault, onCheckedChange = { SettingsStore.setSubtitlesByDefault(it) }) }
+            )
         }
-        Spacer(Modifier.height(16.dp))
 
-        SettingsCard(R.drawable.ic_play, "Reproducción") {
-            SettingRow("Reproducción automática", "Inicia el vídeo al abrir la ficha", trailing = { TvToggle(SettingsStore.autoplay) { SettingsStore.setAutoplayEnabled(it) } })
-            DividerThin()
-            SettingRow("Siguiente automático", "Cuenta atrás de 10 s al terminar", trailing = { TvToggle(SettingsStore.autoNext) { SettingsStore.setAutoNextEnabled(it) } })
-            DividerThin()
-            SettingRow("Iniciar silenciado", "Comienza sin audio", trailing = { TvToggle(SettingsStore.mutedStart) { SettingsStore.setMutedStartEnabled(it) } })
-        }
-        Spacer(Modifier.height(16.dp))
+        Spacer(Modifier.height(20.dp))
 
-        SettingsCard(R.drawable.ic_quality, "Calidad y audio") {
-            SettingRow("Calidad preferida", "Se aplica al iniciar cada vídeo", trailing = { ValuePill(SettingsStore.preferredQuality) }, modifier = Modifier.focusRequester(firstFocus), onClick = { val p = SettingsStore.QUALITY_PRESETS; SettingsStore.savePreferredQuality(p[(p.indexOf(SettingsStore.preferredQuality) + 1) % p.size]) })
-            DividerThin()
-            SettingRow("Velocidad", "Recordada entre vídeos", trailing = { ValuePill(SettingsStore.speedLabel()) }, onClick = { val p = SettingsStore.SPEED_PRESETS; SettingsStore.savePlaybackSpeed(p[(p.indexOf(SettingsStore.playbackSpeed) + 1) % p.size]) })
-            DividerThin()
-            SettingRow("Subtítulos por defecto", "Actívalos si hay pistas disponibles", trailing = { TvToggle(SettingsStore.subtitlesDefault) { SettingsStore.setSubtitlesByDefault(it) } })
+        /* ---------------- Red ---------------- */
+        SettingsCard(iconRes = R.drawable.ic_server, title = "Red") {
+            SettingRow(
+                title = "DNS de Cloudflare",
+                subtitle = "Si el DNS de tu router falla o filtra, los nombres se resuelven " +
+                    "por DNS sobre HTTPS (cloudflare-dns.com, 1.1.1.1). El certificado se " +
+                    "sigue comprobando contra el nombre original; solo se usa https://",
+                trailing = { TvToggle(SettingsStore.cloudflareDns, onCheckedChange = { SettingsStore.saveCloudflareDns(it) }) }
+            )
         }
-        Spacer(Modifier.height(16.dp))
 
-        SettingsCard(R.drawable.ic_server, "Fuentes y plugins") {
-            SettingRow("Catálogos (Stremio)", "${SettingsStore.customAddons.size} instalados — Cinemeta/Nuvio + addons", trailing = { ValuePill("${SettingsStore.customAddons.size}") })
-            DividerThin()
-            SettingRow("Streams (Stremio)", "${SettingsStore.streamAddons.size} fuentes — Torrentio/Comet/AIOStreams", trailing = { ValuePill("${SettingsStore.streamAddons.size}") })
-            DividerThin()
-            SettingRow("Plugins Nuvio", "${SettingsStore.nuvioPlugins.size} repos · ${com.omnitv.app.data.NuvioPluginManager.totalScrapers} scrapers (All-in-One)", trailing = { ValuePill("${SettingsStore.nuvioPlugins.size}") })
-            DividerThin()
-            Box(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp)) {
-                Text("Añade repos Nuvio (https://raw.githubusercontent.com/…/manifest.json con scrapers[]) desde el QR. Cada repo trae 20-68 scrapers (HiAnime, VidSrc, HDHub4u, VegaMovies, Torrentio). Con bridge local http://192.168.x:8787/scrape/{id} resuelven HTTP directo sin debrid.", style = AppType.caption, color = TextMuted)
-            }
-        }
-        Spacer(Modifier.height(16.dp))
+        Spacer(Modifier.height(20.dp))
 
-        SettingsCard(R.drawable.ic_server, "Red y sistema") {
-            SettingRow("DNS de Cloudflare", "Resuelve nombres por HTTPS cuando el router falla", trailing = { TvToggle(SettingsStore.cloudflareDns) { SettingsStore.saveCloudflareDns(it) } })
-            DividerThin()
-            SettingRow("Motor", "Media3 ExoPlayer · MP4 · HLS · 4K · DASH (mpd)", trailing = { ValuePill("Media3") })
-            DividerThin()
-            SettingRow("Versión", "Omni TV para Android TV", trailing = { ValuePill("1.2.0-nuvio") })
+        /* ---------------- Sistema ---------------- */
+        SettingsCard(iconRes = R.drawable.ic_server, title = "Sistema") {
+            SettingRow(
+                title = "Idioma",
+                subtitle = "Idioma de la interfaz",
+                trailing = { ValueText("Español") }
+            )
+            SettingRow(
+                title = "Motor de reproducción",
+                subtitle = "Reproductor integrado con soporte MP4, HLS y 4K",
+                trailing = { ValueText("Media3 ExoPlayer") }
+            )
+            SettingRow(
+                title = "Acerca de",
+                subtitle = "Omni TV · diseñado para Android TV",
+                trailing = { ValueText("1.0.0") }
+            )
         }
-        Spacer(Modifier.height(48.dp))
+
+        Spacer(Modifier.height(56.dp))
     }
 }
 
-@Composable private fun SettingsCard(iconRes: Int, title: String, content: @Composable () -> Unit) {
-    Column(Modifier.fillMaxWidth().clip(AppRadius.lg).background(SurfaceCard).border(1.dp, Color.White.copy(alpha = 0.06f), AppRadius.lg)) {
-        Row(Modifier.padding(horizontal = 20.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.size(36.dp).clip(AppRadius.sm).background(Accent.copy(alpha = 0.15f)), contentAlignment = Alignment.Center) {
-                Image(painterResource(iconRes), null, Modifier.size(18.dp), colorFilter = androidx.compose.ui.graphics.ColorFilter.tint(Accent))
+/* -------------------------------------------------------------------------- */
+/*  Tarjeta de ajustes                                                        */
+/* -------------------------------------------------------------------------- */
+
+@Composable
+private fun SettingsCard(
+    iconRes: Int,
+    title: String,
+    content: @Composable () -> Unit
+) {
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .clip(AppRadius.lg)
+            .background(SurfaceCard)
+            .border(1.dp, Color.White.copy(alpha = 0.06f), AppRadius.lg)
+            .padding(vertical = 10.dp)
+    ) {
+        Row(
+            Modifier.padding(horizontal = 22.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                Modifier
+                    .size(42.dp)
+                    .clip(AppRadius.sm)
+                    .background(Accent.copy(alpha = 0.22f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Image(
+                    painter = painterResource(iconRes),
+                    contentDescription = null,
+                    modifier = Modifier.size(21.dp),
+                    colorFilter = androidx.compose.ui.graphics.ColorFilter.tint(Accent)
+                )
             }
-            Spacer(Modifier.width(12.dp))
-            Text(title.uppercase(), style = AppType.overline, color = TextPrimary)
-            Spacer(Modifier.weight(1f))
-            Box(Modifier.size(6.dp).clip(androidx.compose.foundation.shape.CircleShape).background(Accent.copy(alpha = 0.9f)))
+            Spacer(Modifier.width(14.dp))
+            Text(
+                title,
+                style = androidx.compose.ui.text.TextStyle(
+                    fontFamily = FontFamily.SansSerif,
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 22.sp
+                ),
+                color = TextPrimary
+            )
         }
-        Box(Modifier.fillMaxWidth().height(1.dp).background(Color.White.copy(alpha = 0.06f)))
         content()
     }
 }
-@Composable private fun DividerThin() { Box(Modifier.fillMaxWidth().padding(horizontal = 20.dp).height(1.dp).background(Color.White.copy(alpha = 0.06f))) }
-@Composable private fun ValuePill(v: String) { Row(verticalAlignment = Alignment.CenterVertically) { Box(Modifier.clip(AppRadius.pill).background(Color.White.copy(alpha = 0.10f)).padding(horizontal = 12.dp, vertical = 6.dp)) { Text(v, style = AppType.caption, color = TextPrimary) }; Spacer(Modifier.width(8.dp)); Text("›", style = AppType.sectionTitle, color = TextMuted) } }
-@Composable private fun StatusGrid() {
-    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        StatusLine("Servidor", if (PairingServer.running.value) "Activo · ${PairingServer.localIpv4()}:8080" else "Iniciando…")
-        Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-            StatusLine("Addons", "${SettingsStore.customAddons.size}")
-            StatusLine("Fuentes", "${SettingsStore.streamAddons.size}")
-            StatusLine("APIs", "${SettingsStore.apiKeys.size}")
-        }
-        StatusLine("Cuenta", SettingsStore.linkedAccount.ifEmpty { "Sin enlazar" })
-        StatusLine("Seguridad", if (SettingsStore.apiKeys.isEmpty()) "Sin claves" else if (SettingsStore.secretsEncrypted) "Cifradas en el televisor" else "Sin cifrar")
+
+@Composable
+private fun ValueText(value: String) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(value, style = AppType.metadata, color = Accent)
+        Spacer(Modifier.width(8.dp))
+        Text("›", style = AppType.sectionTitle, color = TextSecondary)
     }
 }
-@Composable private fun StatusLine(label: String, value: String) { Row { Text("$label  ", style = AppType.caption, color = TextMuted); Text(value, style = AppType.caption, color = TextPrimary) } }
 
-@Composable private fun QrCode(data: String, modifier: Modifier = Modifier) {
-    val bmp = remember(data) {
+@Composable
+private fun StatusLine(label: String, value: String) {
+    Row(Modifier.padding(bottom = 5.dp)) {
+        Text("$label: ", style = AppType.metadata, color = TextSecondary)
+        Text(value, style = AppType.metadata, color = TextPrimary)
+    }
+}
+
+/** QR generado con ZXing a partir del texto dado (URL de emparejamiento). */
+@Composable
+private fun QrCode(data: String, modifier: Modifier = Modifier) {
+    val bitmap = remember(data) {
         runCatching {
-            val hints = mapOf(com.google.zxing.EncodeHintType.MARGIN to 1, com.google.zxing.EncodeHintType.ERROR_CORRECTION to com.google.zxing.qrcode.decoder.ErrorCorrectionLevel.M)
-            val m = com.google.zxing.qrcode.QRCodeWriter().encode(data, com.google.zxing.BarcodeFormat.QR_CODE, 512, 512, hints)
-            val b = android.graphics.Bitmap.createBitmap(512, 512, android.graphics.Bitmap.Config.ARGB_8888)
-            for (x in 0 until 512) for (y in 0 until 512) b.setPixel(x, y, if (m.get(x, y)) android.graphics.Color.BLACK else android.graphics.Color.WHITE); b
+            val hints = mapOf(
+                com.google.zxing.EncodeHintType.MARGIN to 1,
+                com.google.zxing.EncodeHintType.ERROR_CORRECTION to
+                    com.google.zxing.qrcode.decoder.ErrorCorrectionLevel.M
+            )
+            val matrix = com.google.zxing.qrcode.QRCodeWriter().encode(
+                data,
+                com.google.zxing.BarcodeFormat.QR_CODE,
+                512,
+                512,
+                hints
+            )
+            val bmp = android.graphics.Bitmap.createBitmap(512, 512, android.graphics.Bitmap.Config.ARGB_8888)
+            for (x in 0 until 512) {
+                for (y in 0 until 512) {
+                    bmp.setPixel(x, y, if (matrix.get(x, y)) android.graphics.Color.BLACK else android.graphics.Color.WHITE)
+                }
+            }
+            bmp
         }.getOrNull()
     }
-    Box(modifier.background(Color.White), contentAlignment = Alignment.Center) {
-        if (bmp != null) Image(bmp.asImageBitmap(), "QR de vinculación", Modifier.fillMaxSize().padding(8.dp), contentScale = ContentScale.Fit) else Text("QR", style = AppType.sectionTitle, color = Color.Black)
+
+    Box(
+        modifier.background(Color.White),
+        contentAlignment = Alignment.Center
+    ) {
+        if (bitmap != null) {
+            Image(
+                bitmap = bitmap.asImageBitmap(),
+                contentDescription = "Código QR de vinculación",
+                contentScale = ContentScale.Fit,
+                modifier = Modifier.fillMaxSize().padding(8.dp)
+            )
+        } else {
+            Text("QR", style = AppType.sectionTitle, color = Color.Black)
+        }
     }
 }

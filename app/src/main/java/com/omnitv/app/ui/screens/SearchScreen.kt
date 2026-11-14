@@ -1,414 +1,290 @@
 package com.omnitv.app.ui.screens
 
+import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.Text
-import androidx.compose.runtime.*
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.unit.dp
-import coil.compose.AsyncImage
 import com.omnitv.app.R
 import com.omnitv.app.data.CatalogRepository
 import com.omnitv.app.data.ProfileStore
 import com.omnitv.app.data.RemoteCatalog
+import com.omnitv.app.data.TvKeypad
 import com.omnitv.app.data.Video
-import com.omnitv.app.ui.components.*
-import com.omnitv.app.ui.theme.*
-import kotlinx.coroutines.delay
+import com.omnitv.app.ui.components.PosterCard
+import com.omnitv.app.ui.components.RequestTvFocus
+import com.omnitv.app.ui.components.TvChip
+import com.omnitv.app.ui.components.TvKeyboard
+import com.omnitv.app.ui.components.TvTextField
+import com.omnitv.app.ui.theme.AppType
+import com.omnitv.app.ui.theme.Background
+import com.omnitv.app.ui.theme.GlassFill
+import com.omnitv.app.ui.theme.TextPrimary
+import com.omnitv.app.ui.theme.TextSecondary
 
+/**
+ * Buscador sobre todo el catálogo: resultados **locales + remotos**
+ * (Cinemeta y Nuvio).
+ *
+ * Al entrar, el foco va al campo y se abre el **teclado en pantalla** de la app
+ * (`TvKeyboard`): en Android TV el teclado del sistema no aparece de forma
+ * fiable con Compose, así que el buscador trae el suyo para que un mando sin
+ * teclados pueda escribir. Se maneja con las flechas y OK, y se cierra con
+ * «LISTO», que devuelve el foco al campo y deja ver la lista completa.
+ *
+ * La búsqueda no distingue acentos ni mayúsculas («accion» encuentra «Acción»),
+ * porque el teclado de la tele no tiene tildes.
+ */
 @Composable
 fun SearchScreen(onOpenDetail: (Video) -> Unit) {
     var query by rememberSaveable { mutableStateOf("") }
-    val keyboard = LocalSoftwareKeyboardController.current
     val kidsOnly = ProfileStore.currentProfile?.isKids == true
-    val fieldFocus = remember { FocusRequester() }
-    RequestTvFocus(fieldFocus)
+    val localResults = remember(query, kidsOnly) { CatalogRepository.search(query, kidsOnly = kidsOnly) }
 
-    // Debounce + búsqueda viva (local + remota)
-    val trimmed = query.trim()
+    // Búsqueda remota (catálogo real) con rebote
     var remoteResults by remember { mutableStateOf<List<Video>>(emptyList()) }
     var searching by remember { mutableStateOf(false) }
-    val localResults = remember(trimmed, kidsOnly) { CatalogRepository.search(trimmed, kidsOnly = kidsOnly) }
-
-    LaunchedEffect(trimmed, kidsOnly) {
-        if (trimmed.length >= 2 && !kidsOnly) {
-            delay(280) // debounce para no acribillar la red al teclear
+    LaunchedEffect(query) {
+        val q = query.trim()
+        if (q.length >= 2 && !kidsOnly) {
             searching = true
-            remoteResults = RemoteCatalog.search(trimmed)
+            remoteResults = RemoteCatalog.search(q)
             searching = false
         } else {
             remoteResults = emptyList()
-            searching = false
         }
     }
-    val results = remember(localResults, remoteResults) { (localResults + remoteResults).distinctBy { it.id } }
+    val results = (localResults + remoteResults).distinctBy { it.id }
+    val suggestions = listOf("Animación", "Ciencia ficción", "Motor", "Demo", "Fantasía")
 
-    // Tops al lado del teclado — del catálogo real (trending / populares)
-    val tops: List<Video> = remember(RemoteCatalog.gridVideos.size, RemoteCatalog.rows.size) {
-        val pool = RemoteCatalog.gridVideos.ifEmpty { RemoteCatalog.rows.flatMap { it.items } }
-        pool.distinctBy { it.id }.take(10)
+    // Al entrar en la pantalla el foco va al campo: en un mando, tener que
+    // atravesar la barra de pestañas para poder buscar es un peaje innecesario.
+    val fieldFocus = remember { FocusRequester() }
+    RequestTvFocus(fieldFocus)
+
+    // Teclado en pantalla: se abre al entrar en el campo y se cierra con
+    // «LISTO». Mientras está abierto ocupa el sitio de las sugerencias.
+    var keyboardOpen by rememberSaveable { mutableStateOf(false) }
+    var keyboardJustClosed by remember { mutableStateOf(false) }
+    val firstKeyFocus = remember { FocusRequester() }
+
+    // Cada vez que el teclado se abre, el foco entra en la primera tecla para
+    // que el mando escriba sin pasos intermedios. Depende de `keyboardOpen`: si
+    // fuera `Unit`, al reabrir el foco se quedaría donde estaba.
+    LaunchedEffect(keyboardOpen) {
+        if (keyboardOpen) {
+            withFrameNanos { }
+            runCatching { firstKeyFocus.requestFocus() }
+        }
     }
 
-    val suggestions = listOf("Acción", "Aventura", "Animación", "Ciencia ficción", "Comedia", "Drama", "Terror", "Familia")
+    // «Atrás» con el teclado abierto lo cierra en vez de salir de la pantalla.
+    BackHandler(enabled = keyboardOpen) {
+        keyboardOpen = false
+        keyboardJustClosed = true
+        runCatching { fieldFocus.requestFocus() }
+    }
 
-    Row(
-        Modifier
-            .fillMaxSize()
-            .background(Background)
-            .padding(horizontal = AppSpacing.screenMargin, vertical = 16.dp),
-        horizontalArrangement = Arrangement.spacedBy(24.dp)
-    ) {
-        // ── PANEL IZQUIERDO: teclado nativo + tops ───────────────────────
+    Box(Modifier.fillMaxSize().background(Background)) {
+        // ---- Contenido de la pantalla (campo, sugerencias o resultados) ----
         Column(
             Modifier
-                .width(420.dp)
-                .fillMaxHeight()
-                .clip(AppRadius.lg)
-                .background(Surface)
-                .border(1.dp, Color.White.copy(alpha = 0.06f), AppRadius.lg)
-                .padding(20.dp)
+                .fillMaxSize()
+                .padding(horizontal = 48.dp)
         ) {
-            Text("BUSCAR", style = AppType.overline, color = TextMuted)
-            Spacer(Modifier.height(6.dp))
+            Spacer(Modifier.height(12.dp))
             Text("Buscar", style = AppType.screenTitle, color = TextPrimary)
-            Spacer(Modifier.height(4.dp))
-            Text("Teclado nativo + resultados en vivo", style = AppType.caption, color = TextTertiary)
-
-            Spacer(Modifier.height(18.dp))
-
+            Spacer(Modifier.height(22.dp))
             TvTextField(
                 value = query,
                 onValueChange = { query = it },
-                placeholder = "Títulos, géneros, reparto…",
+                placeholder = "Títulos, géneros, sinopsis…",
                 leadingIconRes = R.drawable.ic_search,
-                imeAction = androidx.compose.ui.text.input.ImeAction.Search,
+                imeAction = ImeAction.Search,
                 focusRequester = fieldFocus,
-                onImeAction = { keyboard?.hide() },
-                modifier = Modifier.fillMaxWidth()
+                // El IME del sistema no se pide: el teclado es el de la app.
+                imeOnCenter = false,
+                // Con el teclado abierto el campo no debe poder recuperar el
+                // foco, o el D-pad se sale de las teclas y el mando deja de
+                // escribir sin que se vea por qué.
+                focusable = !keyboardOpen,
+                // Al enfocar el campo se abre el teclado de la app (no el del
+                // sistema): en un televisor el IME no aparece de forma fiable.
+                onFocusChange = { focused ->
+                    // Solo abre al entrar con el mando, no cuando «LISTO»
+                    // devuelve el foco al campo (si no, se reabriría solo).
+                    if (focused && !keyboardJustClosed) keyboardOpen = true
+                    keyboardJustClosed = false
+                },
+                modifier = Modifier.width(620.dp)
             )
-
-            Spacer(Modifier.height(12.dp))
-
-            // Chips de atajo — rellenan query en 1 click
-            Row(
-                Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                suggestions.take(4).forEach { s ->
-                    TvChip(
-                        text = s,
-                        selected = query.equals(s, ignoreCase = true),
-                        onClick = { query = s },
-                        style = AppType.caption
-                    )
-                }
-            }
-            Spacer(Modifier.height(8.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                suggestions.drop(4).take(4).forEach { s ->
-                    TvChip(
-                        text = s,
-                        selected = query.equals(s, ignoreCase = true),
-                        onClick = { query = s },
-                        style = AppType.caption
-                    )
-                }
-            }
 
             Spacer(Modifier.height(16.dp))
-            Box(Modifier.fillMaxWidth().height(1.dp).background(Color.White.copy(alpha = 0.06f)))
-            Spacer(Modifier.height(14.dp))
 
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    if (trimmed.isBlank()) "Top 10 hoy" else "Sugerencias",
-                    style = AppType.sectionTitle,
-                    color = TextPrimary
-                )
-                Spacer(Modifier.width(8.dp))
-                Box(
-                    Modifier.clip(AppRadius.pill).background(Accent.copy(alpha = 0.16f))
-                        .padding(horizontal = 8.dp, vertical = 3.dp)
-                ) {
-                    Text(
-                        if (trimmed.isBlank()) "${tops.size} títulos" else "${results.size} resultados",
-                        style = AppType.caption,
-                        color = Accent
-                    )
+            // Las sugerencias solo ocupan sitio cuando el teclado está cerrado.
+            if (!keyboardOpen) {
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    suggestions.forEach { suggestion ->
+                        TvChip(suggestion, onClick = { query = suggestion })
+                    }
                 }
+                Spacer(Modifier.height(24.dp))
             }
-            Spacer(Modifier.height(4.dp))
-            Text(
-                if (trimmed.isBlank()) "Al lado del teclado · toca para ver"
-                else "Filtra al escribir · toca para abrir",
-                style = AppType.caption,
-                color = TextMuted
-            )
 
-            Spacer(Modifier.height(12.dp))
-
-            // Lista tops / sugerencias vivas (filtra al escribir)
-            val sideList = if (trimmed.isBlank()) tops else results.take(10)
-            if (sideList.isEmpty() && !searching) {
-                Box(
-                    Modifier.fillMaxWidth().padding(top = 18.dp)
-                        .clip(AppRadius.md).background(GlassFill)
-                        .padding(16.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        if (trimmed.isBlank() && tops.isEmpty()) "Cargando tops…"
-                        else "Sin sugerencias",
-                        style = AppType.caption,
-                        color = TextSecondary
+            Box(Modifier.weight(1f).padding(bottom = 56.dp)) {
+                when {
+                    // Con el teclado abierto el estado vacío grande sobra: se
+                    // queda detrás del teclado y no se lee. La consulta ya se ve
+                    // en el campo, que está encima del teclado.
+                    query.isBlank() && keyboardOpen -> Unit
+                    query.isBlank() -> EmptyState(
+                        iconRes = R.drawable.ic_search,
+                        title = "Busca en todo el catálogo",
+                        subtitle = "Cinemeta · Nuvio · contenido demo · escribe un título o género"
                     )
-                }
-            } else {
-                LazyColumn(
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                    contentPadding = PaddingValues(bottom = 8.dp),
-                    modifier = Modifier.weight(1f)
-                ) {
-                    if (searching && trimmed.isNotEmpty()) {
-                        item {
-                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(vertical = 8.dp)) {
-                                LoadingSpinner(size = 16.dp)
-                                Spacer(Modifier.width(8.dp))
-                                Text("Buscando…", style = AppType.caption, color = TextSecondary)
+                    searching -> Text(
+                        "Buscando en Cinemeta y Nuvio…",
+                        style = AppType.metadata,
+                        color = TextSecondary,
+                        modifier = Modifier.padding(bottom = 18.dp)
+                    )
+                    results.isEmpty() -> EmptyState(
+                        iconRes = R.drawable.ic_search,
+                        title = "Sin resultados para «$query»",
+                        subtitle = "Prueba con otro término o género"
+                    )
+                    else -> {
+                        Text(
+                            "${results.size} resultados",
+                            style = AppType.metadata,
+                            color = TextSecondary,
+                            modifier = Modifier.padding(bottom = 18.dp)
+                        )
+                        LazyVerticalGrid(
+                            columns = GridCells.Fixed(5),
+                            contentPadding = PaddingValues(bottom = 56.dp),
+                            horizontalArrangement = Arrangement.spacedBy(20.dp),
+                            verticalArrangement = Arrangement.spacedBy(24.dp)
+                        ) {
+                            items(results, key = { it.id }) { video ->
+                                PosterCard(
+                                    video = video,
+                                    onClick = { onOpenDetail(video) },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(210.dp)
+                                )
                             }
                         }
                     }
-                    itemsIndexed(sideList, key = { _, v -> v.id }) { index, video ->
-                        TopRankRow(
-                            rank = index + 1,
-                            video = video,
-                            onClick = { keyboard?.hide(); onOpenDetail(video) }
-                        )
-                    }
                 }
-            }
-
-            Spacer(Modifier.height(10.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.size(6.dp).clip(CircleShape).background(Accent))
-                Spacer(Modifier.width(6.dp))
-                Text("OK abre Gboard · Escribe y mira a la derecha", style = AppType.caption, color = TextTertiary)
             }
         }
 
-        // ── PANEL DERECHO: resultados en vivo ────────────────────────────
-        Column(Modifier.weight(1f).fillMaxHeight()) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    when {
-                        trimmed.isBlank() -> "Descubre"
-                        searching -> "Buscando…"
-                        results.isEmpty() -> "Sin resultados"
-                        else -> "Resultados"
+        // ---- Teclado en pantalla ----
+        //
+        // Se dibuja **encima** del contenido, anclado abajo: con 4 filas de
+        // teclas no cabe debajo del buscador sin dejar los resultados en una
+        // franja inútil. Así se sigue viendo la consulta y lo que va saliendo
+        // mientras se escribe; «LISTO» lo cierra y deja la lista completa.
+        AnimatedVisibility(
+            visible = keyboardOpen,
+            enter = slideInVertically { it } + fadeIn(),
+            exit = slideOutVertically { it } + fadeOut(),
+            modifier = Modifier.align(Alignment.BottomCenter)
+        ) {
+            // Velo: separa el teclado de los pósters que quedan detrás.
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .background(
+                        Brush.verticalGradient(
+                            0f to Background.copy(alpha = 0f),
+                            0.28f to Background.copy(alpha = 0.92f),
+                            1f to Background
+                        )
+                    )
+                    .padding(start = 48.dp, end = 48.dp, top = 40.dp, bottom = 24.dp)
+            ) {
+                TvKeyboard(
+                    onKey = { key -> query = TvKeypad.apply(query, key) },
+                    onDone = {
+                        // «LISTO» no lanza la búsqueda: los resultados ya se
+                        // están actualizando mientras se escribe. Solo cierra
+                        // el teclado y devuelve el foco al campo.
+                        keyboardOpen = false
+                        keyboardJustClosed = true
+                        runCatching { fieldFocus.requestFocus() }
                     },
-                    style = AppType.sectionTitle,
-                    color = TextPrimary
+                    firstKeyFocus = firstKeyFocus
                 )
-                Spacer(Modifier.width(12.dp))
-                Box(
-                    Modifier.clip(AppRadius.pill).background(GlassFill)
-                        .padding(horizontal = 12.dp, vertical = 6.dp)
-                ) {
-                    Text(
-                        when {
-                            trimmed.isBlank() -> "${tops.size} destacados"
-                            searching -> "Cinemeta + Nuvio…"
-                            else -> "${results.size} títulos"
-                        },
-                        style = AppType.caption,
-                        color = TextSecondary
-                    )
-                }
-                if (trimmed.isNotBlank() && !searching) {
-                    Spacer(Modifier.width(8.dp))
-                    Box(
-                        Modifier.clip(AppRadius.pill).background(Accent.copy(alpha = 0.14f))
-                            .padding(horizontal = 10.dp, vertical = 5.dp)
-                    ) {
-                        Text("En vivo", style = AppType.caption, color = Accent)
-                    }
-                }
-            }
-            Spacer(Modifier.height(6.dp))
-            Text(
-                when {
-                    trimmed.isBlank() -> "Empieza a escribir y la grilla cambia sola"
-                    searching -> "Filtrando al escribir…"
-                    results.isEmpty() -> "Prueba con 2–3 letras clave o un género"
-                    else -> "Actualizado al escribir · ${results.size} coincidencias"
-                },
-                style = AppType.caption,
-                color = TextMuted
-            )
-
-            Spacer(Modifier.height(14.dp))
-
-            Box(Modifier.weight(1f)) {
-                when {
-                    trimmed.isBlank() -> {
-                        if (tops.isEmpty()) {
-                            SearchEmptyState(
-                                iconRes = R.drawable.ic_search,
-                                title = "Explora sin límites",
-                                subtitle = "Toca Top 10 a la izquierda o escribe arriba",
-                                hint = "Cinemeta · Nuvio · Plataformas"
-                            )
-                        } else {
-                            LazyVerticalGrid(
-                                columns = GridCells.Fixed(4),
-                                contentPadding = PaddingValues(bottom = 24.dp),
-                                horizontalArrangement = Arrangement.spacedBy(14.dp),
-                                verticalArrangement = Arrangement.spacedBy(16.dp)
-                            ) {
-                                items(tops, key = { it.id }) { v ->
-                                    PosterCard(
-                                        video = v,
-                                        onClick = { onOpenDetail(v) },
-                                        modifier = Modifier.fillMaxWidth().height(176.dp)
-                                    )
-                                }
-                            }
-                        }
-                    }
-                    searching -> {
-                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 24.dp)) {
-                            LoadingSpinner(size = 20.dp)
-                            Spacer(Modifier.width(12.dp))
-                            Text("Buscando en Cinemeta y Nuvio…", style = AppType.metadata, color = TextSecondary)
-                        }
-                    }
-                    results.isEmpty() -> SearchEmptyState(
-                        iconRes = R.drawable.ic_search,
-                        title = "Sin resultados para “$trimmed”",
-                        subtitle = "Revisa la escritura o toca un género a la izquierda",
-                        hint = "Sugerencia: usa solo 2–3 letras clave"
-                    )
-                    else -> LazyVerticalGrid(
-                        columns = GridCells.Fixed(4),
-                        contentPadding = PaddingValues(bottom = 24.dp),
-                        horizontalArrangement = Arrangement.spacedBy(14.dp),
-                        verticalArrangement = Arrangement.spacedBy(16.dp)
-                    ) {
-                        items(results, key = { it.id }) { v ->
-                            PosterCard(
-                                video = v,
-                                onClick = { keyboard?.hide(); onOpenDetail(v) },
-                                modifier = Modifier.fillMaxWidth().height(176.dp)
-                            )
-                        }
-                    }
-                }
             }
         }
     }
 }
 
+/** Estado vacío con icono (sin resultados / búsqueda inicial). */
 @Composable
-private fun TopRankRow(rank: Int, video: Video, onClick: () -> Unit) {
-    var focused by remember { mutableStateOf(false) }
-    Row(
+private fun EmptyState(iconRes: Int, title: String, subtitle: String) {
+    Column(
         Modifier
             .fillMaxWidth()
-            .clip(AppRadius.md)
-            .background(if (focused) Color.White.copy(alpha = 0.08f) else GlassFill)
-            .border(
-                width = if (focused) 2.dp else 1.dp,
-                color = if (focused) Color.White else Color.White.copy(alpha = 0.06f),
-                shape = AppRadius.md
-            )
-            .clickable(
-                remember { MutableInteractionSource() },
-                indication = null,
-                onClick = onClick
-            )
-            .onFocusChanged { focused = it.isFocused }
-            .padding(8.dp),
-        verticalAlignment = Alignment.CenterVertically
+            .padding(top = 56.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Text(
-            String.format("%02d", rank),
-            style = AppType.overline,
-            color = if (rank <= 3) Accent else TextTertiary,
-            modifier = Modifier.width(28.dp)
-        )
-        AsyncImage(
-            model = video.cardUrl,
-            contentDescription = null,
-            contentScale = ContentScale.Crop,
-            modifier = Modifier.size(48.dp, 68.dp).clip(RoundedCornerShape(6.dp)).background(SurfaceElevated)
-        )
-        Spacer(Modifier.width(10.dp))
-        Column(Modifier.weight(1f)) {
-            Text(video.title, style = AppType.bodyStrong, color = if (focused) Color.White else TextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Spacer(Modifier.height(2.dp))
-            Text(
-                listOfNotNull(
-                    video.year.takeIf { it > 0 }?.toString(),
-                    video.genres.firstOrNull(),
-                    video.ratingLabel.takeIf { video.hasRating }?.let { "★ $it" }
-                ).joinToString(" · "),
-                style = AppType.caption,
-                color = TextSecondary,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-        }
-        if (focused) {
-            Spacer(Modifier.width(8.dp))
-            Box(Modifier.size(6.dp).clip(CircleShape).background(Accent))
-        }
-    }
-}
-
-@Composable
-private fun SearchEmptyState(iconRes: Int, title: String, subtitle: String, hint: String? = null) {
-    Column(Modifier.fillMaxWidth().padding(top = 36.dp), horizontalAlignment = Alignment.CenterHorizontally) {
         Box(
-            Modifier.size(84.dp).clip(CircleShape)
-                .background(Brush.radialGradient(listOf(Accent.copy(alpha = 0.18f), GlassFill))),
+            Modifier
+                .size(72.dp)
+                .clip(CircleShape)
+                .background(GlassFill),
             contentAlignment = Alignment.Center
         ) {
             Image(
                 painter = painterResource(iconRes),
                 contentDescription = null,
-                modifier = Modifier.size(36.dp),
+                modifier = Modifier.size(32.dp),
                 colorFilter = androidx.compose.ui.graphics.ColorFilter.tint(TextSecondary)
             )
         }
-        Spacer(Modifier.height(16.dp))
-        Text(title, style = AppType.sectionTitle, color = TextPrimary, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+        Spacer(Modifier.height(18.dp))
+        Text(title, style = AppType.sectionTitle, color = TextPrimary)
         Spacer(Modifier.height(8.dp))
-        Text(subtitle, style = AppType.body, color = TextSecondary, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
-        if (hint != null) {
-            Spacer(Modifier.height(10.dp))
-            Text(hint, style = AppType.caption, color = TextMuted, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
-        }
+        Text(subtitle, style = AppType.body, color = TextSecondary)
     }
 }

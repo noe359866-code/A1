@@ -1,47 +1,88 @@
 package com.omnitv.app.ui.screens
 
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
+import com.omnitv.app.data.CatalogRepository
 import com.omnitv.app.data.ProfileStore
 import com.omnitv.app.data.RemoteCatalog
 import com.omnitv.app.data.Video
-import com.omnitv.app.ui.components.LoadingSpinner
 import com.omnitv.app.ui.components.PosterCard
-import com.omnitv.app.ui.theme.*
+import com.omnitv.app.ui.theme.AppType
+import com.omnitv.app.ui.theme.Background
+import com.omnitv.app.ui.theme.TextPrimary
+import com.omnitv.app.ui.theme.TextSecondary
+import androidx.compose.material.Text
 
+/**
+ * Rejilla con todo el catálogo (pestaña "Películas"): catálogo real
+ * (Cinemeta + Nuvio) + títulos demo locales.
+ */
 @Composable
 fun MoviesScreen(onOpenDetail: (Video) -> Unit) {
     val profile = ProfileStore.currentProfile
-    LaunchedEffect(Unit) { if (!RemoteCatalog.loaded.value) RemoteCatalog.refresh() }
+    LaunchedEffect(Unit) {
+        if (!RemoteCatalog.loaded.value) RemoteCatalog.refresh()
+    }
+
+    val local = CatalogRepository.catalogFor(profile)
     val kidsOnly = profile?.isKids == true
-    val catalog = if (kidsOnly) RemoteCatalog.gridVideos.filter { it.certification == "TP" || it.certification == "7+" || it.certification.isBlank() } else RemoteCatalog.gridVideos
-    Column(Modifier.fillMaxSize().background(Background).padding(horizontal = AppSpacing.screenMargin)) {
+    val catalog = if (kidsOnly) {
+        local
+    } else {
+        (RemoteCatalog.gridVideos + local).distinctBy { it.id }
+    }
+
+    Column(
+        Modifier
+            .fillMaxSize()
+            .background(Background)
+            .padding(horizontal = 48.dp)
+    ) {
         Spacer(Modifier.height(12.dp))
-        Row(verticalAlignment = Alignment.Bottom) {
-            Text("Películas", style = AppType.screenTitle, color = TextPrimary)
-            Spacer(Modifier.weight(1f))
-            Box(Modifier.clip(AppRadius.pill).background(GlassFill).padding(horizontal = 12.dp, vertical = 6.dp)) {
-                Text(when { RemoteCatalog.loading.value && catalog.isEmpty() -> "Cargando…" ; catalog.isEmpty() -> "0 títulos" ; else -> "${catalog.size} títulos" }, style = AppType.caption, color = TextSecondary)
-            }
-        }
+        Text("Películas", style = AppType.screenTitle, color = TextPrimary)
         Spacer(Modifier.height(6.dp))
-        Text(when { RemoteCatalog.loading.value && catalog.isEmpty() -> "Cargando catálogo · Cinemeta  ·  Nuvio" ; catalog.isEmpty() -> "Sin títulos disponibles" ; else -> "Catálogo completo · toca un título para ver detalles" }, style = AppType.metadata, color = TextMuted)
-        Spacer(Modifier.height(24.dp))
-        when {
-            RemoteCatalog.loading.value && catalog.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Column(horizontalAlignment = Alignment.CenterHorizontally) { LoadingSpinner(); Spacer(Modifier.height(16.dp)); Text("Cargando catálogo", style = AppType.metadata, color = TextSecondary) } }
-            catalog.isEmpty() -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) { Column(horizontalAlignment = Alignment.CenterHorizontally) { Box(Modifier.size(72.dp).clip(CircleShape).background(GlassFill), contentAlignment = Alignment.Center) { Text("◫", style = AppType.sectionTitle, color = TextSecondary) }; Spacer(Modifier.height(16.dp)); Text("No hay títulos", style = AppType.sectionTitle, color = TextPrimary); Spacer(Modifier.height(6.dp)); Text("Verifica tu conexión o añade addons en Ajustes → Vincular", style = AppType.body, color = TextSecondary) } }
-            else -> LazyVerticalGrid(columns = GridCells.Fixed(5), contentPadding = PaddingValues(bottom = 56.dp), horizontalArrangement = Arrangement.spacedBy(16.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) { items(catalog, key = { it.id }) { v -> PosterCard(v, onClick = { onOpenDetail(v) }, modifier = Modifier.fillMaxWidth().height(184.dp)) } }
+        Text(
+            if (RemoteCatalog.loading.value && catalog.size <= local.size) {
+                "Cargando catálogo (Cinemeta · Nuvio)…"
+            } else {
+                "${catalog.size} títulos en el catálogo"
+            },
+            style = AppType.metadata,
+            color = TextSecondary
+        )
+        Spacer(Modifier.height(28.dp))
+
+        LazyVerticalGrid(
+            // 5 columnas: en 960 dp de ancho, 4 dejan pósters de 220 dp
+            // con 20 dp de hueco; 5 encajan con la zona segura.
+            columns = GridCells.Fixed(5),
+            contentPadding = PaddingValues(bottom = 56.dp),
+            horizontalArrangement = Arrangement.spacedBy(20.dp),
+            verticalArrangement = Arrangement.spacedBy(24.dp)
+        ) {
+            items(catalog, key = { it.id }) { video ->
+                PosterCard(
+                    video = video,
+                    onClick = { onOpenDetail(video) },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(200.dp)
+                )
+            }
         }
     }
 }

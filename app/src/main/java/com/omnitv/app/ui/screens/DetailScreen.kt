@@ -4,12 +4,30 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.runtime.*
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -49,169 +67,533 @@ import com.omnitv.app.ui.components.PillButton
 import com.omnitv.app.ui.components.PosterCard
 import com.omnitv.app.ui.components.RequestTvFocus
 import com.omnitv.app.ui.components.TvChip
-import com.omnitv.app.ui.theme.*
+import com.omnitv.app.ui.theme.Accent
+import com.omnitv.app.ui.theme.AccentGreen
+import com.omnitv.app.ui.theme.AppRadius
+import com.omnitv.app.ui.theme.AppType
+import com.omnitv.app.ui.theme.Background
+import com.omnitv.app.ui.theme.GlassFill
+import com.omnitv.app.ui.theme.GlassFillStrong
+import com.omnitv.app.ui.theme.SurfaceElevated
+import com.omnitv.app.ui.theme.TextMuted
+import com.omnitv.app.ui.theme.TextPrimary
+import com.omnitv.app.ui.theme.TextSecondary
+import com.omnitv.app.ui.theme.TextTertiary
 
+/**
+ * Ficha de detalle estilo Netflix, transparente:
+ *
+ * - El **tráiler se reproduce de fondo** en bucle y silenciado (como los
+ *   previews de Netflix), con botón para activar el sonido. En títulos del
+ *   catálogo real (sin stream de vídeo) el fondo es el arte del propio
+ *   título (backdrop de Cinemeta/Nuvio).
+ * - Toda la interfaz (título, metadatos, botones, episodios) flota encima
+ *   sobre velos de degradado.
+ * - Series y anime muestran su lista de **episodios** con selector de
+ *   temporada; las fichas remotas se enriquecen con la meta del addon
+ *   (episodios, reparto) al abrirse.
+ */
 @Composable
-fun DetailScreen(video: Video, onBack: () -> Unit, onPlay: (Video) -> Unit, onOpenDetail: (Video) -> Unit) {
+fun DetailScreen(
+    video: Video,
+    onBack: () -> Unit,
+    onPlay: (Video) -> Unit,
+    onOpenDetail: (Video) -> Unit
+) {
     val context = LocalContext.current
     val screenHeight = LocalConfiguration.current.screenHeightDp.dp
+
+    // Ficha completa: se enriquece con la meta remota (episodios, reparto)
     var full by remember(video.id) { mutableStateOf(video) }
-    LaunchedEffect(video.id) { if (video.isRemote && video.episodes.isEmpty()) RemoteCatalog.fetchDetail(video)?.let { full = it } }
+    LaunchedEffect(video.id) {
+        if (video.isRemote && video.episodes.isEmpty()) {
+            RemoteCatalog.fetchDetail(video)?.let { full = it }
+        }
+    }
+
     val related = remember(full.id, full.episodes.size) { CatalogRepository.related(full.id) }
     var muted by remember { mutableStateOf(true) }
     var selectedSeason by remember { mutableStateOf(1) }
+
+    // Foco inicial en «Reproducir»: es la acción que el usuario viene a hacer.
+    // Si el foco cayera en «Atrás», el primer OK saldría de la ficha.
     val playFocus = remember { FocusRequester() }
     RequestTvFocus(playFocus, key = video.id)
+
+    // Título a reproducir: primer episodio en series/anime, el vídeo en películas
     val playTarget = remember(full.id, full.episodes.size) {
-        val ep = full.episodes.firstOrNull()
-        if (ep != null) CatalogRepository.episodeVideo(full, ep) else full
+        val firstEpisode = full.episodes.firstOrNull()
+        if (firstEpisode != null) CatalogRepository.episodeVideo(full, firstEpisode) else full
     }
+
+    // ---------------- Tráiler de fondo (Media3, en bucle, silenciado) ----------------
     val trailerPlayer = remember(full.videoUrl) {
-        if (full.videoUrl.isEmpty()) null else ExoPlayer.Builder(context).build().apply {
-            setAudioAttributes(AudioAttributes.Builder().setContentType(C.AUDIO_CONTENT_TYPE_MOVIE).setUsage(C.USAGE_MEDIA).build(), false)
-            setMediaItem(ExoMediaItem.Builder().setUri(full.videoUrl).build())
-            volume = 0f; repeatMode = Player.REPEAT_MODE_ALL; playWhenReady = true; prepare()
+        if (full.videoUrl.isEmpty()) {
+            null // catálogo real: sin stream de vídeo → fondo con el arte del título
+        } else {
+            ExoPlayer.Builder(context).build().apply {
+                setAudioAttributes(
+                    AudioAttributes.Builder()
+                        .setContentType(C.AUDIO_CONTENT_TYPE_MOVIE)
+                        .setUsage(C.USAGE_MEDIA)
+                        .build(),
+                    /* handleAudioFocus = */ false // el tráiler no roba el foco de audio
+                )
+                setMediaItem(ExoMediaItem.Builder().setUri(full.videoUrl).build())
+                volume = 0f
+                repeatMode = Player.REPEAT_MODE_ALL
+                playWhenReady = true
+                prepare()
+            }
         }
     }
-    DisposableEffect(trailerPlayer) { onDispose { trailerPlayer?.release() } }
+    DisposableEffect(trailerPlayer) {
+        onDispose { trailerPlayer?.release() }
+    }
 
-    Box(Modifier.fillMaxSize().background(Background)) {
-        // Fondo — tráiler o backdrop con velos editoriales
+    Box(
+        Modifier
+            .fillMaxSize()
+            .background(Background)
+    ) {
+        // 1 · Tráiler (o arte del título) a pantalla completa
         if (trailerPlayer != null) {
-            AndroidView(factory = { ctx -> PlayerView(ctx).apply { player = trailerPlayer; useController = false; resizeMode = AspectRatioFrameLayout.RESIZE_MODE_ZOOM; isFocusable = false } }, modifier = Modifier.fillMaxSize())
+            AndroidView(
+                factory = { ctx ->
+                    PlayerView(ctx).apply {
+                        this.player = trailerPlayer
+                        useController = false
+                        resizeMode = AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+                        // El tráiler es fondo decorativo: no debe robar el foco
+                        // del mando a los botones de la ficha.
+                        isFocusable = false
+                        isFocusableInTouchMode = false
+                    }
+                },
+                update = { it.player = trailerPlayer },
+                modifier = Modifier.fillMaxSize()
+            )
         } else {
-            AsyncImage(model = full.backdropUrl.ifEmpty { full.cardUrl }, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+            AsyncImage(
+                model = full.backdropUrl.ifEmpty { full.cardUrl },
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize()
+            )
         }
-        Box(Modifier.fillMaxSize().background(Brush.verticalGradient(0f to Background.copy(alpha = 0.35f), 0.28f to Background.copy(alpha = 0.08f), 0.62f to Background.copy(alpha = 0.88f), 1f to Background)))
-        Box(Modifier.fillMaxSize().background(Brush.horizontalGradient(0f to Background.copy(alpha = 0.82f), 0.42f to Background.copy(alpha = 0.18f), 0.75f to Color.Transparent)))
 
-        // Contenido
-        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+        // 2 · Velos de degradado para legibilidad (la interfaz es transparente)
+        Box(
+            Modifier
+                .fillMaxSize()
+                .background(
+                    Brush.verticalGradient(
+                        0f to Background.copy(alpha = 0.45f),
+                        0.30f to Background.copy(alpha = 0.15f),
+                        0.62f to Background.copy(alpha = 0.88f),
+                        0.85f to Background
+                    )
+                )
+        )
+        Box(
+            Modifier
+                .fillMaxSize()
+                .background(
+                    Brush.horizontalGradient(
+                        0f to Background.copy(alpha = 0.85f),
+                        0.42f to Background.copy(alpha = 0.25f),
+                        0.75f to Color.Transparent
+                    )
+                )
+        )
+
+        // 3 · Contenido transparente encima del tráiler
+        Column(
+            Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+        ) {
+            // Zona superior: el tráiler se ve a la izquierda con la info encima.
+            // El hueco es proporcional a la pantalla (no 190 dp fijos): así el
+            // tráiler se sigue viendo tanto en 1080p como en un panel 4K.
             Spacer(Modifier.height(screenHeight * 0.30f))
-            Column(Modifier.padding(horizontal = AppSpacing.screenMargin).widthIn(max = 760.dp)) {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(
+                Modifier
+                    .padding(horizontal = 48.dp)
+                    .widthIn(max = 720.dp)
+            ) {
+                // Chip de tipo + badge
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     TypeChip(full.type)
                     full.badge?.let { AccentChip(it) }
-                    if (full.hasRating) MatchPill(full.matchPercent)
                 }
-                Spacer(Modifier.height(14.dp))
-                Text(full.title, style = AppType.hero, color = TextPrimary, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                Spacer(Modifier.height(12.dp))
-                DetailMeta(full)
-                Spacer(Modifier.height(18.dp))
-                Text(full.description, style = AppType.body, color = Color.White.copy(alpha = 0.90f), maxLines = 3, overflow = TextOverflow.Ellipsis, modifier = Modifier.widthIn(max = 620.dp))
-                Spacer(Modifier.height(24.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    PillButton("Reproducir", R.drawable.ic_play, true, onClick = { onPlay(playTarget) }, modifier = Modifier.focusRequester(playFocus))
-                    val inMyList = ProfileStore.currentProfile?.myList?.contains(full.id) == true
-                    PillButton(if (inMyList) "En Mi lista" else "Mi lista", if (inMyList) R.drawable.ic_check else R.drawable.ic_add, false, onClick = { ProfileStore.toggleMyList(full.id) })
-                    if (trailerPlayer != null) {
-                        PillButton(if (muted) "Sonido" else "Silenciar", if (muted) R.drawable.ic_volume_off else R.drawable.ic_audio, false, onClick = { muted = !muted; trailerPlayer.volume = if (muted) 0f else 1f })
+
+                Spacer(Modifier.height(16.dp))
+                Text(
+                    full.title,
+                    style = AppType.hero,
+                    color = TextPrimary,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+
+                Spacer(Modifier.height(16.dp))
+                // Metadatos: match % estilo Netflix + año + duración/episodios + calidad
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    // La afinidad se deriva de la valoración: sin valoración real no se muestra
+                    if (full.hasRating) {
+                        Text(
+                            "${full.matchPercent} % para ti",
+                            style = androidx.compose.ui.text.TextStyle(
+                                fontFamily = FontFamily.SansSerif,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 19.sp
+                            ),
+                            color = AccentGreen
+                        )
+                    }
+                    // Solo datos que existen (un título remoto puede llegar sin año o duración)
+                    val metaParts = listOfNotNull(
+                        full.year.takeIf { it > 0 }?.toString(),
+                        full.episodesLabel ?: full.durationLabel.takeIf { full.durationMinutes > 0 },
+                        full.quality.takeIf { it.isNotBlank() },
+                        full.certification.takeIf { it.isNotBlank() }
+                    )
+                    metaParts.forEachIndexed { index, part ->
+                        if (index > 0 || full.hasRating) Dot()
+                        Text(part, style = AppType.metadata, color = TextSecondary)
                     }
                 }
+
+                Spacer(Modifier.height(20.dp))
+                Text(
+                    full.description,
+                    style = AppType.body,
+                    color = TextPrimary.copy(alpha = 0.92f),
+                    maxLines = 3,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.widthIn(max = 620.dp)
+                )
+
+                Spacer(Modifier.height(26.dp))
+                // Botones: Reproducir · Mi lista · sonido del tráiler (si lo hay)
+                Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                    PillButton(
+                        text = "Reproducir",
+                        iconRes = R.drawable.ic_play,
+                        primary = true,
+                        onClick = { onPlay(playTarget) },
+                        modifier = Modifier.focusRequester(playFocus)
+                    )
+                    val inMyList = ProfileStore.currentProfile?.myList?.contains(full.id) == true
+                    PillButton(
+                        text = if (inMyList) "En Mi lista" else "Mi lista",
+                        iconRes = if (inMyList) R.drawable.ic_check else R.drawable.ic_add,
+                        primary = false,
+                        onClick = { ProfileStore.toggleMyList(full.id) }
+                    )
+                    if (trailerPlayer != null) {
+                        PillButton(
+                            text = if (muted) "Sonido del tráiler" else "Silenciar",
+                            iconRes = if (muted) R.drawable.ic_volume_off else R.drawable.ic_audio,
+                            primary = false,
+                            onClick = {
+                                muted = !muted
+                                trailerPlayer.volume = if (muted) 0f else 1f
+                            }
+                        )
+                    }
+                }
+
+                // Aviso honesto para títulos del catálogo real
                 if (full.isRemote) {
                     Spacer(Modifier.height(14.dp))
-                    Text("Origen: ${full.source} · ${full.remoteType ?: full.type.label.lowercase()}  ·  Addons en Ajustes", style = AppType.caption, color = TextMuted)
+                    Text(
+                        "Catálogo real de ${full.source} · los addons de catálogo no incluyen " +
+                            "enlaces de reproducción: se reproducirá una demostración",
+                        style = AppType.metadata,
+                        // No `TextTertiary` (2,5:1 sobre el fondo): es texto real
+                        color = TextMuted
+                    )
                 }
             }
-            Spacer(Modifier.height(40.dp))
-            Column(Modifier.padding(horizontal = AppSpacing.screenMargin)) {
+
+            Spacer(Modifier.height(44.dp))
+
+            Column(Modifier.padding(horizontal = 48.dp)) {
+                // ---------------- Episodios (series y anime) ----------------
                 if (full.episodes.isNotEmpty()) {
                     val seasons = full.episodes.map { it.season }.distinct().sorted()
-                    val cur = if (selectedSeason in seasons) selectedSeason else seasons.first()
-                    val eps = full.episodes.filter { it.season == cur }
+                    val currentSeason = if (selectedSeason in seasons) selectedSeason else seasons.first()
+                    val seasonEpisodes = full.episodes.filter { it.season == currentSeason }
+
                     Text("Episodios", style = AppType.sectionTitle, color = TextPrimary)
-                    Spacer(Modifier.height(4.dp))
-                    Text(if (seasons.size > 1) "Temporada $cur · ${eps.size} episodios" else full.episodesLabel ?: "Temporada 1", style = AppType.metadata, color = TextSecondary)
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        if (seasons.size > 1) "Temporada $currentSeason · ${seasonEpisodes.size} episodios"
+                        else full.episodesLabel ?: "Temporada 1",
+                        style = AppType.metadata,
+                        color = TextSecondary
+                    )
+
                     if (seasons.size > 1) {
-                        Spacer(Modifier.height(12.dp))
-                        LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) { items(seasons) { s -> TvChip("Temporada $s", selected = s == cur, onClick = { selectedSeason = s }) } }
+                        Spacer(Modifier.height(14.dp))
+                        LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            items(seasons) { season ->
+                                TvChip(
+                                    text = "Temporada $season",
+                                    selected = season == currentSeason,
+                                    onClick = { selectedSeason = season }
+                                )
+                            }
+                        }
                     }
+
                     Spacer(Modifier.height(18.dp))
-                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) { eps.forEach { ep -> EpisodeRow(episode = ep, onClick = { onPlay(CatalogRepository.episodeVideo(full, ep)) }) } }
-                    Spacer(Modifier.height(32.dp))
-                    Divider()
-                    Spacer(Modifier.height(32.dp))
+                    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                        seasonEpisodes.forEach { episode ->
+                            EpisodeRow(
+                                episode = episode,
+                                onClick = { onPlay(CatalogRepository.episodeVideo(full, episode)) }
+                            )
+                        }
+                    }
+                    Spacer(Modifier.height(36.dp))
                 }
+
+                // ---------------- Reparto ----------------
                 if (full.cast.isNotEmpty()) {
                     SectionLabel("Reparto")
-                    LazyRow(contentPadding = PaddingValues(end = AppSpacing.screenMargin), horizontalArrangement = Arrangement.spacedBy(10.dp)) { items(full.cast) { n -> InfoChip(n) } }
-                    Spacer(Modifier.height(24.dp))
+                    LazyRow(
+                        contentPadding = PaddingValues(end = 48.dp),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        items(full.cast) { name -> InfoChip(name) }
+                    }
+                    Spacer(Modifier.height(28.dp))
                 }
+
+                // ---------------- Géneros ----------------
                 if (full.genres.isNotEmpty()) {
                     SectionLabel("Géneros")
-                    LazyRow(contentPadding = PaddingValues(end = AppSpacing.screenMargin), horizontalArrangement = Arrangement.spacedBy(10.dp)) { items(full.genres) { g -> InfoChip(g) } }
-                    Spacer(Modifier.height(24.dp))
+                    LazyRow(
+                        contentPadding = PaddingValues(end = 48.dp),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        items(full.genres) { genre -> InfoChip(genre) }
+                    }
+                    Spacer(Modifier.height(28.dp))
                 }
+
+                // ---------------- Información ----------------
                 SectionLabel("Información")
-                if (full.isRemote) InfoRow("Fuente", "${full.source} (${full.remoteType ?: full.type.name.lowercase()})")
-                if (full.language.isNotEmpty()) InfoRow("Idioma", full.language)
+                if (full.isRemote) {
+                    InfoRow("Fuente", "${full.source} (${full.remoteType ?: full.type.name.lowercase()})")
+                }
+                if (full.language.isNotEmpty()) {
+                    InfoRow("Idioma / país", full.language)
+                }
                 InfoRow("Calidad", full.quality)
+
+                // ---------------- Más como esto ----------------
                 if (related.isNotEmpty()) {
                     Spacer(Modifier.height(36.dp))
-                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                        Text("Más como esto", style = AppType.sectionTitle, color = TextPrimary)
-                        Spacer(Modifier.weight(1f))
-                        Box(Modifier.clip(AppRadius.pill).background(Color.White.copy(alpha = 0.08f)).padding(horizontal = 14.dp, vertical = 6.dp)) { Text("${related.size}", style = AppType.chip, color = TextSecondary) }
-                    }
-                    Spacer(Modifier.height(16.dp))
-                    LazyRow(contentPadding = PaddingValues(end = AppSpacing.screenMargin), horizontalArrangement = Arrangement.spacedBy(16.dp)) {
-                        items(related, key = { it.id }) { item -> PosterCard(item, onClick = { onOpenDetail(item) }, modifier = Modifier.size(220.dp, 124.dp)) }
+                    Text("Más como esto", style = AppType.sectionTitle, color = TextPrimary)
+                    Spacer(Modifier.height(18.dp))
+                    LazyRow(
+                        contentPadding = PaddingValues(end = 48.dp),
+                        horizontalArrangement = Arrangement.spacedBy(20.dp)
+                    ) {
+                        items(related, key = { it.id }) { item ->
+                            PosterCard(item, onClick = { onOpenDetail(item) })
+                        }
                     }
                 }
                 Spacer(Modifier.height(56.dp))
             }
         }
-        CircleIconButton(R.drawable.ic_back, "Volver", onClick = onBack, modifier = Modifier.align(Alignment.TopStart).padding(AppSpacing.screenMargin))
-        Box(Modifier.align(Alignment.TopEnd).padding(24.dp).clip(AppRadius.xs).background(if (full.isRemote) Accent else Color.White.copy(alpha = 0.14f)).padding(horizontal = 10.dp, vertical = 6.dp)) {
-            Text(if (full.isRemote) "CATÁLOGO · ${full.source.uppercase()}" else if (muted) "TRÁILER · SILENCIADO" else "TRÁILER", style = AppType.chip, color = Color.White)
+
+        // Volver (arriba a la izquierda)
+        CircleIconButton(
+            iconRes = R.drawable.ic_back,
+            contentDescription = "Volver",
+            onClick = onBack,
+            modifier = Modifier
+                .align(Alignment.TopStart)
+                .padding(48.dp)
+        )
+
+        // Estado del fondo (arriba a la derecha)
+        Row(
+            Modifier
+                .align(Alignment.TopEnd)
+                .padding(32.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            if (full.isRemote) {
+                AccentChip("CATÁLOGO · ${full.source.uppercase()}")
+            } else {
+                AccentChip(if (muted) "TRÁILER · SILENCIADO" else "TRÁILER")
+            }
         }
     }
 }
 
-@Composable private fun TypeChip(type: VideoType) { Box(Modifier.clip(AppRadius.xs).background(Color.White.copy(alpha = 0.14f)).border(1.dp, GlassBorder, AppRadius.xs).padding(horizontal = 10.dp, vertical = 4.dp)) { Text(type.label.uppercase(), style = AppType.chip, color = TextPrimary) } }
-@Composable private fun AccentChip(text: String) { Box(Modifier.clip(AppRadius.xs).background(Accent).padding(horizontal = 10.dp, vertical = 4.dp)) { Text(text.uppercase(), style = AppType.chip, color = Color.White) } }
-@Composable private fun MatchPill(percent: Int) { Box(Modifier.clip(AppRadius.xs).background(Brush.linearGradient(listOf(Color(0xFF30D158), Color(0xFF00C7BE)))).padding(horizontal = 10.dp, vertical = 4.dp)) { Text("$percent% para ti", style = AppType.chip, color = Color.White) } }
-@Composable private fun InfoChip(text: String) { Box(Modifier.clip(AppRadius.sm).background(GlassFillStrong).border(1.dp, GlassBorder, AppRadius.sm).padding(horizontal = 14.dp, vertical = 8.dp)) { Text(text, style = AppType.metadata, color = TextPrimary) } }
-@Composable private fun SectionLabel(text: String) { Text(text, style = AppType.sectionTitle, color = TextPrimary); Spacer(Modifier.height(12.dp)) }
-@Composable private fun InfoRow(label: String, value: String) { Row(Modifier.padding(bottom = 8.dp)) { Text("$label", style = AppType.caption, color = TextSecondary, modifier = Modifier.width(140.dp)); Text(value, style = AppType.metadata, color = TextPrimary) } }
-@Composable private fun Dot() { Box(Modifier.padding(horizontal = 10.dp).size(3.dp).clip(AppRadius.xs).background(TextTertiary)) }
-@Composable private fun Divider() { Box(Modifier.fillMaxWidth().height(1.dp).background(Color.White.copy(alpha = 0.06f))) }
-@Composable private fun DetailMeta(video: Video) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        if (video.hasRating) { Text("${video.matchPercent}% para ti", style = AppType.match, color = AccentGreen); Dot() }
-        val parts = listOfNotNull(video.year.takeIf { it > 0 }?.toString(), video.episodesLabel ?: video.durationLabel.takeIf { video.durationMinutes > 0 }, video.quality.takeIf { it.isNotBlank() }, video.certification.takeIf { it.isNotBlank() })
-        parts.forEachIndexed { i, p -> if (i > 0) Dot(); Text(p, style = AppType.metadata, color = TextSecondary) }
+/* -------------------------------------------------------------------------- */
+/*  Piezas de la ficha                                                        */
+/* -------------------------------------------------------------------------- */
+
+@Composable
+private fun TypeChip(type: VideoType) {
+    Box(
+        Modifier
+            .clip(AppRadius.xs)
+            .background(Color.White.copy(alpha = 0.18f))
+            .padding(horizontal = 10.dp, vertical = 4.dp)
+    ) {
+        Text(
+            type.label.uppercase(),
+            style = AppType.chip,
+            color = TextPrimary
+        )
     }
 }
 
 @Composable
+private fun AccentChip(text: String) {
+    Box(
+        Modifier
+            .clip(AppRadius.xs)
+            .background(Accent)
+            .padding(horizontal = 10.dp, vertical = 4.dp)
+    ) {
+        Text(text, style = AppType.chip, color = Color.White)
+    }
+}
+
+@Composable
+private fun InfoChip(text: String) {
+    Box(
+        Modifier
+            .clip(AppRadius.sm)
+            .background(GlassFillStrong)
+            .padding(horizontal = 14.dp, vertical = 8.dp)
+    ) {
+        Text(text, style = AppType.metadata, color = TextPrimary)
+    }
+}
+
+@Composable
+private fun SectionLabel(text: String) {
+    Text(text, style = AppType.sectionTitle, color = TextPrimary)
+    Spacer(Modifier.height(14.dp))
+}
+
+@Composable
+private fun InfoRow(label: String, value: String) {
+    Row(Modifier.padding(bottom = 10.dp)) {
+        Text("$label: ", style = AppType.metadata, color = TextSecondary, modifier = Modifier.width(130.dp))
+        Text(value, style = AppType.metadata, color = TextPrimary)
+    }
+}
+
+@Composable
+private fun Dot() {
+    Box(
+        Modifier
+            .padding(horizontal = 10.dp)
+            .size(3.dp)
+            .clip(AppRadius.xs)
+            .background(TextTertiary)
+    )
+}
+
+/** Fila de episodio estilo Netflix (miniatura + número + sinopsis). */
+@Composable
 private fun EpisodeRow(episode: Episode, onClick: () -> Unit) {
     var focused by remember { mutableStateOf(false) }
-    val scale by androidx.compose.animation.core.animateFloatAsState(if (focused) 1.02f else 1f, tween(150), label = "epScale")
+    val scale by androidx.compose.animation.core.animateFloatAsState(
+        if (focused) 1.02f else 1f,
+        androidx.compose.animation.core.tween(150),
+        label = "episodeScale"
+    )
+
     Row(
-        Modifier.fillMaxWidth().graphicsLayer { scaleX = scale; scaleY = scale }.clip(AppRadius.md)
-            .background(if (focused) SurfaceElevated else GlassFill).border(if (focused) 2.dp else 1.dp, if (focused) Color.White else Color.White.copy(alpha = 0.06f), AppRadius.md)
-            .clickable(remember { MutableInteractionSource() }, null, onClick).onFocusChanged { focused = it.isFocused }.padding(14.dp),
+        Modifier
+            .fillMaxWidth()
+            .graphicsLayer { scaleX = scale; scaleY = scale }
+            .clip(AppRadius.md)
+            .background(if (focused) SurfaceElevated.copy(alpha = 0.85f) else GlassFill)
+            .then(
+                if (focused) Modifier.border(3.dp, Color.White.copy(alpha = 0.5f), AppRadius.md)
+                else Modifier
+            )
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onClick
+            )
+            .onFocusChanged { focused = it.isFocused }
+            .padding(16.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Box(Modifier.size(36.dp).clip(CircleShape).background(if (focused) Accent else Color.White.copy(alpha = 0.12f)), contentAlignment = Alignment.Center) {
-            Text("${episode.number}", style = androidx.compose.ui.text.TextStyle(FontFamily.SansSerif, FontWeight.Bold, 16.sp), color = if (focused) Color.White else TextSecondary)
-        }
+        Text(
+            "${episode.number}",
+            style = androidx.compose.ui.text.TextStyle(
+                fontFamily = FontFamily.SansSerif,
+                fontWeight = FontWeight.Bold,
+                fontSize = 28.sp
+            ),
+            color = if (focused) TextPrimary else TextSecondary,
+            modifier = Modifier.width(34.dp)
+        )
         Spacer(Modifier.width(14.dp))
         Box {
-            AsyncImage(model = episode.thumbnailUrl, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.width(160.dp).height(90.dp).clip(AppRadius.sm))
-            Box(Modifier.align(Alignment.Center).size(32.dp).clip(CircleShape).background(Color.Black.copy(alpha = 0.55f)), contentAlignment = Alignment.Center) { Text("▶", style = AppType.metadata, color = Color.White) }
+            AsyncImage(
+                model = episode.thumbnailUrl,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier
+                    .width(168.dp)
+                    .height(94.dp)
+                    .clip(AppRadius.sm)
+            )
+            Box(
+                Modifier
+                    .align(Alignment.Center)
+                    .size(34.dp)
+                    .clip(AppRadius.lg)
+                    .background(Color.Black.copy(alpha = 0.55f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Text("▶", style = AppType.metadata, color = Color.White)
+            }
         }
-        Spacer(Modifier.width(16.dp))
+        Spacer(Modifier.width(18.dp))
         Column(Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(episode.title, style = androidx.compose.ui.text.TextStyle(FontFamily.SansSerif, FontWeight.SemiBold, 19.sp), color = TextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-                Spacer(Modifier.width(8.dp))
-                Text(episode.durationLabel, style = AppType.caption, color = TextTertiary)
+                Text(
+                    episode.title,
+                    style = androidx.compose.ui.text.TextStyle(
+                        fontFamily = FontFamily.SansSerif,
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 20.sp
+                    ),
+                    color = TextPrimary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Spacer(Modifier.weight(1f))
+                Text(episode.durationLabel, style = AppType.metadata, color = TextSecondary)
             }
-            Spacer(Modifier.height(4.dp))
-            Text(episode.description, style = AppType.caption, color = TextSecondary, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Spacer(Modifier.height(6.dp))
+            Text(
+                episode.description,
+                style = AppType.metadata,
+                color = TextSecondary,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
         }
     }
 }
