@@ -82,6 +82,10 @@ dependencies {
     // Código QR del panel de vinculación (Ajustes → Vincular)
     implementation(libs.zxing.core)
 
+    // Plugins Streamflix-compat: scraping + extractores (providers/*.js → native)
+    implementation(libs.jsoup)
+    implementation(libs.okhttp)
+
     // Tests unitarios (JVM): política de red, panel de vinculación y parsers.
     // org.json no existe en la JVM de escritorio (en Android lo pone el sistema).
     testImplementation(libs.junit)
