@@ -70,6 +70,9 @@ La revisión encontró diferencias importantes entre esa intención y la impleme
   dependencias `jsoup`/`okhttp` y el `OkHttpClient` muerto de `cronetSupport`.
   Documentación histórica corregida. Tests nuevos para refiner, registro,
   cabeceras/subtítulos, `getText` y origen cruzado.
+- **Avisos del compilador**: condición siempre verdadera en `EditProfileScreen`
+  y `LocalLifecycleOwner` obsoleto migrados a `androidx.lifecycle.compose`.
+  CI ya compila también `assembleRelease` en cada push.
 
 ## Hallazgos que siguen abiertos
 
@@ -86,7 +89,7 @@ La revisión encontró diferencias importantes entre esa intención y la impleme
 | Parcial | Seguridad local | Añadido rechazo de orígenes cruzados en `/save` y cabeceras `Cross-Origin-*`. Quedan: código en la URL del QR, HTTP en LAN y claves en claro solo en API 22. Revisar exposición en redes de invitados/VPN. |
 | Resuelta | WebView / Coil | `WebViewResolver` eliminado; `CronetFetcher` instalado en el `ImageLoader` singleton y corregido para no corromper imágenes binarias. |
 | Resuelta | UI / memoria | Detalle compone episodios por tandas de 20. El héroe y los textos con escala grande aún necesitan prueba de overscan/accesibilidad (incluida en «Validación en dispositivo»). |
-| Baja | Mantenimiento | Código experimental y docs históricos corregidos. Persisten avisos de versiones (Gradle 8.9, Kotlin/Media3/Compose de 2024) y 9 ramas `arena/*` huérfanas en GitHub. |
+| Baja | Mantenimiento | Código experimental, docs históricos y avisos del compilador corregidos. Persiste el aviso de Gradle 8.9 (y versiones Kotlin/Media3/Compose de 2024) y 9 ramas `arena/*` huérfanas en GitHub. |
 
 ## Validación
 
@@ -94,7 +97,7 @@ La revisión encontró diferencias importantes entre esa intención y la impleme
 - `python3 -m py_compile tools/check_android_tv.py tools/omni-stream-bridge/bridge.py`: correcto.
 - `git diff --check`: correcto.
 - CI de la primera pasada (`03719b4`): **[ejecución 43554360259](https://github.com/noe359866-code/A1/actions/runs/43554360259), correcta**. Contrato TV, **98 tests / 0 fallos**, `assembleDebug` y `lintDebug` pasan. Los errores de lint (API 24 y opt-in de Media3) se corrigieron; no se creó un baseline.
-- Segunda pasada: `python3 tools/check_android_tv.py` y `node --test` de los tres puentes Node siguen correctos en local. Se añadieron tests JVM para `EmbedRefiner`, `ExtractorRegistry`, `StreamResponse`, `AddonHttp.getText` y origen cruzado; su ejecución y la compilación Android quedan **pendientes de CI** (no hay SDK local).
+- Segunda pasada: `python3 tools/check_android_tv.py` y `node --test` de los tres puentes Node correctos en local (7/7). CI final **[ejecución 43636914940](https://github.com/noe359866-code/A1/actions/runs/43636914940), correcta**: **175 tests / 0 fallos**, `assembleDebug`, `assembleRelease` (R8 con firma debug de reserva) y `lintDebug`; sin avisos del compilador. Se añadieron tests JVM para `EmbedRefiner`, `ExtractorRegistry`, `StreamResponse`, `AddonHttp.getText` y origen cruzado.
 - Release `v1.2.0` ya publicado con `OmniTV-v1.2.0.apk`; esta pasada añade la firma de producción opcional sin cambiar el `versionCode`/`versionName` del árbol.
 - Puente Python: prueba local de `/health`, `/stream/movie/tt1375666.json` y `/stream/series/tt0944947:1:2` contra un servidor temporal en loopback; las tres respuestas fueron correctas. Sigue siendo un puente de ejemplo, no un resolver de producción.
 - CI conserva avisos de mantenimiento (por ejemplo, Gradle 8.9 antiguo); no son errores de compilación.
