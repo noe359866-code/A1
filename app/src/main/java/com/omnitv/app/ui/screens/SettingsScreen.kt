@@ -486,7 +486,9 @@ fun SettingsScreen(
                     PinTask.CLEAR -> "Introduce el PIN actual para desactivar el control parental"
                 },
                 confirmEntry = task == PinTask.SET,
-                onDismiss = if (task == PinTask.GATE) onExit else { pinTask = null },
+                onDismiss = {
+                    if (task == PinTask.GATE) onExit() else pinTask = null
+                },
                 onSubmit = { pin ->
                     when (task) {
                         PinTask.GATE -> if (SettingsStore.verifyParentalPin(pin)) {
