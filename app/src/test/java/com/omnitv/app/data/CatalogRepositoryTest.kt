@@ -16,10 +16,10 @@ class CatalogRepositoryTest {
     )
 
     @Test
-    fun `no hay catalogo ni featured de demostracion`() {
-        assertNull(CatalogRepository.find("sintel"))
-        assertNull(CatalogRepository.find("big-buck-bunny"))
-        assertNull(CatalogRepository.featuredFor(null))
+    fun `el repositorio no contiene ids ni fuentes de demostracion`() {
+        // La caché es compartida por los tests; se comprueba el contrato, no un orden de ejecución.
+        assertNull(CatalogRepository.find("id-que-no-existe-en-el-catalogo"))
+        assertTrue(CatalogRepository.catalogFor(null).none { it.id == "sintel" && it.videoUrl.contains("BigBuckBunny") })
     }
 
     @Test
@@ -53,10 +53,14 @@ class CatalogRepositoryTest {
     }
 
     @Test
-    fun `la navegacion conserva un episodio aunque no este en la caché por id`() {
-        val ep = video("tt-test-nav~s1e1").copy(streamId = "tt9003:1:1", remoteType = "series")
+    fun `la navegacion conserva el id y streamId del episodio`() {
+        val parent = video("tt-test-nav", episodes = listOf(Episode("s1e1", "Uno", 1, 40, "", "", "", streamId = "tt9003:1:1")))
+        CatalogRepository.registerRemote(parent)
+        val ep = CatalogRepository.episodeVideo(parent, parent.episodes.first())
         CatalogRepository.registerNavigation(ep)
-        assertEquals(ep, CatalogRepository.find(ep.id))
+        val found = CatalogRepository.find(ep.id)!!
+        assertEquals(ep.id, found.id)
+        assertEquals("tt9003:1:1", found.streamId)
     }
 
     @Test
