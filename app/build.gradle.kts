@@ -85,6 +85,8 @@ dependencies {
     // Plugins Streamflix-compat: scraping + extractores (providers/*.js → native)
     implementation(libs.jsoup)
     implementation(libs.okhttp)
+    // Streamflix 403 fix: Cronet envía TLS fingerprint de Chrome (JA3) en lugar de OkHttp, evita bloqueos 403 en imágenes/streams
+    implementation(libs.cronet.embedded)
 
     // Tests unitarios (JVM): política de red, panel de vinculación y parsers.
     // org.json no existe en la JVM de escritorio (en Android lo pone el sistema).
