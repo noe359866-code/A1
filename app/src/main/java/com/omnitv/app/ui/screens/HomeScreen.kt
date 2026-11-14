@@ -97,7 +97,7 @@ fun HomeScreen(
                         Spacer(Modifier.height(12.dp))
                         Text(
                             if (kidsOnly) "El perfil infantil no carga catálogos remotos sin clasificación."
-                            else "Añade addons en Ajustes o comprueba la conexión.",
+                            else "Comprueba tu conexión o vuelve a intentarlo más tarde.",
                             style = AppType.metadata, color = TextSecondary
                         )
                     }

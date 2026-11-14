@@ -320,12 +320,12 @@ fun DetailScreen(
                     }
                 }
 
-                // Aviso honesto para títulos del catálogo real
+                // Ayuda de configuración, sin atribuir el contenido a una fuente.
                 if (full.isRemote) {
                     Spacer(Modifier.height(14.dp))
                     Text(
-                        "Catálogo de ${full.source} · la reproducción requiere un addon " +
-                            "de streams configurado en Ajustes → Vincular.",
+                        "Si la reproducción no está disponible, revisa la configuración " +
+                            "en Ajustes → Vincular.",
                         style = AppType.metadata,
                         // No `TextTertiary` (2,5:1 sobre el fondo): es texto real
                         color = TextMuted
@@ -402,9 +402,6 @@ fun DetailScreen(
 
                 // ---------------- Información ----------------
                 SectionLabel("Información")
-                if (full.isRemote) {
-                    InfoRow("Fuente", "${full.source} (${full.remoteType ?: full.type.name.lowercase()})")
-                }
                 if (full.language.isNotEmpty()) {
                     InfoRow("Idioma / país", full.language)
                 }
@@ -446,7 +443,7 @@ fun DetailScreen(
             verticalAlignment = Alignment.CenterVertically
         ) {
             if (full.isRemote) {
-                AccentChip("CATÁLOGO · ${full.source.uppercase()}")
+                AccentChip("CATÁLOGO")
             } else {
                 AccentChip(if (muted) "TRÁILER · SILENCIADO" else "TRÁILER")
             }

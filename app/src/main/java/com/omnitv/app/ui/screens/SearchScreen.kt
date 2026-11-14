@@ -173,7 +173,7 @@ fun SearchScreen(onOpenDetail: (Video) -> Unit) {
                         subtitle = "Escribe un título o género"
                     )
                     searching -> Text(
-                        "Buscando en Cinemeta y Nuvio…",
+                        "Buscando en el catálogo…",
                         style = AppType.metadata,
                         color = TextSecondary,
                         modifier = Modifier.padding(bottom = 18.dp)

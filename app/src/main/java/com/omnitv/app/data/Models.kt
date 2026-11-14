@@ -72,7 +72,7 @@ data class Video(
     val episodes: List<Episode> = emptyList(),
     /** Viene del catálogo real (Cinemeta/Nuvio) en lugar del demo local. */
     val isRemote: Boolean = false,
-    /** Nombre del addon de origen ("Cinemeta" / "Nuvio"). */
+    /** Origen interno para resolver fichas y streams; no se muestra en el catálogo. */
     val source: String = "",
     /** Tipo Stremio remoto ("movie"/"series") para pedir la ficha completa. */
     val remoteType: String? = null,

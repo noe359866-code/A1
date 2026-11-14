@@ -109,7 +109,7 @@ fun StudioCatalogScreen(
                 Column {
                     Text(studio.name, style = AppType.screenTitle, color = TextPrimary)
                     Text(
-                        "Catálogo real · sweetfox.app",
+                        "Películas y series del estudio",
                         style = AppType.metadata,
                         color = TextSecondary
                     )

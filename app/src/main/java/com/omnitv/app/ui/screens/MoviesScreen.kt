@@ -62,7 +62,7 @@ fun MoviesScreen(onOpenDetail: (Video) -> Unit) {
         Spacer(Modifier.height(6.dp))
         Text(
             if (RemoteCatalog.loading.value && catalog.isEmpty()) {
-                "Cargando catálogo (Cinemeta · Nuvio)…"
+                "Cargando catálogo…"
             } else {
                 "${catalog.size} títulos en el catálogo"
             },
@@ -83,7 +83,7 @@ fun MoviesScreen(onOpenDetail: (Video) -> Unit) {
         Spacer(Modifier.height(18.dp))
         if (catalog.isEmpty() && !RemoteCatalog.loading.value) {
             Text(
-                if (kidsOnly) "No hay películas guardadas con clasificación infantil." else "No hay películas disponibles. Revisa tus addons en Ajustes.",
+                if (kidsOnly) "No hay películas guardadas con clasificación infantil." else "No hay películas disponibles en este momento.",
                 style = AppType.metadata, color = TextSecondary
             )
         }

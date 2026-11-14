@@ -123,7 +123,9 @@ object RemoteCatalog {
                     val requested = if (catalog.supportsExtra("skip")) mapOf("skip" to "0") else emptyMap()
                     val extras = manifest.catalogExtras(catalog, requested) ?: return@async null
                     val key = "$url|${catalog.type}|${catalog.id}"
-                    val title = "${manifest.name} · ${catalog.name} (${catalog.type})"
+                    // El nombre y la URL del addon siguen identificando la página,
+                    // pero no se añaden al título que ve el usuario.
+                    val title = CatalogLabels.title(catalog)
                     val base = StremioUrl.base(url)
                     val page = fetchPage(base, catalog, extras) ?: return@async null
                     val videos = page.metas.map { StremioClient.parseVideo(it, manifest.name, url.takeIf { _ -> manifest.supports("meta", catalog.type, it.optString("id")) }, catalog.type) }
@@ -158,7 +160,7 @@ object RemoteCatalog {
                         val extras = page.extras + ("skip" to page.skip.toString())
                         val result = fetchPage(page.base, page.catalog, extras)
                         if (result == null) {
-                            lastError.value = "No se pudo cargar más de ${page.title}"
+                            lastError.value = "No se pudieron cargar más títulos. Inténtalo de nuevo."
                             return@async page.copy(hasMore = false)
                         }
                         val manifest = installed.firstOrNull { it.url == page.manifestUrl }?.manifest
