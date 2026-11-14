@@ -16,6 +16,12 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -33,6 +39,9 @@ import androidx.compose.ui.unit.sp
 import com.omnitv.app.BuildConfig
 import com.omnitv.app.R
 import com.omnitv.app.data.PairingServer
+import com.omnitv.app.data.AddonRegistry
+import com.omnitv.app.data.NuvioPluginManager
+import com.omnitv.app.data.NuvioScraperResolver
 import com.omnitv.app.data.ProfileStore
 import com.omnitv.app.data.SettingsStore
 import com.omnitv.app.ui.components.AvatarView
@@ -68,6 +77,18 @@ fun SettingsScreen(onSwitchProfile: () -> Unit) {
     // tarjeta de perfil para empezar a ajustar cosas.
     val firstFocus = remember { FocusRequester() }
     RequestTvFocus(firstFocus)
+    val scope = rememberCoroutineScope()
+    var bridgeStatus by remember { mutableStateOf("Comprobando puente…") }
+    var refreshing by remember { mutableStateOf(false) }
+    suspend fun checkIntegrations() {
+        refreshing = true
+        try {
+            AddonRegistry.refresh(force = true)
+            NuvioPluginManager.refreshAll(force = true)
+            bridgeStatus = NuvioScraperResolver.checkBridge()
+        } finally { refreshing = false }
+    }
+    LaunchedEffect(SettingsStore.revision) { checkIntegrations() }
 
     Column(
         Modifier
@@ -148,7 +169,7 @@ fun SettingsScreen(onSwitchProfile: () -> Unit) {
                     Text(
                         "El QR abre el panel web ya desbloqueado; si escribes la dirección a mano, " +
                             "te pedirá el código de abajo. Solo entonces podrás enlazar tu cuenta, " +
-                            "añadir addons (manifest.json de Stremio) y registrar APIs.",
+                            "instalar addons Stremio, guardar repositorios/puente Nuvio y registrar APIs.",
                         style = AppType.metadata,
                         color = TextSecondary
                     )
@@ -187,6 +208,35 @@ fun SettingsScreen(onSwitchProfile: () -> Unit) {
                         Text(PairingServer.lastAction.value, style = AppType.metadata, color = Accent)
                     }
                 }
+            }
+        }
+
+        Spacer(Modifier.height(20.dp))
+
+        /* ---------------- Addons y plugins ---------------- */
+        SettingsCard(iconRes = R.drawable.ic_link, title = "Addons Stremio · Plugins Nuvio") {
+            Column(Modifier.fillMaxWidth().padding(horizontal = 22.dp, vertical = 12.dp)) {
+                Text("Stremio: manifests con resources. Nuvio: índices de scrapers JS.", style = AppType.metadata, color = TextSecondary)
+                Spacer(Modifier.height(10.dp))
+                if (AddonRegistry.statuses.value.isEmpty()) {
+                    StatusLine("Stremio", "Sin addons instalados")
+                } else AddonRegistry.statuses.value.forEach { StatusLine(it.label, it.summary) }
+                Spacer(Modifier.height(8.dp))
+                if (NuvioPluginManager.repositories.value.isEmpty()) {
+                    StatusLine("Nuvio", "Sin repositorios guardados")
+                } else NuvioPluginManager.repositories.value.forEach { StatusLine(it.label, it.summary) }
+                StatusLine("Puente JS", bridgeStatus)
+                Text(
+                    "Los repositorios Nuvio no se ejecutan en el televisor. Sin puente solo quedan guardados. " +
+                        "Los torrents/P2P no se reproducen.",
+                    style = AppType.metadata, color = TextSecondary
+                )
+                Spacer(Modifier.height(12.dp))
+                PillButton(
+                    text = if (refreshing) "Comprobando…" else "Comprobar manifests y puente",
+                    primary = false,
+                    onClick = { if (!refreshing) scope.launch { checkIntegrations() } }
+                )
             }
         }
 
@@ -267,7 +317,7 @@ fun SettingsScreen(onSwitchProfile: () -> Unit) {
             )
             SettingRow(
                 title = "Motor de reproducción",
-                subtitle = "Reproductor integrado con soporte MP4, HLS y 4K",
+                subtitle = "Reproductor integrado con soporte MP4, HLS, DASH y 4K",
                 trailing = { ValueText("Media3 ExoPlayer") }
             )
             SettingRow(

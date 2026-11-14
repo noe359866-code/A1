@@ -82,7 +82,7 @@ fun HomeScreen(
                 playFocusRequester = heroFocus
             )
         }
-        items(rows.take(2), key = { it.title }) { row ->
+        items(rows.take(2), key = { it.key }) { row ->
             SectionRow(row = row, onOpenDetail = onOpenDetail)
         }
         // «Solo en {plataforma}» — como el «Only on Netflix» de flystream.net
@@ -99,7 +99,7 @@ fun HomeScreen(
                 StudioStripSection(onOpenStudio = onOpenStudio)
             }
         }
-        items(rows.drop(2), key = { it.title }) { row ->
+        items(rows.drop(2), key = { it.key }) { row ->
             SectionRow(row = row, onOpenDetail = onOpenDetail)
         }
     }

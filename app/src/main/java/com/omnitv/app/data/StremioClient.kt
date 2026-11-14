@@ -4,9 +4,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
-import java.net.HttpURLConnection
-import java.net.URL
-import java.net.URLEncoder
 
 /**
  * Cliente mínimo del protocolo de addons de Stremio (catalog / meta),
@@ -35,45 +32,29 @@ object StremioClient {
 
     /* ------------------------------- HTTP -------------------------------- */
 
-    /**
-     * Descarga [url] como JSON. Primero por el DNS normal; si el nombre no
-     * resuelve, reintenta con el DNS de Cloudflare ([Doh]).
-     */
-    private fun httpJson(url: String): JSONObject? =
-        httpJsonDirect(url) ?: Doh.retry(url)?.let { body ->
-            runCatching { JSONObject(body) }.getOrNull()
-        }
-
-    private fun httpJsonDirect(url: String): JSONObject? = runCatching {
-        val connection = URL(url).openConnection() as HttpURLConnection
-        try {
-            connection.connectTimeout = 10_000
-            connection.readTimeout = 10_000
-            connection.setRequestProperty("User-Agent", "OmniTV/1.0 (Android TV)")
-            connection.setRequestProperty("Accept", "application/json")
-            if (connection.responseCode !in 200..299) return null
-            JSONObject(connection.inputStream.bufferedReader().readText())
-        } finally {
-            connection.disconnect()
-        }
-    }.getOrNull()
+    private fun httpJson(url: String): JSONObject? = AddonHttp.getJson(url) as? JSONObject
 
     /* ------------------------------ Catálogo ----------------------------- */
 
-    /** Lee una lista de catálogo. `extras` se codifica como `search=…`, `genre=…&skip=20`. */
+    /** Extras en el path, no en la query: catalog/tipo/id/search=…&skip=20.json. */
     suspend fun fetchCatalog(
         base: String,
         type: String,
         catalogId: String,
         extras: Map<String, String> = emptyMap()
-    ): List<JSONObject> = withContext(Dispatchers.IO) {
-        val extraPath = if (extras.isEmpty()) {
-            ""
-        } else {
-            "/" + extras.entries.joinToString("&") { "${it.key}=${encode(it.value)}" }
-        }
-        val json = httpJson("$base/catalog/$type/$catalogId$extraPath.json")
-        json?.optJSONArray("metas").toObjectList()
+    ): List<JSONObject> = fetchCatalogPage(base, type, catalogId, extras).metas
+
+    suspend fun fetchCatalogPage(
+        base: String,
+        type: String,
+        catalogId: String,
+        extras: Map<String, String> = emptyMap()
+    ): CatalogPage = withContext(Dispatchers.IO) {
+        val json = httpJson(StremioUrl.catalog(base, type, catalogId, extras))
+        val metas = json?.optJSONArray("metas").toObjectList().filter { it.optString("id").isNotBlank() }
+        // Stremio no tiene un total obligatorio. Solo se ofrece otra página si
+        // skip está declarado y esta respuesta no ha venido vacía.
+        CatalogPage(metas, metas.isNotEmpty() && "skip" in extras)
     }
 
     /** Búsqueda dentro de un catálogo (`extra: search`). */
@@ -87,25 +68,26 @@ object StremioClient {
     /** Ficha completa (`meta/{type}/{id}`) con reparto y episodios (`videos`). */
     suspend fun fetchMeta(base: String, type: String, id: String): JSONObject? =
         withContext(Dispatchers.IO) {
-            httpJson("$base/meta/$type/$id.json")?.optJSONObject("meta")
+            httpJson(StremioUrl.resource(base, "meta", type, id))?.optJSONObject("meta")
         }
 
-    /** Manifest de un addon arbitrario (URL completa o base del addon). */
+    /** URL completa o base; nunca se pierde un prefijo de configuración. */
     suspend fun fetchManifest(urlOrBase: String): JSONObject? = withContext(Dispatchers.IO) {
-        val url = if (urlOrBase.endsWith(".json")) {
-            urlOrBase
-        } else {
-            "${urlOrBase.trimEnd('/')}/manifest.json"
-        }
+        val url = StremioUrl.normalize(urlOrBase) ?: return@withContext null
         httpJson(url)
     }
+
+    suspend fun fetchTypedManifest(urlOrBase: String): StremioManifest? =
+        fetchManifest(urlOrBase)?.let {
+            if (StremioManifestParser.validate(it) == null) StremioManifestParser.parse(it) else null
+        }
 
     /* ------------------------------ Mapeo -------------------------------- */
 
     /** Convierte un `meta` de Stremio en el modelo [Video] de Omni TV. */
-    fun parseVideo(meta: JSONObject, sourceName: String): Video {
+    fun parseVideo(meta: JSONObject, sourceName: String, metaAddonUrl: String? = null, fallbackType: String = "movie"): Video {
         val id = meta.optString("id").ifEmpty { meta.optString("imdb_id") }
-        val remoteType = meta.optString("type", "movie")
+        val remoteType = meta.optString("type", fallbackType)
         val genres = (meta.optJSONArray("genres") ?: meta.optJSONArray("genre")).toStringList()
         val poster = meta.optString("poster", "")
         val background = meta.optString("background", "").ifEmpty { poster }
@@ -164,13 +146,12 @@ object StremioClient {
             episodes = episodes,
             isRemote = true,
             source = sourceName,
-            remoteType = remoteType
+            remoteType = remoteType,
+            metaAddonUrl = metaAddonUrl
         )
     }
 
     /* ------------------------------ Utilidades --------------------------- */
-
-    private fun encode(value: String): String = URLEncoder.encode(value, "UTF-8")
 
     private fun parseRuntime(runtime: String): Int =
         runtime.filter { it.isDigit() }.toIntOrNull() ?: 0

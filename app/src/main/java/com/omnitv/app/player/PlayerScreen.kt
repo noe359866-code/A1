@@ -51,7 +51,6 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.Format
-import androidx.media3.common.MediaItem as ExoMediaItem
 import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.TrackGroup
@@ -142,7 +141,7 @@ fun PlayerScreen(
                         .build(),
                     /* handleAudioFocus = */ true
                 )
-                setMediaItem(ExoMediaItem.Builder().setUri(sources[0].url).build())
+                setMediaSource(streamMediaSource(context, sources[0]))
                 playWhenReady = SettingsStore.autoplay
                 if (SettingsStore.mutedStart) volume = 0f
                 setPlaybackSpeed(SettingsStore.playbackSpeed)
@@ -206,7 +205,7 @@ fun PlayerScreen(
     val switchServer: (Int) -> Unit = { index ->
         val position = player.currentPosition
         serverIndex = index
-        player.setMediaItem(ExoMediaItem.Builder().setUri(sources[index].url).build(), position)
+        player.setMediaSource(streamMediaSource(context, sources[index]), position)
         player.prepare()
         player.playWhenReady = true
         hasError = null
@@ -700,10 +699,7 @@ fun PlayerScreen(
                             modifier = Modifier.focusRequester(retryFocus),
                             onClick = {
                                 hasError = null
-                                player.setMediaItem(
-                                    ExoMediaItem.Builder().setUri(sources[serverIndex].url).build(),
-                                    positionMs
-                                )
+                                player.setMediaSource(streamMediaSource(context, sources[serverIndex]), positionMs)
                                 player.prepare()
                                 player.playWhenReady = true
                             }
@@ -760,7 +756,11 @@ fun PlayerScreen(
                             Spacer(Modifier.width(12.dp))
                             InfoChip(video.quality)
                             Spacer(Modifier.width(8.dp))
-                            InfoChip(if (video.streamFormat == StreamFormat.HLS) "HLS" else "MP4")
+                            InfoChip(when (sources.getOrNull(serverIndex)?.format ?: video.streamFormat) {
+                                    StreamFormat.HLS -> "HLS"
+                                    StreamFormat.DASH -> "DASH"
+                                    StreamFormat.MP4 -> "MP4"
+                                })
                             if (speed != 1f) {
                                 Spacer(Modifier.width(8.dp))
                                 InfoChip(SettingsStore.speedLabel(speed))

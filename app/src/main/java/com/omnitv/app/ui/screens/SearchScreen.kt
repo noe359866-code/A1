@@ -44,6 +44,7 @@ import com.omnitv.app.R
 import com.omnitv.app.data.CatalogRepository
 import com.omnitv.app.data.ProfileStore
 import com.omnitv.app.data.RemoteCatalog
+import com.omnitv.app.data.SettingsStore
 import com.omnitv.app.data.TvKeypad
 import com.omnitv.app.data.Video
 import com.omnitv.app.ui.components.PosterCard
@@ -78,7 +79,7 @@ fun SearchScreen(onOpenDetail: (Video) -> Unit) {
     // Búsqueda remota (catálogo real) con rebote
     var remoteResults by remember { mutableStateOf<List<Video>>(emptyList()) }
     var searching by remember { mutableStateOf(false) }
-    LaunchedEffect(query, kidsOnly) {
+    LaunchedEffect(query, kidsOnly, SettingsStore.revision) {
         val q = query.trim()
         if (q.length >= 2 && !kidsOnly) {
             delay(350)

@@ -1,218 +1,238 @@
 package com.omnitv.app.data
 
+import androidx.compose.runtime.mutableStateOf
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
+import org.json.JSONArray
 import org.json.JSONObject
-import java.net.HttpURLConnection
-import java.net.URL
 
-/**
- * Modelo de un scraper de Nuvio (plugin) — corresponde a una entrada de
- * `scrapers[]` en el manifest All-in-One-Nuvio.
- *
- * Cada scraper es un `providers/[id].js` que Nuvio ejecuta para sacar links
- * HTTP directos (mp4/mkv/m3u8/mpd) de una web concreta.
- *
- * Ejemplo: `{"id":"hianime","name":"HiAnime","supportedTypes":["movie","tv"],"formats":["m3u8"]}`
- */
+/** Entrada de un índice Nuvio. El JS asociado NO se ejecuta en el televisor. */
 data class NuvioScraper(
     val id: String,
     val name: String,
-    val description: String,
-    val version: String,
-    val author: String,
-    val supportedTypes: List<String>,
-    val filename: String,
-    val enabled: Boolean,
-    val hasSettings: Boolean,
-    val formats: List<String>,
-    val logo: String?,
-    val contentLanguage: List<String>,
+    val description: String = "",
+    val version: String = "1.0.0",
+    val author: String = "",
+    val supportedTypes: List<String> = listOf("movie", "tv"),
+    val filename: String = "providers/$id.js",
+    val enabled: Boolean = true,
+    val hasSettings: Boolean = false,
+    val formats: List<String> = listOf("mp4", "m3u8"),
+    val logo: String? = null,
+    val contentLanguage: List<String> = emptyList(),
     val limited: Boolean = false
 ) {
-    val isAnime: Boolean get() = name.contains("anime", ignoreCase = true) || id.contains("anime")
-    val isHindi: Boolean get() = "hi" in contentLanguage
-    val isFrench: Boolean get() = "fr" in contentLanguage
+    fun supports(type: String): Boolean {
+        val aliases = if (type == "series") setOf("series", "tv", "show") else setOf(type)
+        return supportedTypes.any { it.lowercase() in aliases }
+    }
 }
 
-/** Manifest de repositorio de plugins Nuvio (no confundir con addon Stremio). */
 data class NuvioPluginManifest(
     val name: String,
     val version: String,
     val scrapers: List<NuvioScraper>,
-    val raw: JSONObject
+    val raw: JSONObject,
+    val url: String = ""
 )
 
-/**
- * Gestor de plugins Nuvio — fetchea repos tipo All-in-One, cachea y expone
- * contadores para Ajustes y StreamHub.
- *
- * El manifest Nuvio con `scrapers[]` no es installable como addon Stremio;
- * es un índice. Cada `filename: providers/xyz.js` se ejecuta dentro de Nuvio.
- * En Omni TV lo tratamos como catalogo de fuentes: si hay un bridge local
- * (`http://192.168.x:8787/scrape/{id}`) que ejecute los JS, lo usamos.
- */
-object NuvioPluginManager {
-
-    private const val CONNECT_TIMEOUT = 10_000
-    private const val READ_TIMEOUT = 12_000
-
-    /** Cache en memoria: repoUrl -> manifest. */
-    private val cache = mutableMapOf<String, NuvioPluginManifest>()
-
-    /** Total de scrapers de todos los repos instalados (para UI). */
-    val totalScrapers: Int get() = cache.values.sumOf { it.scrapers.size }
-
-    /** Todos los scrapers agregados (para búsqueda por idioma/tipo). */
-    val allScrapers: List<NuvioScraper> get() = cache.values.flatMap { it.scrapers }
-
-    suspend fun fetchRepo(url: String): NuvioPluginManifest? = withContext(Dispatchers.IO) {
-        if (!NetPolicy.isAllowed(url)) return@withContext null
-        cache[url]?.let { return@withContext it }
-        val json = httpJson(url) ?: return@withContext null
-        val manifest = parseManifest(json) ?: return@withContext null
-        cache[url] = manifest
-        manifest
-    }
-
-    /** Refresca todos los repos configurados. */
-    suspend fun refreshAll(): List<NuvioPluginManifest> {
-        // TODO: integrar con SettingsStore cuando exista nuvioPlugins (mantener compilable con base 47b2116)
-        val urls: List<String> = emptyList()
-        if (urls.isEmpty()) return emptyList()
-        return urls.mapNotNull { fetchRepo(it) }
-    }
-
-    fun clearCache() { cache.clear() }
-
-    fun parseManifest(json: JSONObject): NuvioPluginManifest? {
-        if (!json.has("scrapers")) return null
-        val scrapersArray = json.optJSONArray("scrapers") ?: return null
-        val scrapers = buildList {
-            for (i in 0 until scrapersArray.length()) {
-                val o = scrapersArray.optJSONObject(i) ?: continue
-                val idRaw = o.optString("id")
-                if (idRaw.isBlank()) continue
-                val id = idRaw
-                add(
-                    NuvioScraper(
-                        id = id,
-                        name = o.optString("name", id),
-                        description = o.optString("description", ""),
-                        version = o.optString("version", "1.0.0"),
-                        author = o.optString("author", ""),
-                        supportedTypes = o.optJSONArray("supportedTypes").toStringList().ifEmpty { listOf("movie", "tv") },
-                        filename = o.optString("filename", "providers/$id.js"),
-                        enabled = o.optBoolean("enabled", true),
-                        hasSettings = o.optBoolean("hasSettings", false),
-                        formats = o.optJSONArray("formats").toStringList().ifEmpty { listOf("mp4", "m3u8") },
-                        logo = o.optString("logo").takeIf { it.isNotBlank() },
-                        contentLanguage = o.optJSONArray("contentLanguage").toStringList(),
-                        limited = o.optBoolean("limited", false)
-                    )
-                )
-            }
-        }
-        if (scrapers.isEmpty()) return null
-        return NuvioPluginManifest(
-            name = json.optString("name", "Nuvio Plugins"),
-            version = json.optString("version", "1.0.0"),
-            scrapers = scrapers,
-            raw = json
-        )
-    }
-
-    private fun org.json.JSONArray?.toStringList(): List<String> {
-        if (this == null) return emptyList()
-        return buildList { for (i in 0 until length()) optString(i).takeIf { it.isNotBlank() }?.let { add(it) } }
-    }
-
-    private fun httpJson(url: String): JSONObject? {
-        val direct = httpJsonDirect(url)
-        if (direct != null) return direct
-        val byDoh = Doh.retry(url) ?: return null
-        return runCatching { JSONObject(byDoh) }.getOrNull()
-    }
-
-    private fun httpJsonDirect(url: String): JSONObject? = runCatching {
-        val c = URL(url).openConnection() as HttpURLConnection
-        try {
-            c.connectTimeout = CONNECT_TIMEOUT
-            c.readTimeout = READ_TIMEOUT
-            c.setRequestProperty("User-Agent", "OmniTV/1.0 (Android TV)")
-            c.setRequestProperty("Accept", "application/json")
-            if (c.responseCode !in 200..299) return null
-            JSONObject(c.inputStream.bufferedReader().readText())
-        } finally { c.disconnect() }
-    }.getOrNull()
-
-    /** URLs de repositorios conocidos que el usuario puede añadir con 1 tap. */
-    val knownRepos: List<Pair<String, String>> = listOf(
-        "https://raw.githubusercontent.com/D3adlyRocket/All-in-One-Nuvio/refs/heads/main/manifest.json" to "All-in-One-Nuvio (68 scrapers)",
-        "https://raw.githubusercontent.com/yoruix/nuvio-providers/refs/heads/main/manifest.json" to "Yoru Providers",
-        "https://raw.githubusercontent.com/NuvioPlugin/All-in-One-Nuvio/refs/heads/main/manifest.json" to "D3adlyRocket Mirror"
-    )
+data class NuvioRepoStatus(
+    val url: String,
+    val manifest: NuvioPluginManifest? = null,
+    val error: String = ""
+) {
+    val label: String get() = manifest?.name ?: runCatching { java.net.URI(url).host }.getOrDefault("Nuvio")
+    val summary: String get() = manifest?.let {
+        "${it.scrapers.count { s -> s.enabled }} activos / ${it.scrapers.size} scrapers"
+    } ?: error.ifBlank { "Pendiente de comprobar" }
 }
 
 /**
- * Resolver de streams vía scrapers Nuvio — delega a un bridge local que sí
- * ejecuta los `providers/[id].js`.
- *
- * El bridge esperado (opcional) expone: `POST http://192.168.x:8787/scrape/{scraperId}` con body
- * `{"type":"movie","id":"tt123","extra":{"tmdbId":"123","title":"..."}}` y
- * responde `{"streams":[{"url":"https://...","quality":"1080p","name":"HiAnime"}]}`.
- * Si no hay bridge, devuelve vacío y StreamHub sigue con Stremio.
+ * Gestiona índices `scrapers[]`, no los confunde con Stremio ni anuncia una
+ * ejecución JS que no existe. La ejecución se delega al puente configurado.
  */
-object NuvioScraperResolver {
+object NuvioPluginManager {
+    const val TTL_MS = 5 * 60_000L
+    private val mutex = Mutex()
+    private val cache = mutableMapOf<String, Pair<Long, NuvioRepoStatus>>()
+    val repositories = mutableStateOf<List<NuvioRepoStatus>>(emptyList())
+    val refreshing = mutableStateOf(false)
+    val lastError = mutableStateOf("")
 
-    /** Bridge configurado — si es null, los scrapers no resuelven (solo se listan). */
-    var bridgeBase: String? = null
+    val totalScrapers: Int get() = repositories.value.sumOf { it.manifest?.scrapers?.size ?: 0 }
+    val allScrapers: List<NuvioScraper> get() = repositories.value.flatMap { it.manifest?.scrapers.orEmpty() }
 
-    suspend fun resolveScraper(scraperId: String, type: String, videoId: String): List<StreamLink> {
-        val base = bridgeBase?.trimEnd('/') ?: return emptyList()
-        if (!NetPolicy.isAllowed(base)) return emptyList()
-        return withContext(Dispatchers.IO) {
-            runCatching {
-                val url = URL("$base/scrape/$scraperId")
-                val body = org.json.JSONObject().apply {
-                    put("type", type)
-                    put("id", videoId)
-                }.toString()
-                val c = url.openConnection() as HttpURLConnection
-                try {
-                    c.connectTimeout = 6_000
-                    c.readTimeout = 10_000
-                    c.requestMethod = "POST"
-                    c.doOutput = true
-                    c.setRequestProperty("Content-Type", "application/json")
-                    c.setRequestProperty("User-Agent", "OmniTV/1.0 (Android TV)")
-                    c.outputStream.bufferedWriter().use { it.write(body) }
-                    if (c.responseCode !in 200..299) return@runCatching emptyList<StreamLink>()
-                    val json = JSONObject(c.inputStream.bufferedReader().readText())
-                    parseStreams(json)
-                } finally { c.disconnect() }
-            }.getOrDefault(emptyList())
+    suspend fun fetchRepo(url: String, force: Boolean = false): NuvioPluginManifest? =
+        refresh(listOf(url), force).firstOrNull()?.manifest
+
+    suspend fun refreshAll(force: Boolean = false): List<NuvioPluginManifest> =
+        refresh(SettingsStore.nuvioPlugins, force).mapNotNull { it.manifest }
+
+    suspend fun refresh(urls: List<String>, force: Boolean = false): List<NuvioRepoStatus> = mutex.withLock {
+        refreshing.value = true
+        try {
+            val normalized = urls.map { it.trim() }.filter(NetPolicy::isAllowed).distinct()
+            val now = System.currentTimeMillis()
+            val results = coroutineScope {
+                normalized.map { url ->
+                    async {
+                        val old = cache[url]
+                        if (!force && old != null && now - old.first < TTL_MS && old.second.manifest != null) old.second
+                        else {
+                            val json = withContext(Dispatchers.IO) { AddonHttp.getJson(url) as? JSONObject }
+                            val manifest = json?.let { parseManifest(it, url) }
+                            val status = when {
+                                json == null -> NuvioRepoStatus(url, old?.second?.manifest, "No se pudo descargar el índice JSON")
+                                manifest == null -> NuvioRepoStatus(url, error = "No es un repositorio Nuvio válido (scrapers[])")
+                                else -> NuvioRepoStatus(url, manifest)
+                            }
+                            cache[url] = now to status
+                            status
+                        }
+                    }
+                }.awaitAll()
+            }
+            cache.keys.retainAll(normalized.toSet())
+            repositories.value = results
+            lastError.value = results.firstOrNull { it.error.isNotEmpty() }?.let { "${it.label}: ${it.error}" }.orEmpty()
+            results
+        } finally {
+            refreshing.value = false
         }
     }
 
-    private fun parseStreams(json: JSONObject): List<StreamLink> {
-        val arr = json.optJSONArray("streams") ?: json.optJSONArray("results") ?: return emptyList()
-        return buildList {
-            for (i in 0 until arr.length()) {
-                val o = arr.optJSONObject(i) ?: continue
-                val url = o.optString("url").ifEmpty { o.optString("link") }
-                if (url.isBlank() || !NetPolicy.isAllowed(url)) continue
+    fun clearCache() {
+        cache.clear()
+        repositories.value = emptyList()
+        lastError.value = ""
+    }
+
+    fun parseManifest(json: JSONObject, url: String = ""): NuvioPluginManifest? {
+        val array = json.optJSONArray("scrapers") ?: return null
+        val scrapers = buildList {
+            for (i in 0 until array.length()) {
+                val obj = array.optJSONObject(i) ?: continue
+                val id = obj.optString("id").trim()
+                // El id acabará en una ruta HTTP del puente: nunca una ruta arbitraria.
+                if (!id.matches(Regex("[A-Za-z0-9_-]+"))) continue
                 add(
-                    StreamLink(
-                        label = o.optString("name", o.optString("title", o.optString("provider", scraperLabel(o)))),
-                        url = url,
-                        quality = o.optString("quality", o.optString("resolution", "")),
-                        format = if (url.contains(".m3u8")) StreamFormat.HLS else StreamFormat.MP4
+                    NuvioScraper(
+                        id = id,
+                        name = obj.optString("name", id),
+                        description = obj.optString("description"),
+                        version = obj.optString("version", "1.0.0"),
+                        author = obj.optString("author"),
+                        supportedTypes = obj.optJSONArray("supportedTypes").toStringList().ifEmpty { listOf("movie", "tv") },
+                        filename = obj.optString("filename", "providers/$id.js"),
+                        enabled = obj.optBoolean("enabled", true),
+                        hasSettings = obj.optBoolean("hasSettings", false),
+                        formats = obj.optJSONArray("formats").toStringList().ifEmpty { listOf("mp4", "m3u8") },
+                        logo = obj.optString("logo").takeIf { it.isNotBlank() },
+                        contentLanguage = obj.optJSONArray("contentLanguage").toStringList(),
+                        limited = obj.optBoolean("limited", false)
                     )
                 )
             }
-        }
+        }.distinctBy { it.id }
+        if (scrapers.isEmpty()) return null
+        return NuvioPluginManifest(json.optString("name", "Nuvio Plugins"), json.optString("version", "1.0.0"), scrapers, json, url)
     }
 
-    private fun scraperLabel(o: JSONObject): String = o.optString("scraper", "Nuvio")
+    private fun JSONArray?.toStringList(): List<String> {
+        if (this == null) return emptyList()
+        return buildList { for (i in 0 until length()) optString(i).takeIf { it.isNotBlank() }?.let { add(it) } }
+    }
+}
+
+/** Petición de ejecución al puente; `tv` y `series` representan lo mismo. */
+internal object NuvioBridgeRequest {
+    fun body(repo: NuvioPluginManifest, scraper: NuvioScraper, type: String, videoId: String): String {
+        val parts = videoId.split(':')
+        val tmdb = videoId.startsWith("tmdb:")
+        val canonical = if (tmdb) "tmdb:${parts.getOrNull(1).orEmpty()}" else parts.first()
+        val season = parts.getOrNull(if (tmdb) 2 else 1)?.toIntOrNull()
+        val episode = parts.getOrNull(if (tmdb) 3 else 2)?.toIntOrNull()
+        val extra = JSONObject().apply {
+            put("tmdbId", canonical.takeIf { it.startsWith("tmdb:") }?.removePrefix("tmdb:"))
+            put("imdbId", canonical.takeIf { it.startsWith("tt") })
+            put("season", season)
+            put("episode", episode)
+        }
+        return JSONObject().apply {
+            put("type", if (type == "series") "tv" else type)
+            put("id", videoId)
+            put("repoUrl", repo.url)
+            put("filename", scraper.filename)
+            put("scraper", scraper.id)
+            put("extra", extra)
+        }.toString()
+    }
+}
+
+/**
+ * Puente opcional: POST /scrape/{id}. Sin URL no hay scrapers activos.
+ * Se envían repositorio y archivo para distinguir ids repetidos entre repos.
+ * El puente debe ejecutar el JS y devolver streams/results con URL HTTP directa.
+ */
+object NuvioScraperResolver {
+    val lastStatus = mutableStateOf("")
+    private val limiter = Semaphore(6)
+
+    suspend fun resolve(type: String, videoId: String): List<StreamLink> {
+        val base = SettingsStore.nuvioBridge.trim().trimEnd('/')
+        if (base.isEmpty()) {
+            lastStatus.value = "Plugins Nuvio guardados: configura el puente JS para ejecutarlos"
+            return emptyList()
+        }
+        if (!NetPolicy.isAllowed(base)) {
+            lastStatus.value = "URL del puente Nuvio no permitida"
+            return emptyList()
+        }
+        val repos = NuvioPluginManager.refreshAll().filter { it.url.isNotEmpty() }
+        val jobs = repos.flatMap { repo -> repo.scrapers.filter { it.enabled && it.supports(type) }.map { repo to it } }
+        if (jobs.isEmpty()) {
+            lastStatus.value = "Nuvio no tiene scrapers activos para $type"
+            return emptyList()
+        }
+        val links = coroutineScope {
+            jobs.map { (repo, scraper) ->
+                async {
+                    limiter.withPermit {
+                        val body = NuvioBridgeRequest.body(repo, scraper, type, videoId)
+                        val json = withContext(Dispatchers.IO) {
+                            AddonHttp.postJson("$base/scrape/${StremioUrl.encodeSegment(scraper.id)}", body)
+                        }
+                        StreamResponse.parse(json, scraper.name).map { it.copy(label = "${scraper.name} · ${it.label}".take(100)) }
+                    }
+                }
+            }.awaitAll().flatten()
+        }.distinctBy { it.url }
+        lastStatus.value = if (links.isEmpty()) "El puente Nuvio no entregó enlaces para este título"
+        else "${links.size} enlaces del puente Nuvio"
+        return links
+    }
+
+    /** Prueba solo conectividad/protocolo, no afirma haber ejecutado ningún scraper. */
+    suspend fun checkBridge(): String {
+        val base = SettingsStore.nuvioBridge.trim().trimEnd('/')
+        if (base.isEmpty()) return "Puente JS no configurado"
+        if (!NetPolicy.isAllowed(base)) return "URL del puente no permitida"
+        val json = withContext(Dispatchers.IO) { AddonHttp.getJson("$base/health") as? JSONObject }
+        return if (json != null && json.optBoolean("ok", false)) "Puente conectado · ejecución JS externa"
+        else "El puente no respondió correctamente a /health"
+    }
+}
+
+/** Adaptador Nuvio para el mismo resolvedor multi-fuente que los addons Stremio. */
+internal class NuvioStreamAddon : StreamAddon {
+    override val id = "nuvio-plugins"
+    override val name = "Plugins Nuvio"
+    override suspend fun resolve(type: String, videoId: String): List<StreamLink> = NuvioScraperResolver.resolve(type, videoId)
 }

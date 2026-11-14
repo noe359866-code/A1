@@ -77,6 +77,14 @@ object SettingsStore {
     var streamAddons by mutableStateOf<List<String>>(emptyList())
         private set
 
+    /** Índices de plugins Nuvio (`scrapers[]`), NO addons Stremio. */
+    var nuvioPlugins by mutableStateOf<List<String>>(emptyList())
+        private set
+
+    /** Puente HTTP opcional que ejecuta los JS de Nuvio en otro equipo. */
+    var nuvioBridge by mutableStateOf("")
+        private set
+
     /** APIs añadidas desde el panel (nombre → clave). */
     var apiKeys by mutableStateOf<Map<String, String>>(emptyMap())
         private set
@@ -119,6 +127,8 @@ object SettingsStore {
         // Las URLs guardadas por versiones anteriores también pasan la política de red
         customAddons = parseStringList(p.getString("customAddons", "[]")).filter { NetPolicy.isAllowed(it) }
         streamAddons = parseStringList(p.getString("streamAddons", "[]")).filter { NetPolicy.isAllowed(it) }
+        nuvioPlugins = parseStringList(p.getString("nuvioPlugins", "[]")).filter { NetPolicy.isAllowed(it) }
+        nuvioBridge = (p.getString("nuvioBridge", "") ?: "").takeIf { NetPolicy.isAllowed(it) }.orEmpty()
         loadApiKeys(p)
     }
 
@@ -196,7 +206,7 @@ object SettingsStore {
      * Solo se aceptan las URLs que cumplen [NetPolicy] (https, o http en la red local).
      */
     fun saveCustomAddons(urls: List<String>) {
-        val cleaned = urls.map { it.trim() }.filter { NetPolicy.isAllowed(it) }.distinct()
+        val cleaned = urls.mapNotNull(StremioUrl::normalize).distinct()
         update { putString("customAddons", org.json.JSONArray(cleaned).toString()) }.also {
             customAddons = cleaned
             revision++
@@ -213,6 +223,26 @@ object SettingsStore {
             streamAddons = cleaned
             revision++
         }
+    }
+
+    /** Guarda repositorios Nuvio; su contenido se valida al refrescar, no al escribir. */
+    fun saveNuvioPlugins(urls: List<String>) {
+        val cleaned = urls.map { it.trim() }.filter { NetPolicy.isAllowed(it) }.distinct()
+        update { putString("nuvioPlugins", org.json.JSONArray(cleaned).toString()) }
+        nuvioPlugins = cleaned
+        revision++
+    }
+
+    /** Vaciar la URL desconecta el puente sin borrar los repositorios guardados. */
+    fun saveNuvioBridge(url: String) {
+        val cleaned = url.trim().trimEnd('/').takeIf {
+            it.isEmpty() || (NetPolicy.isAllowed(it) && runCatching {
+                val uri = java.net.URI(it); uri.rawQuery == null && uri.rawFragment == null
+            }.getOrDefault(false))
+        }.orEmpty()
+        update { putString("nuvioBridge", cleaned) }
+        nuvioBridge = cleaned
+        revision++
     }
 
     /** Guarda las APIs añadidas desde el panel (nombre → clave). */

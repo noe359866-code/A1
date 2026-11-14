@@ -5,6 +5,9 @@ import androidx.compose.runtime.mutableStateOf
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * Estado observable del catálogo real (Cinemeta + Nuvio).
@@ -30,6 +33,26 @@ object RemoteCatalog {
     /** Ya se intentó cargar alguna vez (para no repetir). */
     val loaded = mutableStateOf(false)
 
+    private val refreshMutex = Mutex()
+    private val pageMutex = Mutex()
+    private var catalogPages = emptyList<CatalogPageState>()
+    val loadingMore = mutableStateOf(false)
+    val canLoadMore = mutableStateOf(false)
+    val lastError = mutableStateOf("")
+
+    /** Página de un catálogo instalado; el offset avanza con el botón del mando. */
+    private data class CatalogPageState(
+        val key: String,
+        val title: String,
+        val base: String,
+        val source: String,
+        val manifestUrl: String,
+        val catalog: StremioCatalog,
+        val extras: Map<String, String>,
+        val skip: Int,
+        val hasMore: Boolean
+    )
+
     /** Selección curada: nombre visible → addon, tipo y catálogo. */
     private data class RowSpec(
         val title: String,
@@ -51,37 +74,37 @@ object RemoteCatalog {
         RowSpec("En familia", StremioClient.NUVIO, StremioClient.NUVIO_NAME, "movie", "family-movies")
     )
 
-    /** Carga (o recarga) el catálogo remoto. Idempotente y en paralelo. */
-    suspend fun refresh() {
+    /** Carga (o recarga) el catálogo remoto. Un addon caído no bloquea los demás. */
+    suspend fun refresh() = refreshMutex.withLock {
+        val revision = SettingsStore.revision
         loading.value = true
-        val loadedRows = coroutineScope {
-            homeRows.map { spec ->
-                async {
-                    val metas = StremioClient.fetchCatalog(spec.base, spec.type, spec.catalogId)
-                    val videos = metas.map { StremioClient.parseVideo(it, spec.sourceName) }
-                    videos.forEach { CatalogRepository.registerRemote(it) }
-                    MediaRow(spec.title, videos)
-                }
-            }.awaitAll()
+        lastError.value = ""
+        try {
+            val loadedRows = coroutineScope {
+                homeRows.map { spec ->
+                    async {
+                        val metas = runCatching { StremioClient.fetchCatalog(spec.base, spec.type, spec.catalogId) }.getOrDefault(emptyList())
+                        val videos = metas.map { StremioClient.parseVideo(it, spec.sourceName) }
+                        videos.forEach { CatalogRepository.registerRemote(it) }
+                        MediaRow(spec.title, videos)
+                    }
+                }.awaitAll()
+            }
+            val installed = AddonRegistry.refresh(SettingsStore.customAddons)
+            val custom = loadInstalledCatalogs(installed)
+            rows.clear()
+            val named = loadedRows.filter { it.items.isNotEmpty() }.map { MediaRow(it.title, it.items, it.title) } +
+                custom.map { MediaRow(it.title, it.videos, it.key) }
+            rows.addAll(named.distinctBy { it.key })
+            gridVideos.clear()
+            gridVideos.addAll((loadedRows.flatMap { it.items } + custom.flatMap { it.videos })
+                .filter { it.type == VideoType.MOVIE }.distinctBy { it.id })
+            featured.value = rows.firstOrNull()?.items?.firstOrNull()
+            loadedRevision = revision
+            loaded.value = true
+        } finally {
+            loading.value = false
         }
-
-        // Addons añadidos por el usuario desde el panel web del QR
-        val customRows = loadCustomAddons()
-
-        rows.clear()
-        rows.addAll(loadedRows.filter { it.items.isNotEmpty() } + customRows)
-
-        gridVideos.clear()
-        gridVideos.addAll(
-            (loadedRows + customRows).flatMap { it.items }
-                .filter { it.type == VideoType.MOVIE }
-                .distinctBy { it.id }
-        )
-
-        featured.value = rows.firstOrNull()?.items?.firstOrNull()
-        loading.value = false
-        loaded.value = true
-        loadedRevision = SettingsStore.revision
     }
 
     private var loadedRevision = -1
@@ -89,58 +112,106 @@ object RemoteCatalog {
     /** Hay que recargar (primera vez o cambio de configuración vía panel). */
     fun needsReload(): Boolean = !loaded.value || loadedRevision != SettingsStore.revision
 
-    /**
-     * Catálogos de los addons Stremio añadidos por el usuario desde el
-     * panel web del QR (`SettingsStore.customAddons`).
-     */
-    private suspend fun loadCustomAddons(): List<MediaRow> {
-        val urls = SettingsStore.customAddons
-        if (urls.isEmpty()) return emptyList()
-        return coroutineScope {
-            urls.map { manifestUrl ->
+    private data class LoadedCatalog(val key: String, val title: String, val videos: List<Video>, val state: CatalogPageState)
+
+    private suspend fun loadInstalledCatalogs(installed: List<AddonStatus>): List<LoadedCatalog> = coroutineScope {
+        installed.filter { it.manifest != null }.flatMap { status ->
+            val manifest = status.manifest!!
+            val url = status.url
+            manifest.catalogs.filter { manifest.supports("catalog", it.type, "") }.map { catalog ->
                 async {
-                    val base = manifestUrl
-                        .substringBefore("/manifest.json")
-                        .trimEnd('/')
-                    val manifest = StremioClient.fetchManifest(manifestUrl) ?: return@async emptyList()
-                    val addonName = manifest.optString("name", "Addon")
-                    val catalogs = manifest.optJSONArray("catalogs").toCatalogList()
-                    catalogs.take(2).mapNotNull { cat ->
-                        val type = cat.optString("type", "movie")
-                        val id = cat.optString("id")
-                        if (id.isBlank()) return@mapNotNull null
-                        val metas = StremioClient.fetchCatalog(base, type, id)
-                        val videos = metas.take(20).map { StremioClient.parseVideo(it, addonName) }
-                        videos.forEach { CatalogRepository.registerRemote(it) }
-                        if (videos.isEmpty()) null
-                        else MediaRow("$addonName · ${cat.optString("name", id)}", videos)
-                    }
+                    val requested = if (catalog.supportsExtra("skip")) mapOf("skip" to "0") else emptyMap()
+                    val extras = manifest.catalogExtras(catalog, requested) ?: return@async null
+                    val key = "$url|${catalog.type}|${catalog.id}"
+                    val title = "${manifest.name} · ${catalog.name} (${catalog.type})"
+                    val base = StremioUrl.base(url)
+                    val page = fetchPage(base, catalog, extras) ?: return@async null
+                    val videos = page.metas.map { StremioClient.parseVideo(it, manifest.name, url.takeIf { _ -> manifest.supports("meta", catalog.type, it.optString("id")) }, catalog.type) }
+                        .filter { it.id.isNotBlank() }.distinctBy { it.id }
+                    videos.forEach { CatalogRepository.registerRemote(it) }
+                    LoadedCatalog(key, title, videos, CatalogPageState(key, title, base, manifest.name, url, catalog, extras,
+                        page.metas.size, page.hasMore && catalog.supportsExtra("skip")))
                 }
-            }.awaitAll().flatten()
+            }
+        }.awaitAll().filterNotNull().also { loaded ->
+            catalogPages = loaded.map { it.state }
+            canLoadMore.value = catalogPages.any { it.hasMore }
         }
     }
 
-    private fun org.json.JSONArray?.toCatalogList(): List<org.json.JSONObject> {
-        if (this == null) return emptyList()
-        return buildList {
-            for (i in 0 until length()) optJSONObject(i)?.let { add(it) }
+    private suspend fun fetchPage(base: String, catalog: StremioCatalog, extras: Map<String, String>): CatalogPage? =
+        withTimeoutOrNull(12_000L) {
+            runCatching { StremioClient.fetchCatalogPage(base, catalog.type, catalog.id, extras) }.getOrNull()
         }
+
+    /** Siguiente página de cada catálogo que declara skip; botón visible en Películas. */
+    suspend fun loadMore() = pageMutex.withLock {
+        if (loadingMore.value || !canLoadMore.value) return@withLock
+        loadingMore.value = true
+        val revision = SettingsStore.revision
+        try {
+            val installed = AddonRegistry.refresh()
+            val next = coroutineScope {
+                catalogPages.map { page ->
+                    async {
+                        if (!page.hasMore) return@async page
+                        val extras = page.extras + ("skip" to page.skip.toString())
+                        val result = fetchPage(page.base, page.catalog, extras)
+                        if (result == null) {
+                            lastError.value = "No se pudo cargar más de ${page.title}"
+                            return@async page.copy(hasMore = false)
+                        }
+                        val manifest = installed.firstOrNull { it.url == page.manifestUrl }?.manifest
+                        val videos = result.metas.map {
+                            StremioClient.parseVideo(it, page.source, page.manifestUrl.takeIf { _ ->
+                                manifest?.supports("meta", page.catalog.type, it.optString("id")) == true
+                            }, page.catalog.type)
+                        }.filter { it.id.isNotBlank() }.distinctBy { it.id }
+                        videos.forEach { CatalogRepository.registerRemote(it) }
+                        if (revision == SettingsStore.revision) {
+                            val index = rows.indexOfFirst { it.key == page.key }
+                            if (index >= 0) rows[index] = rows[index].copy(items = (rows[index].items + videos).distinctBy { it.id })
+                            if (page.catalog.type == "movie") {
+                                val all = (gridVideos + videos).distinctBy { it.id }
+                                gridVideos.clear(); gridVideos.addAll(all)
+                            }
+                        }
+                        page.copy(skip = page.skip + result.metas.size, hasMore = result.hasMore)
+                    }
+                }.awaitAll()
+            }
+            if (revision == SettingsStore.revision) {
+                catalogPages = next
+                canLoadMore.value = next.any { it.hasMore }
+            }
+        } finally { loadingMore.value = false }
     }
 
-    /** Búsqueda remota en Cinemeta (películas y series) + Nuvio. */
+    /** Cinemeta/Nuvio + solo los catálogos instalados que declaran search. */
     suspend fun search(query: String): List<Video> {
         if (query.isBlank()) return emptyList()
         val results = coroutineScope {
-            listOf(
-                async { StremioClient.fetchSearch(StremioClient.CINEMETA, "movie", "top", query) },
-                async { StremioClient.fetchSearch(StremioClient.CINEMETA, "series", "top", query) },
-                async { StremioClient.fetchSearch(StremioClient.NUVIO, "movie", "popular-movies", query) }
-            ).awaitAll().flatten()
+            val builtin = listOf(
+                async { StremioClient.fetchSearch(StremioClient.CINEMETA, "movie", "top", query).map { StremioClient.parseVideo(it, StremioClient.CINEMETA_NAME) } },
+                async { StremioClient.fetchSearch(StremioClient.CINEMETA, "series", "top", query).map { StremioClient.parseVideo(it, StremioClient.CINEMETA_NAME) } },
+                async { StremioClient.fetchSearch(StremioClient.NUVIO, "movie", "popular-movies", query).map { StremioClient.parseVideo(it, StremioClient.NUVIO_NAME) } }
+            )
+            val custom = AddonRegistry.refresh().filter { it.manifest != null }.flatMap { status ->
+                val manifest = status.manifest!!
+                val url = status.url
+                manifest.catalogs.filter { it.supportsExtra("search") && manifest.supports("catalog", it.type, "") }.map { catalog ->
+                    async {
+                        val extras = manifest.catalogExtras(catalog, mapOf("search" to query)) ?: return@async emptyList()
+                        val metas = withTimeoutOrNull(10_000L) {
+                            runCatching { StremioClient.fetchCatalog(StremioUrl.base(url), catalog.type, catalog.id, extras) }.getOrDefault(emptyList())
+                        }.orEmpty()
+                        metas.map { StremioClient.parseVideo(it, manifest.name, url.takeIf { _ -> manifest.supports("meta", catalog.type, it.optString("id")) }, catalog.type) }
+                    }
+                }
+            }
+            (builtin + custom).awaitAll().flatten()
         }
-        return results
-            .map { StremioClient.parseVideo(it, if (it.optString("id").startsWith("tt")) StremioClient.CINEMETA_NAME else StremioClient.NUVIO_NAME) }
-            .distinctBy { it.id }
-            .also { list -> list.forEach { CatalogRepository.registerRemote(it) } }
+        return results.filter { it.id.isNotBlank() }.distinctBy { it.id }.also { list -> list.forEach { CatalogRepository.registerRemote(it) } }
     }
 
     /**
@@ -151,26 +222,31 @@ object RemoteCatalog {
      * El caché conserva tanto el id canónico como el id de navegación.
      */
     suspend fun fetchDetail(video: Video): Video? {
-        val base = if (video.id.startsWith("tmdb:")) {
-            StremioClient.NUVIO
-        } else {
-            StremioClient.baseFor(video.source)
-        }
-        // Tipo remoto: el declarado; si se desconoce o no responde, se prueban
-        // ambos (movie ↔ series) — evita fichas vacías al reabrir desde
-        // «Mi lista» / «Continuar viendo» tras reiniciar la app
-        val candidates = video.remoteType?.let { listOf(it) } ?: listOf("movie", "series")
-        var type = candidates.first()
+        val installed = AddonRegistry.refresh()
+        val types = video.remoteType?.let { listOf(it) } ?: listOf("movie", "series")
+        var type = types.first()
         var meta: org.json.JSONObject? = null
-        for (candidate in candidates) {
-            meta = StremioClient.fetchMeta(base, candidate, video.id)
-            if (meta != null) {
-                type = candidate
+        var metaUrl = video.metaAddonUrl
+        for (candidateType in types) {
+            // Primero el addon de origen; después los que declaran meta para
+            // ese tipo/prefijo. Cinemeta/Nuvio solo reciben ids que les competen.
+            val compatible = installed.filter { it.manifest?.supports("meta", candidateType, video.id) == true }
+                .sortedByDescending { it.url == video.metaAddonUrl }
+            val sources = compatible.map { StremioUrl.base(it.url) to it.url }.toMutableList()
+            if (video.id.startsWith("tt") || video.id.startsWith("tmdb:")) {
+                val builtin = if (video.id.startsWith("tmdb:")) StremioClient.NUVIO else StremioClient.baseFor(video.source)
+                sources.add(minOf(1, sources.size), builtin to null)
+            }
+            for ((base, url) in sources.distinctBy { it.first }) {
+                val result = StremioClient.fetchMeta(base, candidateType, video.id) ?: continue
+                if (!result.has("type")) result.put("type", candidateType)
+                meta = result; type = candidateType; metaUrl = url
                 break
             }
+            if (meta != null) break
         }
         val fullMeta = meta ?: return null
-        var full = StremioClient.parseVideo(fullMeta, video.source)
+        var full = StremioClient.parseVideo(fullMeta, video.source, metaUrl)
 
         // Episodios reales desde Cinemeta (su meta trae videos[] por temporada)
         if (full.episodes.isEmpty() && full.id.startsWith("tt")) {

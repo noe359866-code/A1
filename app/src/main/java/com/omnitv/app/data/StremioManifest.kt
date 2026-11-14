@@ -2,17 +2,10 @@ package com.omnitv.app.data
 
 import org.json.JSONArray
 import org.json.JSONObject
+import java.net.URI
+import java.net.URLEncoder
 
-/**
- * Parser tolerante de manifest.json de Stremio — soporta todas las variantes
- * que circulan (Cinemeta, Nuvio, Torrentio, Comet, AIOStreams, etc.).
- *
- * Un manifest puede traer:
- * - `resources: ["catalog","meta","stream"]`  o
- * - `resources: [{name:"stream", types:["movie"], idPrefixes:["tt"]}, "catalog"]`
- * - `catalogs: [{type:"movie", id:"top", name:"…", extra:[{name:"search",isRequired:false}]}]`
- * - `types: ["movie","series"]`, `idPrefixes: ["tt","tmdb"]`, `behaviorHints:{adult:false}`
- */
+/** Manifiesto Stremio tipado. Las restricciones pueden ser globales o por recurso. */
 data class StremioManifest(
     val id: String,
     val version: String,
@@ -28,19 +21,31 @@ data class StremioManifest(
     val raw: JSONObject
 ) {
     fun supportsResource(name: String): Boolean = resources.any { it.name == name }
-    fun isCatalogAddon(): Boolean = supportsResource("catalog") && catalogs.isNotEmpty()
-    fun isStreamAddon(): Boolean = supportsResource("stream")
-    fun isMetaAddon(): Boolean = supportsResource("meta")
+    fun isCatalogAddon(): Boolean = catalogs.any { supports("catalog", it.type, "") }
+    fun isStreamAddon(): Boolean = resources.any { it.name == "stream" }
+    fun isMetaAddon(): Boolean = resources.any { it.name == "meta" }
+    fun supportsType(requestedType: String): Boolean = types.isEmpty() || requestedType in types
+    fun supportsId(id: String): Boolean = matchesPrefix(id, idPrefixes)
 
-    fun supportsType(requestedType: String): Boolean {
-        if (types.isEmpty()) return true
-        return requestedType in types
+    /** Comprueba conjuntamente el recurso, el tipo y los prefijos admitidos. */
+    fun supports(resource: String, type: String, id: String): Boolean {
+        if (!supportsType(type) || !supportsId(id)) return false
+        return resources.any {
+            it.name == resource &&
+                (it.types.isEmpty() || type in it.types) &&
+                matchesPrefix(id, it.idPrefixes)
+        }
     }
 
-    fun supportsId(id: String): Boolean {
-        if (idPrefixes.isEmpty()) return true
-        return idPrefixes.any { prefix -> id.startsWith(prefix) }
-    }
+    fun catalogFor(type: String, id: String): StremioCatalog? =
+        catalogs.firstOrNull { it.type == type && it.id == id && supports("catalog", type, "") }
+
+    /** Un extra obligatorio sin valor/opción hace que la petición no sea válida. */
+    fun catalogExtras(catalog: StremioCatalog, requested: Map<String, String> = emptyMap()): Map<String, String>? =
+        catalog.normalizedExtras(requested)
+
+    private fun matchesPrefix(id: String, prefixes: List<String>): Boolean =
+        id.isEmpty() || prefixes.isEmpty() || prefixes.any { id.startsWith(it) }
 }
 
 data class StremioResource(
@@ -58,15 +63,23 @@ data class StremioCatalog(
     val extraRequired: List<String> = emptyList(),
     val raw: JSONObject? = null
 ) {
-    /** El catálogo acepta el extra `key` (ej: search, genre, skip). */
-    fun supportsExtra(key: String): Boolean {
-        if (extra.any { it.name == key }) return true
-        if (extraSupported.contains(key)) return true
-        if (extraRequired.contains(key)) return true
-        // legacy: si no declara extra, algunos addons aceptan search igual — tratar como soportado si es search/skip
-        if (extra.isEmpty() && extraSupported.isEmpty() && extraRequired.isEmpty()) return key in setOf("search", "genre", "skip")
-        return false
+    /** No se presupone search/skip: un addon debe declararlos. */
+    fun supportsExtra(key: String): Boolean =
+        extra.any { it.name == key } || key in extraSupported || key in extraRequired
+
+    fun normalizedExtras(requested: Map<String, String> = emptyMap()): Map<String, String>? {
+        val result = requested.filterKeys(::supportsExtra).filterValues { it.isNotBlank() }.toMutableMap()
+        for (name in requiredExtras) {
+            if (!result[name].isNullOrBlank()) continue
+            val default = extra.firstOrNull { it.name == name }?.options?.firstOrNull()
+            if (default.isNullOrBlank()) return null
+            result[name] = default
+        }
+        return result
     }
+
+    val requiredExtras: Set<String>
+        get() = (extraRequired + extra.filter { it.isRequired }.map { it.name }).toSet()
 }
 
 data class StremioExtra(
@@ -77,92 +90,80 @@ data class StremioExtra(
 )
 
 object StremioManifestParser {
+    /** Valida lo indispensable; `scrapers[]` por sí solo NO es un addon Stremio. */
+    fun validate(json: JSONObject): String? = when {
+        json.optString("id").isBlank() -> "Falta id en el manifest"
+        json.optString("name").isBlank() -> "Falta name en el manifest"
+        json.optJSONArray("resources")?.length() == 0 || json.optJSONArray("resources") == null ->
+            "Falta resources: ¿es un repositorio de plugins Nuvio?"
+        parseResources(json.optJSONArray("resources")).isEmpty() -> "resources no contiene recursos válidos"
+        json.optJSONArray("types")?.length() == 0 || json.optJSONArray("types") == null -> "Falta types en el manifest"
+        else -> null
+    }
 
     fun parse(json: JSONObject): StremioManifest {
         val id = json.optString("id")
-        val version = json.optString("version", "0.0.0")
-        val name = json.optString("name", id.ifEmpty { "Addon" })
-        val description = json.optString("description", "")
-        val logo = json.optString("logo").takeIf { it.isNotBlank() }
-
-        val resources = parseResources(json.optJSONArray("resources"))
-        val catalogs = parseCatalogs(json.optJSONArray("catalogs"))
-        val addonCatalogs = parseCatalogs(json.optJSONArray("addonCatalogs"))
-        val types = json.optJSONArray("types").toStringList()
-        val idPrefixes = json.optJSONArray("idPrefixes").toStringList()
-        val behaviorHints = json.optJSONObject("behaviorHints")?.let { obj ->
-            buildMap { obj.keys().forEach { k -> obj.optString(k).takeIf { it.isNotBlank() }?.let { put(k, it) } } }
-        } ?: emptyMap()
-
         return StremioManifest(
             id = id,
-            version = version,
-            name = name,
-            description = description,
-            logo = logo,
-            resources = resources,
-            catalogs = catalogs,
-            types = types,
-            idPrefixes = idPrefixes,
-            behaviorHints = behaviorHints,
-            addonCatalogs = addonCatalogs,
+            version = json.optString("version", "0.0.0"),
+            name = json.optString("name", id.ifEmpty { "Addon" }),
+            description = json.optString("description", ""),
+            logo = json.optString("logo").takeIf { it.isNotBlank() },
+            resources = parseResources(json.optJSONArray("resources")),
+            catalogs = parseCatalogs(json.optJSONArray("catalogs")),
+            types = json.optJSONArray("types").toStringList(),
+            idPrefixes = json.optJSONArray("idPrefixes").toStringList(),
+            behaviorHints = json.optJSONObject("behaviorHints")?.let { obj ->
+                buildMap { obj.keys().forEach { key -> put(key, obj.optString(key)) } }
+            }.orEmpty(),
+            addonCatalogs = parseCatalogs(json.optJSONArray("addonCatalogs")),
             raw = json
         )
     }
 
-    private fun parseResources(arr: JSONArray?): List<StremioResource> {
-        if (arr == null) return emptyList()
+    private fun parseResources(array: JSONArray?): List<StremioResource> {
+        if (array == null) return emptyList()
         return buildList {
-            for (i in 0 until arr.length()) {
-                when (val v = arr.opt(i)) {
-                    is String -> add(StremioResource(name = v))
+            for (i in 0 until array.length()) {
+                when (val value = array.opt(i)) {
+                    is String -> if (value.isNotBlank()) add(StremioResource(value))
                     is JSONObject -> {
-                        val name = v.optString("name").ifEmpty { v.optString("resource") }
-                        if (name.isBlank()) continue
-                        add(
-                            StremioResource(
-                                name = name,
-                                types = v.optJSONArray("types").toStringList(),
-                                idPrefixes = v.optJSONArray("idPrefixes").toStringList()
-                            )
+                        val name = value.optString("name")
+                        if (name.isNotBlank()) add(
+                            StremioResource(name, value.optJSONArray("types").toStringList(), value.optJSONArray("idPrefixes").toStringList())
                         )
                     }
                 }
             }
-        }
+        }.distinctBy { it.name + it.types + it.idPrefixes }
     }
 
-    private fun parseCatalogs(arr: JSONArray?): List<StremioCatalog> {
-        if (arr == null) return emptyList()
+    private fun parseCatalogs(array: JSONArray?): List<StremioCatalog> {
+        if (array == null) return emptyList()
         return buildList {
-            for (i in 0 until arr.length()) {
-                val obj = arr.optJSONObject(i) ?: continue
+            for (i in 0 until array.length()) {
+                val obj = array.optJSONObject(i) ?: continue
                 val type = obj.optString("type")
                 val id = obj.optString("id")
-                if (id.isBlank() || type.isBlank()) continue
-                val name = obj.optString("name", id)
-                val extra = parseExtras(obj.optJSONArray("extra"))
-                val extraSupported = obj.optJSONArray("extraSupported").toStringList()
-                val extraRequired = obj.optJSONArray("extraRequired").toStringList()
-                add(StremioCatalog(type, id, name, extra, extraSupported, extraRequired, obj))
+                if (type.isBlank() || id.isBlank()) continue
+                add(
+                    StremioCatalog(
+                        type, id, obj.optString("name", id), parseExtras(obj.optJSONArray("extra")),
+                        obj.optJSONArray("extraSupported").toStringList(), obj.optJSONArray("extraRequired").toStringList(), obj
+                    )
+                )
             }
         }
     }
 
-    private fun parseExtras(arr: JSONArray?): List<StremioExtra> {
-        if (arr == null) return emptyList()
+    private fun parseExtras(array: JSONArray?): List<StremioExtra> {
+        if (array == null) return emptyList()
         return buildList {
-            for (i in 0 until arr.length()) {
-                val obj = arr.optJSONObject(i) ?: continue
+            for (i in 0 until array.length()) {
+                val obj = array.optJSONObject(i) ?: continue
                 val name = obj.optString("name")
-                if (name.isBlank()) continue
-                add(
-                    StremioExtra(
-                        name = name,
-                        isRequired = obj.optBoolean("isRequired", false),
-                        options = obj.optJSONArray("options").toStringList(),
-                        optionsLimit = obj.optInt("optionsLimit", 0)
-                    )
+                if (name.isNotBlank()) add(
+                    StremioExtra(name, obj.optBoolean("isRequired", false), obj.optJSONArray("options").toStringList(), obj.optInt("optionsLimit", 0))
                 )
             }
         }
@@ -170,6 +171,36 @@ object StremioManifestParser {
 
     private fun JSONArray?.toStringList(): List<String> {
         if (this == null) return emptyList()
-        return buildList { for (i in 0 until length()) optString(i).takeIf { it.isNotBlank() }?.let { add(it) } }
+        return buildList {
+            for (i in 0 until length()) {
+                val value = optString(i).trim()
+                if (value.isNotEmpty()) add(value)
+            }
+        }
     }
+}
+
+/** Conserva el prefijo de configuración del addon (p.ej. /opciones/manifest.json). */
+object StremioUrl {
+    fun normalize(input: String): String? {
+        val value = input.trim().let { if (it.startsWith("stremio://")) "https://" + it.removePrefix("stremio://") else it }
+        if (!NetPolicy.isAllowed(value)) return null
+        val uri = runCatching { URI(value) }.getOrNull() ?: return null
+        if (uri.rawQuery != null || uri.rawFragment != null) return null
+        return value.trimEnd('/').let { if (it.endsWith("/manifest.json")) it else "$it/manifest.json" }
+    }
+
+    fun base(manifestUrl: String): String = manifestUrl.trimEnd('/').removeSuffix("/manifest.json").trimEnd('/')
+
+    fun encodeSegment(value: String): String = URLEncoder.encode(value, "UTF-8").replace("+", "%20")
+
+    /** Formato real Stremio: /catalog/movie/top/genre=Action&skip=20.json. */
+    fun catalog(base: String, type: String, id: String, extras: Map<String, String> = emptyMap()): String {
+        val extra = extras.entries.sortedBy { it.key }.joinToString("&") { "${encodeSegment(it.key)}=${encodeSegment(it.value)}" }
+        return "${base.trimEnd('/')}/catalog/${encodeSegment(type)}/${encodeSegment(id)}" +
+            (if (extra.isEmpty()) "" else "/$extra") + ".json"
+    }
+
+    fun resource(base: String, resource: String, type: String, id: String): String =
+        "${base.trimEnd('/')}/${encodeSegment(resource)}/${encodeSegment(type)}/${encodeSegment(id)}.json"
 }

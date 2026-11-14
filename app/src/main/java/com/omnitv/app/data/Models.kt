@@ -3,7 +3,7 @@ package com.omnitv.app.data
 import java.util.Locale
 
 /** Formato del flujo de vídeo que reproduce Media3. */
-enum class StreamFormat { MP4, HLS }
+enum class StreamFormat { MP4, HLS, DASH }
 
 /** Tipo de contenido, como la clasificación de Netflix. */
 enum class VideoType(val label: String) {
@@ -20,7 +20,9 @@ enum class VideoType(val label: String) {
 data class StreamSource(
     val label: String,
     val url: String,
-    val format: StreamFormat = StreamFormat.MP4
+    val format: StreamFormat = StreamFormat.MP4,
+    /** Cabeceras que el addon exige para este enlace (Referer, User-Agent…). */
+    val headers: Map<String, String> = emptyMap()
 )
 
 /** Episodio de una serie o anime. */
@@ -75,7 +77,9 @@ data class Video(
     /** Tipo Stremio remoto ("movie"/"series") para pedir la ficha completa. */
     val remoteType: String? = null,
     /** Id Stremio del stream (`tt123:1:2` / `tmdb:123:1:2` en episodios). */
-    val streamId: String? = null
+    val streamId: String? = null,
+    /** Manifest del addon que puede completar esta ficha (conserva configuración). */
+    val metaAddonUrl: String? = null
 ) {
     val durationLabel: String
         get() = if (durationMinutes >= 60) {
@@ -116,5 +120,7 @@ data class Video(
 /** Fila horizontal de la pantalla de inicio. */
 data class MediaRow(
     val title: String,
-    val items: List<Video>
+    val items: List<Video>,
+    /** Identificador estable: dos addons pueden tener el mismo nombre visible. */
+    val key: String = title
 )

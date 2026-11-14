@@ -125,6 +125,8 @@ object PairingServer {
             account = SettingsStore.linkedAccount,
             addons = SettingsStore.customAddons,
             streamAddons = SettingsStore.streamAddons,
+            nuvioPlugins = SettingsStore.nuvioPlugins,
+            nuvioBridge = SettingsStore.nuvioBridge,
             apiKeys = SettingsStore.apiKeys,
             secretsEncrypted = SettingsStore.secretsEncrypted
         )
@@ -137,6 +139,8 @@ object PairingServer {
 
         override fun setStreamAddons(urls: List<String>) = SettingsStore.saveStreamAddons(urls)
 
+        override fun setNuvioPlugins(urls: List<String>) = SettingsStore.saveNuvioPlugins(urls)
+        override fun setNuvioBridge(url: String) = SettingsStore.saveNuvioBridge(url)
         override fun setApiKeys(keys: Map<String, String>) = SettingsStore.saveApiKeys(keys)
     }
 

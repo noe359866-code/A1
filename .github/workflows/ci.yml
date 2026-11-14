@@ -56,6 +56,9 @@ jobs:
 
       # `pipefail` es imprescindible: sin él, el código de salida sería el de `tee`
       # y un fallo de Gradle pasaría por bueno.
+      - name: Puente Nuvio (HTTP y worker JS)
+        run: node --test tools/nuvio-bridge/bridge.test.mjs
+
       - name: Tests unitarios
         run: |
           set -o pipefail

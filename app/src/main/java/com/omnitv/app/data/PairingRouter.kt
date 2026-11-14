@@ -13,6 +13,8 @@ internal interface PanelStore {
     fun setAccount(email: String)
     fun setAddons(urls: List<String>)
     fun setStreamAddons(urls: List<String>)
+    fun setNuvioPlugins(urls: List<String>)
+    fun setNuvioBridge(url: String)
     fun setApiKeys(keys: Map<String, String>)
 }
 
@@ -93,7 +95,7 @@ internal class PairingRouter(
                 val data = store.data()
                 PanelResponse(
                     200,
-                    """{"account":${jsonString(data.account)},"addons":${data.addons.size},"streams":${data.streamAddons.size},"apis":${data.apiKeys.size}}""",
+                    """{"account":${jsonString(data.account)},"addons":${data.addons.size},"streams":${data.streamAddons.size},"plugins":${data.nuvioPlugins.size},"apis":${data.apiKeys.size}}""",
                     jsonType
                 )
             }
@@ -109,14 +111,26 @@ internal class PairingRouter(
         var rejectedUrls = 0
         form["account"]?.trim()?.takeIf { it.isNotBlank() }?.let { store.setAccount(it) }
         form["addons"]?.let { text ->
-            val (accepted, rejected) = splitUrls(text)
+            val values = text.lines().map { it.trim() }.filter { it.isNotEmpty() }
+            val accepted = values.mapNotNull(StremioUrl::normalize).distinct()
             store.setAddons(accepted)
-            rejectedUrls += rejected.size
+            rejectedUrls += values.size - accepted.size
         }
         form["streamAddons"]?.let { text ->
             val (accepted, rejected) = splitUrls(text)
             store.setStreamAddons(accepted)
             rejectedUrls += rejected.size
+        }
+        form["nuvioPlugins"]?.let { text ->
+            val (accepted, rejected) = splitUrls(text)
+            store.setNuvioPlugins(accepted)
+            rejectedUrls += rejected.size
+        }
+        form["nuvioBridge"]?.let { text ->
+            val value = text.trim()
+            val valid = runCatching { val uri = java.net.URI(value); uri.rawQuery == null && uri.rawFragment == null }.getOrDefault(false)
+            if (value.isEmpty() || (NetPolicy.isAllowed(value) && valid)) store.setNuvioBridge(value)
+            else rejectedUrls++
         }
         form["apis"]?.let { text ->
             val keys = text.lines()
@@ -132,10 +146,10 @@ internal class PairingRouter(
         val data = store.data()
         onEvent(
             "✅ Configuración guardada desde el panel web (addons: ${data.addons.size}, " +
-                "streams: ${data.streamAddons.size}, APIs: ${data.apiKeys.size})"
+                "streams: ${data.streamAddons.size}, repos Nuvio: ${data.nuvioPlugins.size}, APIs: ${data.apiKeys.size})"
         )
         val message = buildString {
-            append("✅ Guardado. La cuenta, los addons y las APIs ya están en el televisor.")
+            append("✅ Guardado en el televisor. Los manifests y repositorios se comprobarán al abrir Inicio/Ajustes.")
             if (rejectedUrls > 0) {
                 append(" ⚠️ Se descartaron $rejectedUrls URL no válidas: usa https://, o http:// solo ")
                 append("con una IP de tu red local (192.168.x.x, 10.x.x.x…).")
