@@ -55,6 +55,25 @@ object SettingsStore {
     var preferredQuality by mutableStateOf("Auto")
         private set
 
+    // ---------------- Saltar intro / créditos ----------------
+
+    /**
+     * Tramos saltables activos para todo el mundo: las tres bases de datos se
+     * leen de forma anónima, sin clave incluida en la app.
+     */
+    var skipSegmentsEnabled by mutableStateOf(true)
+        private set
+
+    /** Salto automático por tipo. Por defecto solo se ofrece el botón. */
+    var autoSkipKinds by mutableStateOf<Set<String>>(emptySet())
+        private set
+
+    /** Bases de datos consultadas (nombres de [SkipSegmentParser]). */
+    var skipSources by mutableStateOf(
+        setOf(SkipSegmentParser.SOURCE_SKIPDB, SkipSegmentParser.SOURCE_THEINTRODB, SkipSegmentParser.SOURCE_INTRODB)
+    )
+        private set
+
     // ---------------- Vinculación (QR del panel de Ajustes) ----------------
 
     /** Código de emparejamiento del televisor (se muestra junto al QR). */
@@ -122,6 +141,10 @@ object SettingsStore {
         subtitlesDefault = p.getBoolean("subtitlesDefault", false)
         playbackSpeed = p.getFloat("playbackSpeed", 1f)
         preferredQuality = p.getString("preferredQuality", "Auto") ?: "Auto"
+        skipSegmentsEnabled = p.getBoolean("skipSegmentsEnabled", true)
+        autoSkipKinds = parseStringList(p.getString("autoSkipKinds", "[]")).toSet()
+        skipSources = parseStringList(p.getString("skipSources", null)).toSet().filter { it in SKIP_SOURCE_NAMES }.toSet()
+            .ifEmpty { setOf(SkipSegmentParser.SOURCE_SKIPDB, SkipSegmentParser.SOURCE_THEINTRODB, SkipSegmentParser.SOURCE_INTRODB) }
         cloudflareDns = p.getBoolean("cloudflareDns", true)
         Doh.enabled = cloudflareDns
         pairingCode = p.getString("pairingCode", null) ?: generatePairingCode().also { code ->
@@ -262,6 +285,36 @@ object SettingsStore {
         val cleaned = keys.filterKeys { it.isNotBlank() }.filterValues { it.isNotBlank() }
         persistApiKeys(cleaned)
         apiKeys = cleaned
+        revision++
+    }
+
+    val SKIP_SOURCE_NAMES = listOf(
+        SkipSegmentParser.SOURCE_SKIPDB, SkipSegmentParser.SOURCE_THEINTRODB, SkipSegmentParser.SOURCE_INTRODB
+    )
+
+    fun setSkipSegmentsEnabled(enabled: Boolean) {
+        update { putBoolean("skipSegmentsEnabled", enabled) }
+        skipSegmentsEnabled = enabled
+        SkipSegmentService.clearCache()
+        revision++
+    }
+
+    /** Activa/desactiva el salto automático de un tipo (intro, resumen, créditos…). */
+    fun setAutoSkip(kind: SkipKind, enabled: Boolean) {
+        val next = autoSkipKinds.toMutableSet().apply { if (enabled) add(kind.name) else remove(kind.name) }
+        update { putString("autoSkipKinds", org.json.JSONArray(next.toList()).toString()) }
+        autoSkipKinds = next
+        revision++
+    }
+
+    /** Al menos una base de datos queda activa: sin fuentes no hay tramos. */
+    fun setSkipSource(source: String, enabled: Boolean) {
+        if (source !in SKIP_SOURCE_NAMES) return
+        val next = skipSources.toMutableSet().apply { if (enabled) add(source) else remove(source) }
+        if (next.isEmpty()) return
+        update { putString("skipSources", org.json.JSONArray(next.toList()).toString()) }
+        skipSources = next
+        SkipSegmentService.clearCache()
         revision++
     }
 

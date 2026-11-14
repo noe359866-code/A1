@@ -79,6 +79,7 @@ Basado en Media3 ExoPlayer con investigación de Xuper TV:
 - **Multi-servidor:** Conmutación automática conservando posición
 - **Adaptativo:** HLS/DASH ABR + selector manual (Auto / 1080p / 720p...)
 - **Pistas:** Audio, subtítulos, calidad vía `DefaultTrackSelector`
+- **Saltar intro/resumen/créditos:** tiempos de SkipDB, TheIntroDB e IntroDB; lectura anónima activa para todos, sin clave en la app ([detalle](docs/SKIP_SEGMENTS.md))
 - **Aspecto:** Ajustar / Llenar / Zoom / 16:9 / 4:3 / 21:9
 - **Transporte:** ⏪10s / 10s⏩, barra con buffer, D-pad directo
 - **Autoplay / Auto-next:** Cuenta atrás 10s con miniatura, botón Siguiente

@@ -43,6 +43,9 @@ import com.omnitv.app.data.AddonRegistry
 import com.omnitv.app.data.NuvioPluginManager
 import com.omnitv.app.data.NuvioScraperResolver
 import com.omnitv.app.data.CloudstreamBridge
+import com.omnitv.app.data.SkipKind
+import com.omnitv.app.data.SkipSegmentParser
+import com.omnitv.app.data.SkipSegmentService
 import com.omnitv.app.data.ProfileStore
 import com.omnitv.app.data.SettingsStore
 import com.omnitv.app.ui.components.AvatarView
@@ -263,6 +266,49 @@ fun SettingsScreen(onSwitchProfile: () -> Unit) {
                 subtitle = "Los vídeos empiezan sin audio",
                 trailing = { TvToggle(SettingsStore.mutedStart, onCheckedChange = { SettingsStore.setMutedStartEnabled(it) }) }
             )
+        }
+
+        Spacer(Modifier.height(20.dp))
+
+        /* ---------------- Saltar intro y créditos ---------------- */
+        SettingsCard(iconRes = R.drawable.ic_skip_next, title = "Saltar intro y créditos") {
+            SettingRow(
+                title = "Tramos saltables",
+                subtitle = "Botón «Saltar» con los tiempos de la comunidad. Funciona sin clave: " +
+                    "las bases de datos se leen de forma anónima desde tu propia conexión",
+                trailing = { TvToggle(SettingsStore.skipSegmentsEnabled, onCheckedChange = { SettingsStore.setSkipSegmentsEnabled(it) }) }
+            )
+            listOf(SkipKind.INTRO, SkipKind.RECAP, SkipKind.CREDITS).forEach { kind ->
+                SettingRow(
+                    title = "Saltar ${kind.label} automáticamente",
+                    subtitle = "Si lo dejas apagado, aparece el botón y decides tú",
+                    trailing = {
+                        TvToggle(kind.name in SettingsStore.autoSkipKinds, onCheckedChange = { SettingsStore.setAutoSkip(kind, it) })
+                    }
+                )
+            }
+            SettingsStore.SKIP_SOURCE_NAMES.forEach { source ->
+                SettingRow(
+                    title = source,
+                    subtitle = when (source) {
+                        SkipSegmentParser.SOURCE_SKIPDB -> "Ajusta los tiempos a la duración de tu stream · necesita id IMDb"
+                        SkipSegmentParser.SOURCE_THEINTRODB -> "Intro, resumen, créditos y avance · admite id TMDB o IMDb"
+                        else -> "Intro, resumen y créditos · necesita id IMDb"
+                    },
+                    trailing = {
+                        TvToggle(source in SettingsStore.skipSources, onCheckedChange = { SettingsStore.setSkipSource(source, it) })
+                    }
+                )
+            }
+            Column(Modifier.fillMaxWidth().padding(horizontal = 22.dp, vertical = 12.dp)) {
+                StatusLine("Último título", SkipSegmentService.lastStatus.value.ifBlank { "Sin consultas todavía" })
+                Text(
+                    "Datos de SkipDB (ODbL 1.0), TheIntroDB e IntroDB. Omni TV no incluye ninguna clave API: " +
+                        "cada usuario puede añadir la suya en el panel QR (THEINTRODB=tu_clave) para subir su " +
+                        "límite de consultas. Los tiempos son comunitarios y pueden no encajar con tu versión del vídeo.",
+                    style = AppType.metadata, color = TextSecondary
+                )
+            }
         }
 
         Spacer(Modifier.height(20.dp))

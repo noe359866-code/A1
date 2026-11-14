@@ -66,6 +66,10 @@ import com.omnitv.app.R
 import com.omnitv.app.data.CatalogRepository
 import com.omnitv.app.data.ProfileStore
 import com.omnitv.app.data.SettingsStore
+import com.omnitv.app.data.SkipKind
+import com.omnitv.app.data.SkipSegment
+import com.omnitv.app.data.SkipSegmentService
+import com.omnitv.app.data.SkipTimeline
 import com.omnitv.app.data.StreamFormat
 import com.omnitv.app.data.Video
 import com.omnitv.app.ui.components.LoadingSpinner
@@ -198,6 +202,23 @@ fun PlayerScreen(
     val playFocus = remember { FocusRequester() }
     val retryFocus = remember { FocusRequester() }
     val cancelNextFocus = remember { FocusRequester() }
+    val skipFocus = remember { FocusRequester() }
+
+    // ---------------- Saltar intro / resumen / créditos ----------------
+    // Datos comunitarios (SkipDB · TheIntroDB · IntroDB). Lectura anónima:
+    // funciona para cualquier usuario sin configurar claves.
+    var skipTimeline by remember(video.id) { mutableStateOf(SkipTimeline.EMPTY) }
+    val autoSkipped = remember(video.id) { mutableSetOf<String>() }
+    val durationSeconds = (durationMs / 1000L).toInt()
+    val activeSkip: SkipSegment? = remember(skipTimeline, positionMs) { skipTimeline.activeAt(positionMs) }
+
+    fun skipSegment(segment: SkipSegment) {
+        val target = segment.targetMs(player.duration.takeIf { it > 0 } ?: durationMs)
+        if (target > player.currentPosition) {
+            player.seekTo(target)
+            toast = "Saltado: ${segment.kind.label}"
+        }
+    }
 
     // ---------------- Acciones ----------------
 
@@ -403,6 +424,36 @@ fun PlayerScreen(
         }
     }
 
+    // Consulta los tramos cuando se conoce la duración real: SkipDB/TheIntroDB
+    // la usan para elegir la versión del stream (logo extra, distinto corte…).
+    LaunchedEffect(video.id, durationSeconds, SettingsStore.revision) {
+        if (!SettingsStore.skipSegmentsEnabled) {
+            skipTimeline = SkipTimeline.EMPTY
+            return@LaunchedEffect
+        }
+        // Una sola consulta por episodio: se espera a conocer la duración
+        // (mejora el ajuste por versión) y solo se consulta sin ella si el
+        // stream no la declara pasado un margen.
+        var waited = 0
+        while (durationSeconds == 0 && player.duration <= 0 && waited < 12_000) {
+            delay(1_000)
+            waited += 1_000
+        }
+        val knownMs = if (durationSeconds > 0) durationSeconds * 1000L else player.duration.coerceAtLeast(0)
+        skipTimeline = runCatching {
+            SkipSegmentService.fetch(video, knownMs)
+        }.getOrDefault(SkipTimeline.EMPTY)
+    }
+
+    // Salto automático solo para los tipos que el usuario activó en Ajustes.
+    LaunchedEffect(activeSkip, SettingsStore.autoSkipKinds) {
+        val segment = activeSkip ?: return@LaunchedEffect
+        if (segment.kind.name !in SettingsStore.autoSkipKinds) return@LaunchedEffect
+        if (segment.uncertain) return@LaunchedEffect // dato dudoso: mejor botón
+        val key = "${segment.kind}:${segment.startMs}"
+        if (autoSkipped.add(key)) skipSegment(segment)
+    }
+
     // Temporizador de apagado
     LaunchedEffect(sleepDeadline) {
         val deadline = sleepDeadline
@@ -422,12 +473,13 @@ fun PlayerScreen(
     }
 
     // Gestión de foco: al mostrar controles → botón de play; al ocultar → raíz
-    LaunchedEffect(controlsVisible, menu, hasError, showNextPanel) {
+    LaunchedEffect(controlsVisible, menu, hasError, showNextPanel, activeSkip) {
         withFrameNanos { }
         runCatching {
             when {
                 hasError != null -> retryFocus.requestFocus()
                 showNextPanel != null -> cancelNextFocus.requestFocus()
+                activeSkip != null -> skipFocus.requestFocus()
                 !controlsVisible -> rootFocus.requestFocus()
                 menu == MenuKind.NONE -> playFocus.requestFocus()
             }
@@ -728,6 +780,25 @@ fun PlayerScreen(
                         )
                     }
                 }
+            }
+        }
+
+        // Botón de salto: visible aunque los controles estén ocultos, como en
+        // cualquier reproductor de TV. Recibe el foco para que OK del mando salte.
+        AnimatedVisibility(
+            visible = activeSkip != null && hasError == null && showNextPanel == null,
+            enter = fadeIn(),
+            exit = fadeOut(),
+            modifier = Modifier.align(Alignment.BottomEnd).padding(end = 48.dp, bottom = 150.dp)
+        ) {
+            activeSkip?.let { segment ->
+                ControlPill(
+                    iconRes = R.drawable.ic_skip_next,
+                    label = if (segment.uncertain) "Saltar ${segment.kind.label} (?)" else "Saltar ${segment.kind.label}",
+                    onClick = { skipSegment(segment) },
+                    modifier = Modifier.focusRequester(skipFocus),
+                    active = true
+                )
             }
         }
 

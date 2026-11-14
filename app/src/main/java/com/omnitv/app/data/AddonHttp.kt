@@ -15,8 +15,8 @@ internal object AddonHttp {
     const val MAX_BODY = 4 * 1024 * 1024
     private const val MAX_REDIRECTS = 5
 
-    fun getJson(url: String): Any? {
-        val result = request("GET", url, null)
+    fun getJson(url: String, headers: Map<String, String> = emptyMap()): Any? {
+        val result = request("GET", url, null, headers)
         if (result.value != null || !result.dnsFailure) return result.value
         // DoH solo sustituye una resolución DNS fallida, no un HTTP 404/500.
         val fallback = Doh.retry(url) ?: return null
@@ -25,9 +25,18 @@ internal object AddonHttp {
 
     fun postJson(url: String, body: String): Any? = request("POST", url, body).value
 
-    internal data class Result(val value: Any?, val dnsFailure: Boolean = false)
+    /** GET con estado HTTP: quien llama puede distinguir 429 de «sin datos». */
+    fun getJsonWithStatus(url: String, headers: Map<String, String> = emptyMap()): Result =
+        request("GET", url, null, headers)
 
-    internal fun request(method: String, initialUrl: String, body: String?): Result {
+    internal data class Result(val value: Any?, val dnsFailure: Boolean = false, val status: Int = 0)
+
+    internal fun request(
+        method: String,
+        initialUrl: String,
+        body: String?,
+        headers: Map<String, String> = emptyMap()
+    ): Result {
         if (!NetPolicy.isAllowed(initialUrl)) return Result(null)
         var current = initialUrl
         repeat(MAX_REDIRECTS + 1) {
@@ -39,6 +48,12 @@ internal object AddonHttp {
                     instanceFollowRedirects = false
                     setRequestProperty("User-Agent", "OmniTV/1.2 (Android TV)")
                     setRequestProperty("Accept", "application/json")
+                    val sameOrigin = runCatching { URI(current).host.equals(URI(initialUrl).host, true) }.getOrDefault(false)
+                    headers.forEach { (name, value) ->
+                        val credential = name.equals("Authorization", true) || name.equals("X-API-Key", true)
+                        // Las credenciales no viajan a otro host tras una redirección.
+                        if (value.isNotBlank() && (!credential || sameOrigin)) setRequestProperty(name, value)
+                    }
                     if (body != null) {
                         doOutput = true
                         setRequestProperty("Content-Type", "application/json; charset=utf-8")
@@ -56,8 +71,8 @@ internal object AddonHttp {
                     current = next
                     return@repeat
                 }
-                if (code !in 200..299) return Result(null)
-                return Result(parseJson(readLimited(connection) ?: return Result(null)))
+                if (code !in 200..299) return Result(null, status = code)
+                return Result(parseJson(readLimited(connection) ?: return Result(null, status = code)), status = code)
             } catch (_: java.net.UnknownHostException) {
                 return Result(null, dnsFailure = true)
             } catch (_: Exception) {

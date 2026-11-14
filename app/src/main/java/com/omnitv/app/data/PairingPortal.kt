@@ -152,6 +152,9 @@ internal object PairingPortal {
         <textarea name="apis" placeholder="TMDB=tu_api_key&#10;TRAKT=tu_api_key">$apisValue</textarea>
       </label>
       <p class="hint">$storageHint</p>
+      <p class="hint">Saltar intro/créditos ya funciona sin clave. Si tienes cuenta, añade
+        <code>THEINTRODB=tu_clave</code> para subir tu límite de consultas; <code>SKIPDB=…</code> e
+        <code>INTRODB=…</code> quedan guardadas para futuras funciones de envío.</p>
     </div>
     <button type="submit">Guardar en el televisor</button>
   </form>"""
