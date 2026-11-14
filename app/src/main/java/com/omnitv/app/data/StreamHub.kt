@@ -162,13 +162,13 @@ object StreamHub {
 
     /** Descubre streams tanto en addons Stremio instalados como en proyectos simples. */
     internal suspend fun configuredAddons(
-        manifests: List<AddonStatus> = AddonRegistry.refresh(),
+        manifests: List<AddonStatus>? = null,
         projects: List<String> = SettingsStore.streamAddons,
         plugins: List<String> = SettingsStore.nuvioPlugins
     ): List<StreamAddon> {
         val addons = mutableListOf<StreamAddon>()
         val bases = mutableSetOf<String>()
-        manifests.filter { it.manifest?.isStreamAddon() == true }.forEach { status ->
+        (manifests ?: AddonRegistry.refresh()).filter { it.manifest?.isStreamAddon() == true }.forEach { status ->
             val base = StremioUrl.base(status.url)
             if (bases.add(base)) addons += ProjectStreamAddon(base, status.label, status.manifest)
         }

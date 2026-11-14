@@ -232,7 +232,7 @@ object RemoteCatalog {
             // ese tipo/prefijo. Cinemeta/Nuvio solo reciben ids que les competen.
             val compatible = installed.filter { it.manifest?.supports("meta", candidateType, video.id) == true }
                 .sortedByDescending { it.url == video.metaAddonUrl }
-            val sources = compatible.map { StremioUrl.base(it.url) to it.url }.toMutableList()
+            val sources = compatible.map { StremioUrl.base(it.url) to it.url as String? }.toMutableList()
             if (video.id.startsWith("tt") || video.id.startsWith("tmdb:")) {
                 val builtin = if (video.id.startsWith("tmdb:")) StremioClient.NUVIO else StremioClient.baseFor(video.source)
                 sources.add(minOf(1, sources.size), builtin to null)
