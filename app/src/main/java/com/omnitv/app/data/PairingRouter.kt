@@ -184,18 +184,22 @@ internal class PairingRouter(
      * navegador ajeno no puede reenviar el código del QR desde su origen.
      */
     private fun isCrossOrigin(request: PanelRequest): Boolean {
-        val site = request.headers["sec-fetch-site"]?.trim()?.lowercase()
+        val site = header(request, "sec-fetch-site")?.trim()?.lowercase()
         if (site != null && site != "same-origin" && site != "none") return true
-        val origin = request.headers["origin"]?.trim().orEmpty()
+        val origin = header(request, "origin")?.trim().orEmpty()
         if (origin.isEmpty()) return false
         if (origin.equals("null", true)) return true
         val uri = runCatching { java.net.URI(origin) }.getOrNull() ?: return true
         if (!uri.scheme.equals("http", true)) return true // el panel se sirve por HTTP en la LAN
         val host = uri.host?.takeIf { it.isNotBlank() } ?: return true
         val authority = host + if (uri.port >= 0) ":${uri.port}" else ""
-        val expected = request.headers["host"]?.trim().orEmpty()
+        val expected = header(request, "host")?.trim().orEmpty()
         return expected.isNotBlank() && !authority.equals(expected, ignoreCase = true)
     }
+
+    /** `readPanelRequest` ya normaliza a minúsculas; aceptar cualquier caso evita sorpresas. */
+    private fun header(request: PanelRequest, name: String): String? =
+        request.headers.entries.firstOrNull { it.key.equals(name, ignoreCase = true) }?.value
 
     private fun jsonString(value: String): String = buildString {
         append('"')
