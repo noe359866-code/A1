@@ -125,7 +125,7 @@ La revisión encontró diferencias importantes entre esa intención y la impleme
 | Parcial | Seguridad local | QR sin código, `POST /unlock`, cookie de sesión ligada a IP/código, regeneración que invalida sesiones y rechazo de orígenes cruzados en `/unlock` y `/save`. Quedan: HTTP sin TLS en la LAN, compatibilidad heredada con `?code=`, ausencia de token CSRF por formulario y claves en claro solo en API 22. Revisar exposición en redes de invitados/VPN. |
 | Resuelta | WebView / Coil | `WebViewResolver` eliminado; `CronetFetcher` instalado en el `ImageLoader` singleton y corregido para no corromper imágenes binarias. |
 | Resuelta | UI / memoria | Detalle compone episodios por tandas de 20. El héroe y los textos con escala grande aún necesitan prueba de overscan/accesibilidad (incluida en «Validación en dispositivo»). |
-| Baja | Mantenimiento | Código experimental, docs históricos y avisos del compilador corregidos; Gradle actualizado a 8.10.2. Persisten versiones Kotlin/Media3/Compose de 2024 y 9 ramas `arena/*` huérfanas en GitHub. |
+| Baja | Mantenimiento | Código experimental, docs históricos y avisos del compilador corregidos; Gradle actualizado a 8.10.2 (CI ya solo anota que no es la última versión). Persisten versiones Kotlin/Media3/Compose de 2024 y 9 ramas `arena/*` huérfanas en GitHub. |
 
 ## Validación
 
@@ -134,10 +134,10 @@ La revisión encontró diferencias importantes entre esa intención y la impleme
 - `git diff --check`: correcto.
 - CI de la primera pasada (`03719b4`): **[ejecución 43554360259](https://github.com/noe359866-code/A1/actions/runs/43554360259), correcta**. Contrato TV, **98 tests / 0 fallos**, `assembleDebug` y `lintDebug` pasan. Los errores de lint (API 24 y opt-in de Media3) se corrigieron; no se creó un baseline.
 - Segunda pasada: `python3 tools/check_android_tv.py` y `node --test` de los tres puentes Node correctos en local (7/7). CI final **[ejecución 43637640574](https://github.com/noe359866-code/A1/actions/runs/43637640574), correcta**: **175 tests / 0 fallos**, `assembleDebug`, `assembleRelease` (R8 con firma debug de reserva) y `lintDebug`; sin avisos del compilador. Se añadieron tests JVM para `EmbedRefiner`, `ExtractorRegistry`, `StreamResponse`, `AddonHttp.getText` y origen cruzado.
-- Tercera pasada: contrato TV, `py_compile`, los tres puentes Node (7/7) y `git diff --check` correctos en local; **192 tests JVM** en el árbol. Validación de compilación/Android en CI: **pendiente de registrar la ejecución**.
+- Tercera pasada: contrato TV, `py_compile`, los tres puentes Node (7/7) y `git diff --check` correctos en local. CI final **[ejecución 43641480670](https://github.com/noe359866-code/A1/actions/runs/43641480670), correcta**: **192 tests / 0 fallos**, `assembleDebug`, `assembleRelease` y `lintDebug`; sin avisos del compilador. Se añadieron `ParentalPinTest` y `PairingSessionTest` (17 tests nuevos). El primer intento (`43641194366`) falló por dos errores de sintaxis ya corregidos en `2c58435`.
 - Release `v1.2.0` ya publicado con `OmniTV-v1.2.0.apk`; esta pasada añade la firma de producción opcional sin cambiar el `versionCode`/`versionName` del árbol.
 - Puente Python: prueba local de `/health`, `/stream/movie/tt1375666.json` y `/stream/series/tt0944947:1:2` contra un servidor temporal en loopback; las tres respuestas fueron correctas. Sigue siendo un puente de ejemplo, no un resolver de producción.
-- CI ya no arrastra el aviso de Gradle 8.9; solo queda la anotación de migración de `ubuntu-latest`, que no es un error de compilación.
+- CI ya no arrastra el aviso de Gradle 8.9. Quedan dos anotaciones de mantenimiento: Gradle 8.10.2 «no es la última versión» (subir más exigiría actualizar Kotlin/AGP) y la migración futura de `ubuntu-latest`; ninguna es un error de compilación.
 - El entorno local no tiene Java ni Android SDK, por eso la compilación y los tests Android se ejecutan en GitHub Actions, no se simulan localmente.
 - No se ha probado reproducción con servicios externos ni se garantiza disponibilidad de cinejoy/sweetfox/Nuvio/addons de terceros.
 
