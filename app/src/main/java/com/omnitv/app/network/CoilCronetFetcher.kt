@@ -1,13 +1,16 @@
 package com.omnitv.app.network
 
+import android.content.Context
 import coil.ImageLoader
 import coil.decode.DataSource
+import coil.decode.ImageSource
 import coil.fetch.FetchResult
 import coil.fetch.Fetcher
 import coil.fetch.SourceResult
 import coil.request.Options
-import android.content.Context
 import okhttp3.OkHttpClient
+import okio.Buffer
+import okio.ByteString.Companion.toByteString
 
 /**
  * Coil fetcher que usa Cronet para hosts con 403 (animeonline.ninja, tmdb con protección)
@@ -31,7 +34,7 @@ class CronetFetcher(
             ?: return null
 
         return SourceResult(
-            source = okio.Buffer().write(data),
+            source = ImageSource(source = Buffer().write(data), context = context),
             mimeType = null,
             dataSource = DataSource.NETWORK
         )

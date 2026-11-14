@@ -90,7 +90,9 @@ object NuvioPluginManager {
         val scrapers = buildList {
             for (i in 0 until scrapersArray.length()) {
                 val o = scrapersArray.optJSONObject(i) ?: continue
-                val id = o.optString("id").ifBlank { continue }
+                val idRaw = o.optString("id")
+                if (idRaw.isBlank()) continue
+                val id = idRaw
                 add(
                     NuvioScraper(
                         id = id,
