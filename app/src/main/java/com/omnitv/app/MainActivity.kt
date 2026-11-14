@@ -22,6 +22,9 @@ class MainActivity : ComponentActivity() {
         ProfileStore.init(this)
         SettingsStore.init(this)
 
+        // Fix 403 Streamflix: Cronet envía JA3 de Chrome (no OkHttp) para imágenes/streams bloqueados
+        try { com.omnitv.app.network.CronetClient.init(this) } catch (_: Exception) {}
+
         // Panel de vinculación web (QR de Ajustes): sirve el portal en el
         // puerto 8080 para enlazar cuentas, addons y APIs desde el móvil.
         PairingServer.start()

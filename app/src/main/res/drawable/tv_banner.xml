@@ -1,51 +1,36 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Banner para el launcher de Android TV (referencia 320×180) -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:aapt="http://schemas.android.com/aapt"
-    android:width="320dp"
-    android:height="180dp"
-    android:viewportWidth="320"
-    android:viewportHeight="180">
-
-    <!-- Fondo degradado oscuro -->
+    android:width="320dp" android:height="180dp"
+    android:viewportWidth="320" android:viewportHeight="180">
+    <!-- Fondo premium — degradado profundo -->
     <path android:pathData="M0,0 L320,0 L320,180 L0,180 Z">
         <aapt:attr name="android:fillColor">
-            <gradient
-                android:startX="0"
-                android:startY="0"
-                android:endX="320"
-                android:endY="180"
-                android:type="linear">
-                <item android:offset="0" android:color="#FF101018" />
-                <item android:offset="1" android:color="#FF0B0B0F" />
+            <gradient android:startX="0" android:startY="0" android:endX="320" android:endY="180" android:type="linear">
+                <item android:offset="0" android:color="#FF12121A"/>
+                <item android:offset="0.55" android:color="#FF0B0B0F"/>
+                <item android:offset="1" android:color="#FF08080C"/>
             </gradient>
         </aapt:attr>
     </path>
-
-    <!-- Aro de lupa violeta -->
-    <path
-        android:pathData="M126,88 m-34,0 a34,34 0 1,0 68,0 a34,34 0 1,0 -68,0"
-        android:strokeColor="#FF7C5CFF"
-        android:strokeWidth="7"
-        android:fillColor="#00000000" />
-    <path
-        android:pathData="M150,112 L172,134"
-        android:strokeColor="#FF7C5CFF"
-        android:strokeWidth="9"
-        android:strokeLineCap="round" />
-
-    <!-- Seis puntos turquesa dentro de la lupa -->
-    <path android:pathData="M112,80 m-4,0 a4,4 0 1,0 8,0 a4,4 0 1,0 -8,0" android:fillColor="#FF00C2A8" />
-    <path android:pathData="M126,74 m-4,0 a4,4 0 1,0 8,0 a4,4 0 1,0 -8,0" android:fillColor="#FF00C2A8" />
-    <path android:pathData="M140,80 m-4,0 a4,4 0 1,0 8,0 a4,4 0 1,0 -8,0" android:fillColor="#FF00C2A8" />
-    <path android:pathData="M112,96 m-4,0 a4,4 0 1,0 8,0 a4,4 0 1,0 -8,0" android:fillColor="#FF00C2A8" />
-    <path android:pathData="M126,102 m-4,0 a4,4 0 1,0 8,0 a4,4 0 1,0 -8,0" android:fillColor="#FF00C2A8" />
-    <path android:pathData="M140,96 m-4,0 a4,4 0 1,0 8,0 a4,4 0 1,0 -8,0" android:fillColor="#FF00C2A8" />
-
-    <!-- Tipografía "Omni TV" simulada con barras -->
-    <path android:pathData="M198,72 h8 v36 h-8 z" android:fillColor="#FFFFFFFF" />
-    <path android:pathData="M212,72 h20 a10,10 0 0,1 0,20 h-20 v-8 h18 a2,2 0 0,0 0,-4 h-18 z" android:fillColor="#FFFFFFFF" />
-    <path android:pathData="M212,96 h22 v8 h-22 z" android:fillColor="#FFFFFFFF" />
-    <path android:pathData="M242,72 h8 v36 h-8 z" android:fillColor="#FF0A84FF" />
-    <path android:pathData="M256,72 h8 v28 a8,8 0 0,1 -8,8 z" android:fillColor="#FF0A84FF" />
+    <!-- Halo sutil detrás del icono -->
+    <path android:pathData="M0,0 L160,0 L160,180 L0,180 Z" android:fillColor="#0A0A84FF"/>
+    <!-- Lupa — aro con degradado -->
+    <path android:pathData="M118,86 m-36,0 a36,36 0 1,0 72,0 a36,36 0 1,0 -72,0" android:strokeColor="#FF0A84FF" android:strokeWidth="6.5" android:fillColor="#00000000"/>
+    <path android:pathData="M144,110 L170,136" android:strokeColor="#FF0A84FF" android:strokeWidth="9" android:strokeLineCap="round"/>
+    <!-- Puntos — turquesa con brillo -->
+    <path android:pathData="M104,78 m-4.5,0 a4.5,4.5 0 1,0 9,0 a4.5,4.5 0 1,0 -9,0" android:fillColor="#FF30D158"/>
+    <path android:pathData="M120,72 m-4.5,0 a4.5,4.5 0 1,0 9,0 a4.5,4.5 0 1,0 -9,0" android:fillColor="#FF30D158"/>
+    <path android:pathData="M136,78 m-4.5,0 a4.5,4.5 0 1,0 9,0 a4.5,4.5 0 1,0 -9,0" android:fillColor="#FF30D158"/>
+    <path android:pathData="M104,95 m-4.5,0 a4.5,4.5 0 1,0 9,0 a4.5,4.5 0 1,0 -9,0" android:fillColor="#FF30D158"/>
+    <path android:pathData="M120,102 m-4.5,0 a4.5,4.5 0 1,0 9,0 a4.5,4.5 0 1,0 -9,0" android:fillColor="#FF30D158"/>
+    <path android:pathData="M136,95 m-4.5,0 a4.5,4.5 0 1,0 9,0 a4.5,4.5 0 1,0 -9,0" android:fillColor="#FF30D158"/>
+    <!-- Omni TV — tipografía refinada -->
+    <path android:pathData="M192,64 h9 v44 h-9 z" android:fillColor="#FFFFFFFF"/>
+    <path android:pathData="M208,64 h22 a11,11 0 0,1 0,22 h-22 v-8 h20 a3,3 0 0,0 0,-6 h-20 z" android:fillColor="#FFFFFFFF"/>
+    <path android:pathData="M208,98 h24 v8 h-24 z" android:fillColor="#FFFFFFFF"/>
+    <path android:pathData="M240,64 h9 v44 h-9 z" android:fillColor="#FF0A84FF"/>
+    <path android:pathData="M254,64 h9 v32 a9,9 0 0,1 -9,9 z" android:fillColor="#FF0A84FF"/>
+    <!-- Subtítulo sutil -->
+    <path android:pathData="M192,122 h62 v1.5 h-62 z" android:fillColor="#30FFFFFF"/>
 </vector>
