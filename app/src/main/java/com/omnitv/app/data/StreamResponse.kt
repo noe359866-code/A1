@@ -6,6 +6,8 @@ import java.net.URI
 
 /** Normaliza las respuestas HTTP de Stremio, Omni Streams y el puente Nuvio. */
 internal object StreamResponse {
+    private val FORBIDDEN_HEADERS = setOf("host", "cookie", "content-length", "connection", "transfer-encoding")
+
     fun parse(json: Any?, fallbackName: String): List<StreamLink> {
         val array = when (json) {
             is JSONArray -> json
@@ -29,7 +31,17 @@ internal object StreamResponse {
                     .filter { it.isNotBlank() }.distinct().joinToString(" · ").take(80)
                 val headers = parseHeaders(hints?.optJSONObject("proxyHeaders")?.optJSONObject("request"))
                     .ifEmpty { parseHeaders(item.optJSONObject("headers")) }
-                add(StreamLink(label.ifBlank { fallbackName }, url, quality, format(url, item.optString("format")), headers))
+                val subtitles = parseSubtitles(item.optJSONArray("subtitles"))
+                add(
+                    StreamLink(
+                        label = label.ifBlank { fallbackName },
+                        url = url,
+                        quality = quality,
+                        format = format(url, item.optString("format")),
+                        headers = headers,
+                        subtitles = subtitles
+                    )
+                )
             }
         }.distinctBy { it.url }
     }
@@ -46,14 +58,41 @@ internal object StreamResponse {
     /** Solo cabeceras de petición HTTP; no cookies de otros dominios ni saltos de línea. */
     fun parseHeaders(json: JSONObject?): Map<String, String> {
         if (json == null) return emptyMap()
+        val raw = linkedMapOf<String, String>()
+        json.keys().forEach { key -> raw[key] = json.optString(key) }
+        return sanitizeHeaders(raw)
+    }
+
+    /** Reutiliza el mismo filtro para cabeceras que vienen de extractores Kotlin. */
+    fun sanitizeHeaders(raw: Map<String, String>): Map<String, String> {
         val result = linkedMapOf<String, String>()
-        json.keys().forEach { key ->
-            val value = json.optString(key)
+        for ((key, value) in raw) {
             if (key.matches(Regex("[A-Za-z0-9-]+")) && value.isNotBlank() && '\r' !in value && '\n' !in value &&
-                key.lowercase() !in setOf("host", "cookie", "content-length", "connection", "transfer-encoding") && result.size < 16) {
+                key.lowercase() !in FORBIDDEN_HEADERS && result.size < 16
+            ) {
                 result[key] = value.take(2048)
             }
         }
         return result
+    }
+
+    /**
+     * Stremio permite `subtitles: [{url, lang}]` o un array de cadenas. Solo
+     * se aceptan URLs válidas para la política de red; el reproductor además
+     * limita los subtítulos al mismo host para no filtrar cabeceras del stream.
+     */
+    fun parseSubtitles(json: JSONArray?): List<String> {
+        if (json == null) return emptyList()
+        return buildList {
+            for (i in 0 until minOf(json.length(), 8)) {
+                val value = json.opt(i)
+                val url = when (value) {
+                    is String -> value
+                    is JSONObject -> value.optString("url")
+                    else -> ""
+                }.trim()
+                if (url.isNotBlank() && NetPolicy.isAllowed(url)) add(url)
+            }
+        }.distinct()
     }
 }

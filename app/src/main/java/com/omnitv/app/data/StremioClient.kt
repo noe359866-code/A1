@@ -34,6 +34,12 @@ object StremioClient {
 
     private fun httpJson(url: String): JSONObject? = AddonHttp.getJson(url) as? JSONObject
 
+    /** Como [httpJson], pero conserva el estado HTTP para distinguir «sin red». */
+    private fun httpJsonWithStatus(url: String): Pair<JSONObject?, Int> {
+        val result = AddonHttp.getJsonWithStatus(url)
+        return (result.value as? JSONObject) to result.status
+    }
+
     /* ------------------------------ Catálogo ----------------------------- */
 
     /** Extras en el path, no en la query: catalog/tipo/id/search=…&skip=20.json. */
@@ -50,12 +56,20 @@ object StremioClient {
         catalogId: String,
         extras: Map<String, String> = emptyMap()
     ): CatalogPage = withContext(Dispatchers.IO) {
-        val json = httpJson(StremioUrl.catalog(base, type, catalogId, extras))
+        val (json, status) = httpJsonWithStatus(StremioUrl.catalog(base, type, catalogId, extras))
         val metas = json?.optJSONArray("metas").toObjectList().filter { it.optString("id").isNotBlank() }
         // Stremio no tiene un total obligatorio. Solo se ofrece otra página si
         // skip está declarado y esta respuesta no ha venido vacía.
-        CatalogPage(metas, metas.isNotEmpty() && "skip" in extras)
+        CatalogPage(metas, metas.isNotEmpty() && "skip" in extras, status)
     }
+
+    /** Búsqueda dentro de un catálogo (`extra: search`), con estado HTTP. */
+    suspend fun fetchSearchPage(
+        base: String,
+        type: String,
+        catalogId: String,
+        query: String
+    ): CatalogPage = fetchCatalogPage(base, type, catalogId, mapOf("search" to query))
 
     /** Búsqueda dentro de un catálogo (`extra: search`). */
     suspend fun fetchSearch(

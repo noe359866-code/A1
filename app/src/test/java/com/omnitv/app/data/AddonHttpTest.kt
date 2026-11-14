@@ -37,6 +37,9 @@ class AddonHttpTest {
                             "/redirect" -> "302 Found" to ""
                             "/public" -> "302 Found" to ""
                             "/post" -> "302 Found" to ""
+                            "/html-redirect" -> "302 Found" to ""
+                            "/html" -> "200 OK" to "<html>OK</html>"
+                            "/html-large" -> "200 OK" to ""
                             "/target" -> { redirected.incrementAndGet(); "200 OK" to "{}" }
                             "/large" -> "200 OK" to ""
                             "/catalog/movie/top/genre=Action&skip=20.json" -> "200 OK" to """{"metas":[{"id":"tt1"},{"id":"tt2"}]}"""
@@ -47,9 +50,10 @@ class AddonHttpTest {
                             append("HTTP/1.1 ${response.first}\r\nContent-Type: application/json\r\n")
                             when (path) {
                                 "/redirect", "/post" -> append("Location: http://127.0.0.1:$port/${if (path == "/post") "target" else "array"}\r\n")
+                                "/html-redirect" -> append("Location: http://127.0.0.1:$port/html\r\n")
                                 "/public" -> append("Location: http://public.example/array\r\n")
                             }
-                            append("Content-Length: ${if (path == "/large") AddonHttp.MAX_BODY + 1 else body.size}\r\nConnection: close\r\n\r\n")
+                            append("Content-Length: ${if (path == "/large" || path == "/html-large") AddonHttp.MAX_BODY + 1 else body.size}\r\nConnection: close\r\n\r\n")
                         }
                         it.getOutputStream().apply { write(headers.toByteArray()); write(body); flush() }
                     }
@@ -77,6 +81,23 @@ class AddonHttpTest {
 
     @Test fun `cuerpo declarado por encima del limite se rechaza`() {
         assertNull(AddonHttp.getJson(url("/large")))
+    }
+
+    @Test fun `getText lee HTML y sigue solo redirecciones permitidas`() {
+        assertEquals("<html>OK</html>", AddonHttp.getText(url("/html")))
+        assertEquals("<html>OK</html>", AddonHttp.getText(url("/html-redirect")))
+        assertNull(AddonHttp.getText(url("/public")))
+    }
+
+    @Test fun `getText limita el cuerpo igual que getJson`() {
+        assertNull(AddonHttp.getText(url("/html-large")))
+    }
+
+    @Test fun `getTextWithMeta conserva la URL final`() {
+        val result = AddonHttp.getTextWithMeta(url("/html-redirect"))
+        assertEquals("<html>OK</html>", result.text)
+        assertEquals(url("/html"), result.finalUrl)
+        assertEquals(200, result.status)
     }
 
     @Test fun `catalogo pagina con extras en el path y skip real`() = runBlocking {

@@ -25,7 +25,8 @@ import kotlin.concurrent.thread
  * **sin el código de emparejamiento no se entrega ni se acepta nada** — la
  * página sin código solo muestra el campo para introducirlo (ver
  * [PairingRouter] y [PairingPortal]). Los intentos fallidos se limitan por
- * cliente ([AttemptGuard]) y el tamaño de las peticiones está acotado.
+ * cliente ([AttemptGuard]), el guardado rechaza orígenes cruzados y el
+ * tamaño de las peticiones está acotado.
  */
 object PairingServer {
 
@@ -191,6 +192,8 @@ object PairingServer {
             append("Referrer-Policy: no-referrer\r\n")
             append("X-Content-Type-Options: nosniff\r\n")
             append("X-Frame-Options: DENY\r\n")
+            append("Cross-Origin-Resource-Policy: same-origin\r\n")
+            append("Cross-Origin-Opener-Policy: same-origin\r\n")
             append("\r\n")
         }
         socket.getOutputStream().apply {

@@ -47,7 +47,10 @@ internal class PairingRouter(
                 status(request.query["code"].orEmpty(), client)
 
             request.method == "POST" && path == "/save" ->
-                save(parseForm(request.body), client)
+                if (isCrossOrigin(request)) {
+                    onEvent("⚠️ POST /save rechazado por origen cruzado desde $client")
+                    PanelResponse(403, PairingPortal.html(null, MSG_CROSS_ORIGIN, isError = true))
+                } else save(parseForm(request.body), client)
 
             else -> PanelResponse(404, PairingPortal.html(null, "Página no encontrada", isError = true))
         }
@@ -174,6 +177,26 @@ internal class PairingRouter(
     private fun splitUrls(text: String): Pair<List<String>, List<String>> =
         text.lines().map { it.trim() }.filter { it.isNotEmpty() }.partition { NetPolicy.isAllowed(it) }
 
+    /**
+     * Mitigación CSRF: un formulario de otra web siempre anuncia un `Origin`
+     * distinto (o `Sec-Fetch-Site: cross-site`). Los clientes sin esas
+     * cabeceras (curl, apps propias) siguen pudiendo guardar, pero un
+     * navegador ajeno no puede reenviar el código del QR desde su origen.
+     */
+    private fun isCrossOrigin(request: PanelRequest): Boolean {
+        val site = request.headers["sec-fetch-site"]?.trim()?.lowercase()
+        if (site != null && site != "same-origin" && site != "none") return true
+        val origin = request.headers["origin"]?.trim().orEmpty()
+        if (origin.isEmpty()) return false
+        if (origin.equals("null", true)) return true
+        val uri = runCatching { java.net.URI(origin) }.getOrNull() ?: return true
+        if (!uri.scheme.equals("http", true)) return true // el panel se sirve por HTTP en la LAN
+        val host = uri.host?.takeIf { it.isNotBlank() } ?: return true
+        val authority = host + if (uri.port >= 0) ":${uri.port}" else ""
+        val expected = request.headers["host"]?.trim().orEmpty()
+        return expected.isNotBlank() && !authority.equals(expected, ignoreCase = true)
+    }
+
     private fun jsonString(value: String): String = buildString {
         append('"')
         for (c in value) {
@@ -191,5 +214,6 @@ internal class PairingRouter(
         const val UNSET_CODE = "------"
         const val MSG_WRONG_CODE = "❌ Código de emparejamiento incorrecto"
         const val MSG_LOCKED = "⏳ Demasiados intentos fallidos. Espera un minuto y vuelve a probar."
+        const val MSG_CROSS_ORIGIN = "❌ Petición rechazada: abre el panel desde el QR del televisor"
     }
 }

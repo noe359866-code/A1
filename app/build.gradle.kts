@@ -4,6 +4,16 @@ plugins {
     alias(libs.plugins.kotlin.compose)
 }
 
+// Firma de producción opcional. Sin secretos (build local / fork) se sigue
+// usando la keystore debug para sideload, pero el release ya no está
+// *obligado* a publicarse con una clave de depuración.
+val releaseKeystoreFile = System.getenv("OMNITV_KEYSTORE_FILE")?.takeIf { it.isNotBlank() }?.let { file(it) }
+val releaseStorePassword = System.getenv("OMNITV_KEYSTORE_PASSWORD")?.takeIf { it.isNotBlank() }
+val releaseKeyAlias = System.getenv("OMNITV_KEY_ALIAS")?.takeIf { it.isNotBlank() }
+val releaseKeyPassword = (System.getenv("OMNITV_KEY_PASSWORD") ?: releaseStorePassword)?.takeIf { it.isNotBlank() }
+val hasReleaseSigning = releaseKeystoreFile != null && releaseStorePassword != null &&
+    releaseKeyAlias != null && releaseKeyPassword != null
+
 android {
     namespace = "com.omnitv.app"
     compileSdk = 35
@@ -17,11 +27,23 @@ android {
         versionName = "1.2.0"
     }
 
+    signingConfigs {
+        if (hasReleaseSigning) {
+            create("release") {
+                storeFile = requireNotNull(releaseKeystoreFile)
+                storePassword = requireNotNull(releaseStorePassword)
+                keyAlias = requireNotNull(releaseKeyAlias)
+                keyPassword = requireNotNull(releaseKeyPassword)
+            }
+        }
+    }
+
     buildTypes {
         release {
-            // Firmado con debug keystore para sideload vía GitHub Releases.
-            // AGP genera ~/.android/debug.keystore automáticamente si no existe.
-            signingConfig = signingConfigs.getByName("debug")
+            // Con secretos OMNITV_KEYSTORE_* usa la clave de producción; si no,
+            // conserva debug para sideload (no apto para Play Store).
+            signingConfig = if (hasReleaseSigning) signingConfigs.getByName("release")
+            else signingConfigs.getByName("debug")
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(
@@ -87,10 +109,9 @@ dependencies {
     // Código QR del panel de vinculación (Ajustes → Vincular)
     implementation(libs.zxing.core)
 
-    // Plugins Streamflix-compat: scraping + extractores (providers/*.js → native)
-    implementation(libs.jsoup)
-    implementation(libs.okhttp)
-    // Streamflix 403 fix: Cronet envía TLS fingerprint de Chrome (JA3) en lugar de OkHttp, evita bloqueos 403 en imágenes/streams
+    // Extractores Kotlin y scraping usan AddonHttp (sin Jsoup/OkHttp propios).
+    // Cronet envía TLS fingerprint de Chrome (JA3) para los hosts de imágenes
+    // que bloquean OkHttp; se registra en el ImageLoader desde MainActivity.
     implementation(libs.cronet.embedded)
 
     // Tests unitarios (JVM): política de red, panel de vinculación y parsers.

@@ -5,7 +5,8 @@
 #   código no se entrega nada) y los dos parsers de HTML.
 # - assembleDebug y lintDebug verifican compilación y análisis Android.
 # - El contrato estático comprueba que no se añada un launcher de móvil.
-#   La distribución actual es sideload; release usa firma debug (no Play Store).
+#   El workflow de release admite keystore de producción mediante secretos;
+#   sin ellos sigue siendo sideload con firma debug (no Play Store).
 #
 # Las versiones de las acciones se fijan a las que se ejecutan sobre Node 24
 # (las de Node 20 están retiradas y GitHub las rechaza con un aviso).

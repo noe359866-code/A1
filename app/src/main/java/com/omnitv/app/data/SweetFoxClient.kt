@@ -4,8 +4,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
-import java.net.HttpURLConnection
-import java.net.URL
 
 /**
  * Cliente de sweetfox.app — catálogo real por estudio («Browse by studio»).
@@ -36,27 +34,8 @@ object SweetFoxClient {
 
     /* ------------------------------ HTTP -------------------------------- */
 
-    /**
-     * Descarga [url]. Primero por el DNS normal; si el nombre no resuelve
-     * (redes con DNS roto o filtrado), reintenta con el DNS de Cloudflare
-     * ([Doh]) validando el certificado del nombre original.
-     */
-    private fun httpText(url: String): String? =
-        httpTextDirect(url) ?: Doh.retry(url)
-
-    private fun httpTextDirect(url: String): String? = runCatching {
-        val connection = URL(url).openConnection() as HttpURLConnection
-        try {
-            connection.connectTimeout = 10_000
-            connection.readTimeout = 10_000
-            connection.setRequestProperty("User-Agent", "OmniTV/1.0 (Android TV)")
-            connection.setRequestProperty("Accept", "text/html")
-            if (connection.responseCode !in 200..299) return null
-            connection.inputStream.bufferedReader().readText()
-        } finally {
-            connection.disconnect()
-        }
-    }.getOrNull()
+    /** Cliente común: mismos límites y política de red que los addons. */
+    private fun httpText(url: String): String? = AddonHttp.getText(url)
 
     /* ------------------------------ Parser ------------------------------ */
 

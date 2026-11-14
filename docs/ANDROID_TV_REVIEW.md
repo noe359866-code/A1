@@ -40,30 +40,62 @@ La revisión encontró diferencias importantes entre esa intención y la impleme
 - StreamHub acepta también la forma simple documentada con un array JSON en la raíz.
 - CI comprueba el contrato TV, ejecuta tests, compila debug y ejecuta lint. El recuento de tests ahora falla si no se ejecuta ninguno. Release también pasa tests y lint antes de empaquetar.
 
+### Segunda pasada · integración y corrección de errores
+
+- **Extractores cableados**: `EmbedRefiner` conecta `ExtractorRegistry` con
+  `PlaybackResolver`. `StreamSource` y `StreamLink` llevan `subtitles`, y
+  `StreamMediaSource` registra esos subtítulos en el `MediaItem` (mismo host,
+  para no filtrar cabeceras privadas). El matching de dominios ahora compara
+  el host real, no sub cadenas de la URL.
+- **Un único cliente HTTP**: `AddonHttp.getText`/`getTextWithMeta` sustituyen a
+  los `HttpURLConnection` propios de cinejoy/sweetfox, Jsoup en extractores y
+  al OkHttp heredado de Cronet. Redirecciones, 4 MB, DoH y `NetPolicy`
+  se aplican en un solo sitio. `getJsonWithStatus` también reintenta por DoH.
+- **Cronet/Coil corregidos**: `CronetClient` devuelve `ByteArray` (antes
+  corrompía JPEG al pasar por `String`), limita hilos/cuerpo y valida
+  redirecciones; `cronetSupport()` instala el fetcher en el `ImageLoader`
+  singleton. Se eliminó `WebViewResolver` (JS sin timeout/cancelación).
+- **Caché y errores**: plataformas/estudios con TTL de 15 min, un `Mutex` por
+  id e invalidación por `SettingsStore.revision`. Home y Buscar distinguen
+  «sin resultados» de «no se pudo consultar el catálogo».
+- **Vinculación**: `/save` rechaza `Origin` ajeno y `Sec-Fetch-Site:
+  cross-site`; nuevas cabeceras `Cross-Origin-*-Policy`. El código sigue en la
+  URL del QR (pendiente de mover a POST/cookie si se expone a redes de invitados).
+- **Detalle**: episodios por tandas de 20 con «Mostrar más», en lugar de
+  componer toda la temporada en un `Column`.
+- **Release**: `app/build.gradle.kts` admite `OMNITV_KEYSTORE_*`; sin secretos
+  mantiene debug para sideload. `release.yml` decodifica el keystore y anuncia
+  el modo de firma. Ya no es obligatorio publicar con clave de depuración.
+- **Limpieza**: fuera `Provider.kt`, `SafeGoResolver.kt`, `WebViewResolver.kt`,
+  dependencias `jsoup`/`okhttp` y el `OkHttpClient` muerto de `cronetSupport`.
+  Documentación histórica corregida. Tests nuevos para refiner, registro,
+  cabeceras/subtítulos, `getText` y origen cruzado.
+
 ## Hallazgos que siguen abiertos
 
 | Prioridad | Zona | Hallazgo / trabajo necesario |
 |---|---|---|
-| Alta | Validación en dispositivo | No hay TV ni emulador conectado en este entorno. Falta comprobar foco, overscan, teclado, Home/Atrás, HLS, audio/subtítulos y consumo de memoria en API 22 y en una TV actual. |
-| Alta | Distribución | Release se firma con la clave debug. Sirve para sideload de confianza, **no como firma de producción ni para una distribución pública fiable**. No se ha publicado un APK ni un release. |
-| Parcial | Red / addons | Addons/StreamHub/Nuvio usan `AddonHttp` con redirecciones validadas y cuerpos limitados. Cronet y otros clientes heredados aún mantienen sus propios límites/rutas. |
-| Resuelta en la integración posterior | Plugins / Nuvio | Repositorios persistidos y conectados a StreamHub mediante puente JS externo; sin motor JS embebido. Ver `NUVIO_INVESTIGACION.md`. `ProviderRegistry` fue eliminado. |
-| Resuelta en la mejora posterior | Catálogo | `CatalogRepository` ya no contiene títulos ni servidores demo; la portada tiene estado vacío y el progreso ficticio de perfiles nuevos fue retirado. |
-| Resuelta en la integración posterior | Streams | StreamHub descubre `stream` en manifests instalados, proyectos base y Nuvio; cabeceras por fuente llegan a Media3. |
-| Media | Streams / Media3 | Los headers y subtítulos externos que devuelven los extractores no viajan en `StreamSource` hasta Media3. El formato se deduce de `.m3u8`; no hay DASH ni soporte torrent. |
-| Media | Búsqueda / caché | Los fallos remotos se degradan a listas vacías, sin distinguir ausencia de resultados de falta de red. Las cachés de plataforma/estudio no caducan ni ofrecen reintento; una recarga concurrente puede publicar una revisión antigua. |
+| Alta | Validación en dispositivo | No hay TV ni emulador conectado en este entorno. Falta comprobar foco, overscan, teclado, Home/Atrás, HLS/DASH, audio/subtítulos externos y consumo de memoria en API 22 y en una TV actual. Sigue siendo el bloqueo principal. |
+| Media | Distribución | Ya se admite keystore de producción (`OMNITV_KEYSTORE_*`); **hay que configurar los secretos y verificar el APK firmado** antes de distribución pública. Sin ellos el release sigue siendo debug/sideload. |
+| Resuelta | Red / addons | Un único `AddonHttp` para addons, puentes, scraping y extractores. Cronet valida redirecciones y cuerpo, y ya no hay clientes paralelos sin política. |
+| Resuelta | Plugins / extractores | `ProviderRegistry`, `Provider`/`Server`, resolvers de captcha y `WebViewResolver` eliminados. Los 6 extractores sí están cableados vía `EmbedRefiner`; sin motor JS embebido. |
+| Resuelta | Catálogo | Sin títulos demo; cachés de plataforma/estudio con TTL, bloqueo por id e invalidación por revisión. |
+| Resuelta | Errores remotos | `CatalogPage.status`, `RemoteCatalog.lastError` y `searchError` distinguen fallo de red/429 de una búsqueda sin resultados. |
+| Resuelta | Streams / Media3 | Headers por fuente, subtítulos externos (VTT/SRT/TTML) y HLS/DASH llegan a Media3. Sigue **sin soporte torrent** (infoHash/magnet se descartan por diseño). |
 | Media | Infantil | El filtro local TP/7+ no es un control parental: cualquier usuario puede cambiar de perfil y no hay PIN. Las clasificaciones remotas no se tratan como una política parental completa. |
-| Media | Seguridad local | El panel usa HTTP en LAN y el código viaja en la URL del QR. Tiene límite de intentos, pero falta endurecimiento CSRF/origen y una revisión de exposición en redes de invitados/VPN. Las claves solo se cifran en reposo a partir de API 23. |
-| Media | WebView / Coil | `WebViewResolver` no está conectado al flujo principal y necesita revisión de hilo principal, timeout y cancelación. `CronetFetcher`/`cronetSupport` tampoco están instalados en un `ImageLoader` de la app; Coil no recibe automáticamente ese supuesto fallback 403. |
-| Baja | UI / memoria | Detalle compone todos los episodios de una temporada en un `Column`; temporadas largas deberían usar una lista perezosa. El héroe y los textos con escala de fuente grande necesitan pruebas de overscan/accesibilidad. |
-| Baja | Mantenimiento | Hay imports/código experimental sin uso, avisos de versiones y documentación histórica que afirma más funciones de las que realmente están cableadas. Gradle 8.9 genera aviso de versión antigua en CI. |
+| Parcial | Seguridad local | Añadido rechazo de orígenes cruzados en `/save` y cabeceras `Cross-Origin-*`. Quedan: código en la URL del QR, HTTP en LAN y claves en claro solo en API 22. Revisar exposición en redes de invitados/VPN. |
+| Resuelta | WebView / Coil | `WebViewResolver` eliminado; `CronetFetcher` instalado en el `ImageLoader` singleton y corregido para no corromper imágenes binarias. |
+| Resuelta | UI / memoria | Detalle compone episodios por tandas de 20. El héroe y los textos con escala grande aún necesitan prueba de overscan/accesibilidad (incluida en «Validación en dispositivo»). |
+| Baja | Mantenimiento | Código experimental y docs históricos corregidos. Persisten avisos de versiones (Gradle 8.9, Kotlin/Media3/Compose de 2024) y 9 ramas `arena/*` huérfanas en GitHub. |
 
 ## Validación
 
 - `python3 tools/check_android_tv.py`: **correcto** localmente.
 - `python3 -m py_compile tools/check_android_tv.py tools/omni-stream-bridge/bridge.py`: correcto.
 - `git diff --check`: correcto.
-- CI final del código corregido (`03719b4`): **[ejecución 43554360259](https://github.com/noe359866-code/A1/actions/runs/43554360259), correcta**. Contrato TV, **98 tests / 0 fallos**, `assembleDebug` y `lintDebug` pasan. Los errores de lint detectados durante la revisión (API 24 y opt-in de Media3) se corrigieron; no se creó un baseline para ocultarlos.
+- CI de la primera pasada (`03719b4`): **[ejecución 43554360259](https://github.com/noe359866-code/A1/actions/runs/43554360259), correcta**. Contrato TV, **98 tests / 0 fallos**, `assembleDebug` y `lintDebug` pasan. Los errores de lint (API 24 y opt-in de Media3) se corrigieron; no se creó un baseline.
+- Segunda pasada: `python3 tools/check_android_tv.py` y `node --test` de los tres puentes Node siguen correctos en local. Se añadieron tests JVM para `EmbedRefiner`, `ExtractorRegistry`, `StreamResponse`, `AddonHttp.getText` y origen cruzado; su ejecución y la compilación Android quedan **pendientes de CI** (no hay SDK local).
+- Release `v1.2.0` ya publicado con `OmniTV-v1.2.0.apk`; esta pasada añade la firma de producción opcional sin cambiar el `versionCode`/`versionName` del árbol.
 - Puente Python: prueba local de `/health`, `/stream/movie/tt1375666.json` y `/stream/series/tt0944947:1:2` contra un servidor temporal en loopback; las tres respuestas fueron correctas. Sigue siendo un puente de ejemplo, no un resolver de producción.
 - CI conserva avisos de mantenimiento (por ejemplo, Gradle 8.9 antiguo); no son errores de compilación.
 - El entorno local no tiene Java ni Android SDK, por eso la compilación y los tests Android se ejecutan en GitHub Actions, no se simulan localmente.

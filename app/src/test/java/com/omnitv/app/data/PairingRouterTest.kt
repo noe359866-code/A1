@@ -62,8 +62,12 @@ class PairingRouterTest {
         client
     )
 
-    private fun post(path: String, body: String, client: String = "192.168.1.50") =
-        router.route(PanelRequest("POST", path, emptyMap(), emptyMap(), body), client)
+    private fun post(
+        path: String,
+        body: String,
+        client: String = "192.168.1.50",
+        headers: Map<String, String> = emptyMap()
+    ) = router.route(PanelRequest("POST", path, emptyMap(), headers, body), client)
 
     /** La respuesta no revela nada del televisor: ni el código ni los datos guardados. */
     private fun assertNoSecrets(response: PanelResponse) {
@@ -195,6 +199,45 @@ class PairingRouterTest {
         assertEquals(mapOf("TMDB" to "abc123", "TRAKT" to "xyz=="), store.savedApiKeys)
         assertTrue(response.body.contains("Guardado"))
         assertFalse(response.body.contains("descartaron"))
+    }
+
+    @Test
+    fun `un POST desde otro origen se rechaza antes de leer el codigo`() {
+        val response = post(
+            "/save",
+            "code=$CODE&account=intruso%40mal.com",
+            headers = mapOf("Host" to "192.168.1.10:8080", "Origin" to "http://mal.example")
+        )
+        assertEquals(403, response.status)
+        assertNoSecrets(response)
+        assertEquals(0, store.writes)
+        assertEquals(ACCOUNT, store.savedAccount)
+        assertTrue(events.last().contains("origen cruzado"))
+    }
+
+    @Test
+    fun `el mismo origen y los clientes sin Origin siguen pudiendo guardar`() {
+        val same = post(
+            "/save",
+            "code=$CODE&account=marco%40ejemplo.com",
+            headers = mapOf("Host" to "192.168.1.10:8080", "Origin" to "http://192.168.1.10:8080")
+        )
+        assertEquals(200, same.status)
+        assertEquals("marco@ejemplo.com", store.savedAccount)
+        val sinCabecera = post("/save", "code=$CODE&account=luisa%40ejemplo.com")
+        assertEquals(200, sinCabecera.status)
+        assertEquals("luisa@ejemplo.com", store.savedAccount)
+    }
+
+    @Test
+    fun `Sec-Fetch-Site cross-site tambien se rechaza`() {
+        val response = post(
+            "/save",
+            "code=$CODE",
+            headers = mapOf("Sec-Fetch-Site" to "cross-site")
+        )
+        assertEquals(403, response.status)
+        assertEquals(0, store.writes)
     }
 
     @Test

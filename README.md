@@ -119,6 +119,8 @@ Basado en Media3 ExoPlayer con investigación de Xuper TV:
 - **Protocolo:** `GET {base}/stream/{type}/{id}.json` (Stremio) o `GET {base}/stream/{type}/{id}` (simple) — ver `docs/STREAM-ADDON-PROTOCOL.md`
 - **Configuración:** addons Stremio por `manifest.json`; proyectos simples por URL base; repositorios Nuvio y puente JS en campos separados del panel QR
 - **Flujo:** consulta paralela (timeout 10s), deduplicación, límite 24 enlaces, paso al reproductor multi-servidor
+- **Embeds:** `EmbedRefiner` resuelve Mixdrop/Streamtape/Dood/Voe/Turbovio/Rpmvid a enlaces directos y propaga sus cabeceras y subtítulos (VTT/SRT) hasta Media3; matching por host real
+- **Un solo cliente HTTP:** `AddonHttp` centraliza addons, puentes, scraping y extractores (redirecciones validadas, 4 MB, DoH tras fallo DNS). Cronet/Coil solo para imágenes con 403
 - **Política de red:** solo `https://` hacia internet; `http://` únicamente en LAN privada — validado por `NetPolicy`
 - **Sin fallback demo:** si no hay enlaces, mensaje claro "Sin fuentes disponibles · configura un addon"
 
@@ -138,7 +140,8 @@ Puente Cloudstream: `tools/cloudstream-bridge/` (runtime externo). Puente de str
 - `backup_rules.xml` (API ≤30) y `data_extraction_rules.xml` (API ≥31) excluyen `omni_tv_settings.xml`
 - Claves migradas automáticamente de texto plano → cifrado en primer arranque
 - API 22 (sin Keystore AES): guardado sin cifrar con aviso honesto en UI
-- Panel web: código de 6 caracteres `SecureRandom`, rate-limit 5 intentos → 60s bloqueo, límites 16KB/64KB, headers `no-store`/`nosniff`/`DENY`
+- Panel web: código de 6 caracteres `SecureRandom`, rate-limit 5 intentos → 60s bloqueo, límites 16KB/64KB, headers `no-store`/`nosniff`/`DENY`/`Cross-Origin-*-Policy`
+- `POST /save` rechaza `Origin` ajeno y `Sec-Fetch-Site: cross-site` antes de validar el código (mitigación CSRF)
 
 ---
 
@@ -189,8 +192,10 @@ A1/
 │       ├── java/com/omnitv/app/
 │       │   ├── MainActivity.kt
 │       │   ├── OmniTvApp.kt
-│       │   ├── data/          # Models, Profile, Stores, Catalog, Stremio, Remote, Cinejoy, SweetFox, NetPolicy, Doh, SecretBox, Pairing
-│       │   ├── player/        # PlayerScreen (Media3) + PlayerUi
+│       │   ├── data/          # Models, Profile, Stores, Catalog, Stremio, Remote, Cinejoy, SweetFox, NetPolicy, Doh, SecretBox, Pairing, EmbedRefiner
+│       │   ├── network/       # CronetClient + CoilCronetFetcher (instalados en MainActivity)
+│       │   ├── player/        # PlayerScreen (Media3) + PlayerUi + StreamMediaSource
+│       │   ├── plugins/       # ExtractorRegistry + extractores de embeds
 │       │   └── ui/
 │       │       ├── theme/     # Color, AppType, Theme, Dimens
 │       │       ├── components/# Cards, Hero, Pills, Keyboard, Profile tiles
@@ -211,7 +216,10 @@ A1/
 ./gradlew assembleDebug         # APK debug
 ./gradlew testDebugUnitTest     # Tests JVM
 ./gradlew lint                  # Lint leanback
+./gradlew assembleRelease       # APK de release
 ```
+
+**Firma de release:** sin variables de entorno se usa la keystore *debug* (sideload). Para producción, define `OMNITV_KEYSTORE_FILE`, `OMNITV_KEYSTORE_PASSWORD`, `OMNITV_KEY_ALIAS` y `OMNITV_KEY_PASSWORD`; `release.yml` decodifica el keystore desde los secretos `OMNITV_KEYSTORE_*` del repositorio y anuncia el modo de firma en la release.
 
 CI (`.github/workflows/ci.yml`): contrato TV + tests + assembleDebug + lint en cada push/PR. Ver también `docs/ANDROID_TV_REVIEW.md`.
 

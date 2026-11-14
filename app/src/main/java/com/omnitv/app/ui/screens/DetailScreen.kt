@@ -365,13 +365,26 @@ fun DetailScreen(
                     }
 
                     Spacer(Modifier.height(18.dp))
+                    // Una temporada puede traer cientos de episodios. Se
+                    // componen por tandas: anidar un LazyColumn dentro de esta
+                    // Column con scroll vertical rompería el foco y la altura.
+                    var visibleEpisodes by remember(currentSeason) { mutableStateOf(20) }
+                    val shownEpisodes = seasonEpisodes.take(visibleEpisodes)
                     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                        seasonEpisodes.forEach { episode ->
+                        shownEpisodes.forEach { episode ->
                             EpisodeRow(
                                 episode = episode,
                                 onClick = { onPlay(CatalogRepository.episodeVideo(full, episode)) }
                             )
                         }
+                    }
+                    if (seasonEpisodes.size > shownEpisodes.size) {
+                        Spacer(Modifier.height(16.dp))
+                        TvChip(
+                            text = "Mostrar más episodios (${seasonEpisodes.size - shownEpisodes.size})",
+                            selected = false,
+                            onClick = { visibleEpisodes += 20 }
+                        )
                     }
                     Spacer(Modifier.height(36.dp))
                 }

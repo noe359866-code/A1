@@ -17,7 +17,8 @@ data class StreamLink(
     val url: String,
     val quality: String = "",
     val format: StreamFormat = StreamFormat.MP4,
-    val headers: Map<String, String> = emptyMap()
+    val headers: Map<String, String> = emptyMap(),
+    val subtitles: List<String> = emptyList()
 )
 
 /**
@@ -143,7 +144,8 @@ object StreamHub {
                                 .joinToString(" · "),
                             url = link.url,
                             format = link.format,
-                            headers = link.headers
+                            headers = link.headers,
+                            subtitles = link.subtitles
                         )
                     }
                 }

@@ -22,7 +22,9 @@ data class StreamSource(
     val url: String,
     val format: StreamFormat = StreamFormat.MP4,
     /** Cabeceras que el addon exige para este enlace (Referer, User-Agent…). */
-    val headers: Map<String, String> = emptyMap()
+    val headers: Map<String, String> = emptyMap(),
+    /** Subtítulos externos (VTT/SRT) que acompañan a este enlace. */
+    val subtitles: List<String> = emptyList()
 )
 
 /** Episodio de una serie o anime. */
