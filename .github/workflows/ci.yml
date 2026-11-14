@@ -3,7 +3,8 @@
 # - Los tests unitarios de JVM cubren la parte que más se rompe sin avisar:
 #   la política de red (http solo en la LAN), el panel de vinculación (sin
 #   código no se entrega nada) y los dos parsers de HTML.
-# - assembleDebug y lintDebug verifican compilación y análisis Android.
+# - assembleDebug + assembleRelease y lintDebug verifican compilación,
+#   R8/shrinkResources y análisis Android en cada push.
 # - El contrato estático comprueba que no se añada un launcher de móvil.
 #   El workflow de release admite keystore de producción mediante secretos;
 #   sin ellos sigue siendo sideload con firma debug (no Play Store).
@@ -71,10 +72,12 @@ jobs:
           set -o pipefail
           ./gradlew --no-daemon :app:testDebugUnitTest 2>&1 | tee build-tests.log
 
-      - name: Compilar la app (debug)
+      - name: Compilar la app (debug y release)
+        # El release se firma con debug cuando no hay secretos: así R8, el
+        # shrinker y la nueva configuración de firma se validan en cada push.
         run: |
           set -o pipefail
-          ./gradlew --no-daemon :app:assembleDebug 2>&1 | tee build-app.log
+          ./gradlew --no-daemon :app:assembleDebug :app:assembleRelease 2>&1 | tee build-app.log
 
       - name: Lint Android
         run: |

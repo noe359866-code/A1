@@ -221,7 +221,7 @@ A1/
 
 **Firma de release:** sin variables de entorno se usa la keystore *debug* (sideload). Para producción, define `OMNITV_KEYSTORE_FILE`, `OMNITV_KEYSTORE_PASSWORD`, `OMNITV_KEY_ALIAS` y `OMNITV_KEY_PASSWORD`; `release.yml` decodifica el keystore desde los secretos `OMNITV_KEYSTORE_*` del repositorio y anuncia el modo de firma en la release.
 
-CI (`.github/workflows/ci.yml`): contrato TV + tests + assembleDebug + lint en cada push/PR. Ver también `docs/ANDROID_TV_REVIEW.md`.
+CI (`.github/workflows/ci.yml`): contrato TV + tests + `assembleDebug` + `assembleRelease` (firma debug de reserva) + lint en cada push/PR. Ver también `docs/ANDROID_TV_REVIEW.md`.
 
 > **Emulador:** AVD Android TV (1080p), API 34 recomendado. App solo en launcher TV (`LEANBACK_LAUNCHER`).
 
