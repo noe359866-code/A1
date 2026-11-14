@@ -1,126 +1,89 @@
-# Investigación — Soporte Addons Stremio + Plugins Nuvio All-in-One
+# Addons Stremio y plugins Nuvio — integración implementada
 
-**Fecha:** 2026-11-14  
-**Manifest analizado:** `https://raw.githubusercontent.com/D3adlyRocket/All-in-One-Nuvio/refs/heads/main/manifest.json` (4 chunks, ~70 providers)  
-**Objetivo:** que Omni TV soporte addons Stremio clásicos **y** los plugins de Nuvio (All-in-One).
+**Actualizado:** 2026-11-14. Este documento describe el código de esta rama, no una propuesta pendiente.
 
----
+## Dos instalaciones distintas
 
-## 1. Fetch — qué hay en el manifest Nuvio
+| Entrada | Qué se guarda | Qué hace Omni TV |
+|---|---|---|
+| Addon Stremio | URL `…/manifest.json`, incluido un prefijo de configuración | Comprueba `id`, `name`, `resources`, `types`; usa `catalog`, `meta` y `stream` según capacidades |
+| Proyecto Omni Streams | URL base | `GET /stream/{type}/{id}.json`; alternativa sin `.json` para proyectos simples |
+| Repositorio Nuvio | URL de un índice con `scrapers[]` | Lista los scrapers y delega su ejecución JS al puente configurado |
 
-No es un addon Stremio estándar. Estructura:
+Un índice Nuvio **no** se acepta como addon Stremio. El campo de addons normaliza `stremio://` a `https://` y conserva rutas como `/configuracion/manifest.json`. HTTP sin cifrar solo se admite en la LAN; no se aceptan credenciales en la URL.
 
-```json
+## Stremio
+
+- Recursos como strings u objetos con `types`/`idPrefixes`.
+- Restricciones globales y por recurso; un addon solo-películas no recibe peticiones de series.
+- Catálogos con `extra`, `extraSupported`, `extraRequired` y opciones por defecto.
+- Extras codificados en el path: `/catalog/movie/top/genre=Action&skip=20.json`.
+- Búsqueda solo en catálogos que declaran `search`.
+- Paginación `skip` con botón **Cargar más títulos** operable con el mando en Películas.
+- Fichas desde el addon de origen o desde otro que declare `meta` para ese tipo/id.
+- Streams desde addons instalados en el campo Stremio y desde proyectos base, sin duplicar la misma base.
+- Respuestas `{streams:[…]}`, `{results:[…]}`, `{videos:[…]}` o array raíz.
+- MP4/progresivo, HLS y DASH; cabeceras `behaviorHints.proxyHeaders.request` o `headers` por servidor.
+- Se descartan torrents/infoHash, `ytId`, `notWebReady` y URLs que incumplen la política de red.
+
+Las redirecciones JSON se revalidan con `NetPolicy`; los cuerpos tienen límite de 4 MiB. Los manifests/repositorios se cachean cinco minutos y se pueden forzar desde Ajustes.
+
+## Nuvio y el puente JS
+
+El televisor persiste `nuvioPlugins` y `nuvioBridge`, muestra repositorios/scrapers y el estado real del puente. **No incluye un motor JS embebido.** Sin puente, los repositorios quedan guardados pero no resuelven streams.
+
+Se incluye un puente de referencia en `tools/nuvio-bridge/bridge.mjs` (Node 20+):
+
+```bash
+# Solo repositorios de confianza. El worker NO es un sandbox de seguridad.
+node tools/nuvio-bridge/bridge.mjs \
+  --repo https://raw.githubusercontent.com/D3adlyRocket/All-in-One-Nuvio/refs/heads/main/manifest.json \
+  --host 0.0.0.0 --port 8788
+```
+
+En el panel QR del televisor:
+
+1. **Plugins Nuvio → URLs de manifest**: la misma URL del repo.
+2. **Puente JS**: `http://IP-DEL-EQUIPO:8788` (misma LAN).
+3. Guardar y abrir Ajustes → **Comprobar manifests y puente**.
+
+El puente solo ejecuta repositorios autorizados con `--repo` al arrancar; no acepta que un cliente le mande ejecutar una URL arbitraria. Descarga el archivo `filename` declarado, lo ejecuta en un worker desechable con límite de tiempo/memoria y llama a:
+
+```js
+getStreams(tmdbId, "movie" | "tv", seasonOrNull, episodeOrNull)
+```
+
+Los plugins deben estar compilados para Nuvio (CommonJS, `module.exports.getStreams`). Si usan dependencias npm no incluidas en el bundle, instálalas en el directorio del puente o indica `--modules /ruta/con/node_modules`. Para títulos IMDb, el puente necesita `TMDB_API_KEY` para consultar TMDB Find; con `tmdb:…` no hace falta. No se inventan ids ni resultados.
+
+Contrato TV → puente:
+
+```http
+POST /scrape/{scraperId}
+Content-Type: application/json
+
 {
-  "name": "All-in-One-Nuvio",
-  "version": "1.0.0",
-  "scrapers": [
-    {
-      "id": "hianime",
-      "name": "HiAnime",
-      "description": "multi-server anime streaming…",
-      "version": "1.0.0",
-      "supportedTypes": ["movie","tv"],
-      "filename": "providers/hianime.js",
-      "enabled": true,
-      "formats": ["m3u8"],
-      "logo": "https://…/hianime.png",
-      "contentLanguage": ["ja","en"],
-      "hasSettings": true,
-      "limited": false
-    }, …
-  ]
+  "type": "tv",
+  "id": "tmdb:123:2:3",
+  "repoUrl": "https://…/manifest.json",
+  "filename": "providers/anime.js",
+  "scraper": "anime",
+  "extra": {"tmdbId":"123", "imdbId":null, "season":2, "episode":3}
 }
 ```
 
-- **~68 scrapers** en 4 categorías: anime (AllAnime, HiAnime, AniZone, AnimePahe…), internacional (VixSrc, VidSrc, Videasy, Torrentio), hindi/desi (HDHub4u, VegaMovies, MoviesDrive, DesiFlix) y live/otros (KissKH, OnlyKDrama, Mapple…).
-- Cada scraper: `providers/*.js` que corre en Nuvio (JS) → busca en web y devuelve links HTTP directos (mp4/mkv/m3u8/mpd). No es torrent por defecto, es HTTP/HLS.
-- Campos: `id`, `name`, `description`, `author`, `supportedTypes`, `formats`, `logo`, `contentLanguage`, `enabled`, `hasSettings`, `limited`.
+Respuesta: `{ "streams": [{ "name", "title", "url", "quality", "headers" }] }`. `GET /health` debe devolver `{ "ok": true }`. El puente de streams Python anterior (`tools/omni-stream-bridge`) sigue siendo un protocolo distinto y su `resolve()` de ejemplo no ejecuta plugins Nuvio.
 
-**Diferencia clave:**
+## Seguridad y límites honestos
 
-| Tipo | Instalación | Formato | Qué aporta |
-|------|-------------|---------|------------|
-| **Stremio Addon** | `https://addon.com/manifest.json` → resources catalog/meta/stream | JSON Stremio (`id`, `resources: ["catalog","meta","stream"]`, `catalogs[]`, `types[]`, `idPrefixes[]`) | Catálogos + fichas + streams (HTTP/Torrent) |
-| **Nuvio Plugin Repo** | `https://raw.githubusercontent.com/…/manifest.json` con `scrapers:[]` | Lista de scrapers JS | Streams HTTP vía scrapers; no da catálogo (Nuvio usa Cinemeta + catálogos propios) |
+- Ejecuta el puente en un equipo/contenedor aislado y solo con repositorios de confianza. Un worker de Node no impide acceso al sistema como lo haría un sandbox real.
+- El panel del QR sigue exigiendo código; guardar una URL no significa que el servidor haya respondido. Ajustes muestra el error real.
+- No hay soporte P2P/torrent ni ejecución JS offline en el TV.
+- La disponibilidad de cada scraper externo no está garantizada. El repositorio All-in-One consultado el 2026-11-14 declaraba 66 scrapers, no un número fijo prometido por la app.
+- Las cabeceras de reproducción ya llegan a Media3 por fuente. Los subtítulos externos devueltos por scrapers aún no se incorporan como pistas laterales de Media3.
+- Falta prueba en un televisor físico: compilación/lint/tests no sustituyen validar foco D-pad, codecs y reproducción HLS/DASH reales.
 
-Nuvio soporta ambos: **Addons** (uno a uno, manifest URL) y **Plugins** (repositorio de scrapers). Un addon como `nuviostreams.hayd.uk` o `torrentio.strem.fun` da streams; un repo como `All-in-One-Nuvio` da 68 scrapers a la vez.
+## Pruebas automatizadas
 
-> Nota: El archivo analizado es el **repo**. El endpoint público del addon Nuvio Streams original (`https://nuviostreams.hayd.uk`) sigue declarando `{"id":"org.nuvio.streams","resources":["stream"],"types":["movie","series"],"idPrefixes":["tt","tmdb"]}` — retirado en abril 2026 pero replicable.
-
----
-
-## 2. Stremio addon protocol — soporte actual vs necesario
-
-**Soporte actual (StremioClient.kt + RemoteCatalog.kt):**
-
-- `GET /catalog/{type}/{id}[/{extras}].json → {metas:[…]}` ✓
-- `GET /meta/{type}/{id}.json → {meta:{…}}` ✓
-- `parseVideo()` mapea a `Video` ✓
-- `fetchManifest()` genérico ✓
-- `loadCustomAddons()` carga 2 catálogos por addon, 20 items ✓
-- DoH fallback + NetPolicy `https`/`http://lan` ✓
-
-**Faltaba:**
-
-- `resources` como objetos `{name:"stream", types:[…], idPrefixes:[…]}` además de strings — algunos addons declaran granular.
-- `catalogs[].extra[]` con `name/isRequired/options/optionsLimit` — necesario para validar `search=`, `genre=`, `skip=` antes de pedir.
-- `catalogs[].extraRequired` legacy + `behaviorHints` (`adult`, `p2p`, `configurable`).
-- `idPrefixes`/`types` filtering en cliente — evitar pedir series a addon solo-movies.
-- Pagination `skip=` real (no solo top).
-- Streams con `behaviorHints` (`bingeGroup`, `filename`, `videoHash`, `proxyHeaders`) y debrid.
-
-**Implementado en esta rama:**
-
-- Parser robusto `StremioManifest` que tolera `resources` string/obj y `catalogs` con `extra`/`extraSupported`/`extraRequired`.
-- `AddonCapability` (catalog/meta/stream/subtitles) derivado de resources.
-- `StreamHub` unificado: resuelve de **todos** los addons que provean `stream`, no solo `streamAddons` separados — `streamAddons` sigue útil para proyectos custom puros.
-- Normalización de extras: `search`, `genre`, `skip` codificados como `?search=…&skip=…` dentro del path JSON (variante Stremio v3).
-
----
-
-## 3. Plugins Nuvio — arquitectura en Omni TV
-
-Como los scrapers son JS (`providers/hianime.js` etc.), no se pueden ejecutar directo en Kotlin sin motor JS. Estrategia:
-
-1. **Fetchear y mapear** el repo: `NuvioPluginManager.fetchRepo(url)` → lista `NuvioScraper` con metadatos + `filename` + `formats` + `logo`. Cache con revision.
-2. **Persistir** repo URLs en `SettingsStore.nuvioPlugins` (lista de manifest URLs, igual que `customAddons`). Política NetPolicy idéntica.
-3. **Resolver** vía puente: si los scrapers se necesitan ejecutar, se delega a una instancia compatible Nuvio/bridge local (`http://lan:8787`) que sí ejecuta JS — ya permitido por NetPolicy (`http://192.168.x:8787`). `NuvioScraperResolver` construye `POST /scrape/{scraperId}` con `{type, id, imdb/tmdb}`. Si no hay bridge, se informa y se usan addons Stremio normales.
-4. **UI:** Ajustes muestra conteo de plugins/scrapers y permite activar/desactivar por idioma/formato; el panel web del QR tiene nuevo textarea “Plugins Nuvio”.
-
-Esto deja la puerta abierta a embeber `Duktape`/`QuickJS` más tarde sin romper API.
-
----
-
-## 4. Cambios en código (resumen)
-
-- `StremioManifest.kt` (nuevo): modelos + parser tolerante.
-- `NuvioPlugin.kt` (nuevo): `NuvioScraper`, `NuvioPluginManifest`, `NuvioPluginManager` + `NuvioScraperResolver`.
-- `StremioClient.kt`: `parseManifest()`, `supportsType()`, `catalogExtraSupported()`, normalización extras.
-- `SettingsStore.kt`: `nuvioPlugins: List<String>` + `saveNuvioPlugins()`.
-- `PairingPortal/Router/Server`: nuevo campo `nuvioPlugins` + splitUrls con NetPolicy, status JSON incluye `plugins`.
-- `RemoteCatalog.kt`: usa `StremioManifest` para filtrar catálogos con `search` y soporta pagination.
-- `StreamHub.kt`: descubre addons `stream` de `customAddons` + `streamAddons` + plugins Nuvio (bridge).
-- `SettingsScreen.kt`: nueva card “Plugins Nuvio” con grid y estados.
-
----
-
-## 5. Pruebas manuales
-
-```kotlin
-// Añadir vía QR panel:
-// https://v3-cinemeta.strem.io/manifest.json  → catálogos
-// https://torrentio.strem.fun/manifest.json    → streams (si p2p ok)
-// https://raw.githubusercontent.com/D3adlyRocket/All-in-One-Nuvio/refs/heads/main/manifest.json → 68 scrapers
-```
-
-Al guardar, `RemoteCatalog.needsReload()` dispara `refresh()` → nuevas filas “HiAnime · top” etc. si el addon expone catálogo, o Streams disponibles en `StreamHub` si expone `stream`.
-
----
-
-## 6. Próximos pasos (fuera de alcance inmediato)
-
-- Motor JS embebido (QuickJS Android) para ejecutar `providers/*.js` offline.
-- Cache de streams con TTL y prioridad por calidad/idioma.
-- Descarga de `providers/*.js` individuales para inspección en Ajustes.
-
+- JVM: parsers/capacidades, URLs configuradas, panel QR, política de red, HTTP real en loopback, redirecciones, límite de cuerpo, paginación y normalización de streams.
+- Node: `node --test tools/nuvio-bridge/bridge.test.mjs` levanta un repo fixture y un puente reales, ejecuta `getStreams` en un worker y comprueba health, episodio, streams y denegación de repos no autorizados.
+- CI ejecuta ambas suites, contrato TV, `assembleDebug` y `lintDebug`.
