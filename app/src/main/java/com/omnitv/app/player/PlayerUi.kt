@@ -2,6 +2,8 @@ package com.omnitv.app.player
 
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
@@ -32,22 +34,24 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.omnitv.app.ui.theme.*
 
-// ────────────────────────────────────────────────────────────────────────────
-// Tokens — solo reproductor
-// ────────────────────────────────────────────────────────────────────────────
+// ── Tokens ──────────────────────────────────────────────────────────────────
 
 val GlassDark = Color(0xE60E0E13)
-val GlassBorder = Color(0x26FFFFFF) // 15%
-val PlayerScrimTop = Brush.verticalGradient(0f to Color.Black.copy(alpha = 0.82f), 0.55f to Color.Black.copy(alpha = 0.42f), 1f to Color.Transparent)
-val PlayerScrimBottom = Brush.verticalGradient(0f to Color.Transparent, 0.35f to Color.Black.copy(alpha = 0.55f), 1f to Color.Black.copy(alpha = 0.88f))
+val GlassBorder = Color(0x26FFFFFF)
+val PlayerScrimTop = Brush.verticalGradient(
+    0f to Color.Black.copy(alpha = 0.88f),
+    0.48f to Color.Black.copy(alpha = 0.45f),
+    1f to Color.Transparent
+)
+val PlayerScrimBottom = Brush.verticalGradient(
+    0f to Color.Transparent,
+    0.28f to Color.Black.copy(alpha = 0.55f),
+    1f to Color.Black.copy(alpha = 0.92f)
+)
 val ControlWhite = SurfaceBright
+private val FocusInner = Color(0xFF0E0E13)
 
-private val FocusRing = Color.White
-private val FocusRingInner = Color(0xFF0B0B0F)
-
-// ────────────────────────────────────────────────────────────────────────────
-// GlassPanel — premium, doble borde + sombra 24dp
-// ────────────────────────────────────────────────────────────────────────────
+// ── GlassPanel ──────────────────────────────────────────────────────────────
 
 @Composable
 fun GlassPanel(modifier: Modifier = Modifier, cornerRadius: Dp = 18.dp, content: @Composable () -> Unit) {
@@ -56,180 +60,90 @@ fun GlassPanel(modifier: Modifier = Modifier, cornerRadius: Dp = 18.dp, content:
         modifier
             .shadow(24.dp, shape, clip = false)
             .clip(shape)
-            .background(
-                Brush.verticalGradient(
-                    0f to Color(0xFF1C1C24).copy(alpha = 0.96f),
-                    1f to Color(0xFF0E0E13).copy(alpha = 0.98f)
-                )
-            )
+            .background(Brush.verticalGradient(0f to Color(0xFF1D1D26).copy(0.98f), 1f to Color(0xFF0E0E13).copy(0.98f)))
             .border(1.dp, GlassBorder, shape)
     ) {
-        // Highlight interior superior — efecto cristal
-        Box(
-            Modifier
-                .fillMaxWidth()
-                .height(1.dp)
-                .background(Color.White.copy(alpha = 0.08f))
-                .clip(RoundedCornerShape(topStart = cornerRadius, topEnd = cornerRadius))
-        )
+        Box(Modifier.fillMaxWidth().height(1.dp).background(Color.White.copy(0.08f)).clip(RoundedCornerShape(topStart = cornerRadius, topEnd = cornerRadius)))
         Box(Modifier.padding(1.dp)) { content() }
     }
 }
 
-// ────────────────────────────────────────────────────────────────────────────
-// Timeline — seekbar 3m, thumb grande al enfocar, tiempos legibles
-// ────────────────────────────────────────────────────────────────────────────
+// ── Timeline ────────────────────────────────────────────────────────────────
 
 @Composable
-fun PlayerTimeline(
-    positionMs: Long,
-    durationMs: Long,
-    bufferedMs: Long,
-    modifier: Modifier = Modifier,
-    focused: Boolean = false
-) {
+fun PlayerTimeline(positionMs: Long, durationMs: Long, bufferedMs: Long, modifier: Modifier = Modifier, focused: Boolean = false) {
     val fraction = if (durationMs > 0) (positionMs.toFloat() / durationMs).coerceIn(0f, 1f) else 0f
     val bufferedFrac = if (durationMs > 0) (bufferedMs.toFloat() / durationMs).coerceIn(0f, 1f) else 0f
     val trackH by animateDpAsState(if (focused) 6.dp else 4.dp, tween(AppMotion.Fast), label = "trackH")
     val thumbR by animateDpAsState(if (focused) 9.dp else 7.dp, tween(AppMotion.Fast), label = "thumbR")
     val elapsed = formatMs(positionMs)
     val remaining = if (durationMs > 0) "-${formatMs((durationMs - positionMs).coerceAtLeast(0))}" else "--:--"
-
     Column(modifier) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            // tiempo izquierda — monoespaciado para no saltar
-            Text(elapsed, style = AppType.metadata.copy(fontFamily = FontFamily.Monospace, fontSize = 13.sp), color = Color.White.copy(alpha = 0.92f))
-            Spacer(Modifier.width(16.dp))
+            Text(elapsed, style = AppType.metadata.copy(fontFamily = FontFamily.Monospace, fontSize = 13.sp, letterSpacing = 0.2.sp), color = Color.White.copy(0.96f))
+            Spacer(Modifier.width(14.dp))
             BoxWithConstraints(Modifier.weight(1f).height(28.dp), contentAlignment = Alignment.CenterStart) {
                 val w = maxWidth
-                // base
-                Box(Modifier.width(w).height(trackH).clip(AppRadius.pill).background(Color.White.copy(alpha = 0.18f)))
-                // buffer
-                if (bufferedFrac > 0.01f) {
-                    Box(Modifier.width(w * bufferedFrac).height(trackH).clip(AppRadius.pill).background(Color.White.copy(alpha = 0.30f)))
-                }
-                // progreso
+                Box(Modifier.width(w).height(trackH).clip(AppRadius.pill).background(Color.White.copy(0.18f)))
+                if (bufferedFrac > 0.01f) Box(Modifier.width(w * bufferedFrac).height(trackH).clip(AppRadius.pill).background(Color.White.copy(0.28f)))
                 Box(Modifier.width(w * fraction).height(trackH).clip(AppRadius.pill).background(Color.White))
-                // chapita/indicador de posición
-                Box(
-                    Modifier
-                        .offset(x = (w - thumbR * 2) * fraction)
-                        .size(thumbR * 2)
-                        .clip(CircleShape)
-                        .background(Color.White)
-                        .shadow(8.dp, CircleShape)
-                        .border(2.dp, Color.Black.copy(alpha = 0.12f), CircleShape)
-                )
+                Box(Modifier.offset(x = (w - thumbR * 2) * fraction).size(thumbR * 2).clip(CircleShape).background(Color.White).shadow(8.dp, CircleShape).border(2.dp, Color.Black.copy(0.14f), CircleShape))
             }
-            Spacer(Modifier.width(16.dp))
-            Text(remaining, style = AppType.metadata.copy(fontFamily = FontFamily.Monospace, fontSize = 13.sp), color = Color.White.copy(alpha = 0.72f))
+            Spacer(Modifier.width(14.dp))
+            Text(remaining, style = AppType.metadata.copy(fontFamily = FontFamily.Monospace, fontSize = 13.sp), color = Color.White.copy(0.62f))
         }
-        // capítulo/marca sutil (opcional)
-        if (durationMs > 0 && durationMs > 60_000) {
+        if (durationMs > 60_000) {
             Spacer(Modifier.height(6.dp))
             Canvas(Modifier.fillMaxWidth().height(2.dp)) {
                 val step = size.width / 6f
-                repeat(5) { i ->
-                    drawLine(Color.White.copy(alpha = 0.12f), Offset(step * (i + 1), 0f), Offset(step * (i + 1), size.height), strokeWidth = 1.dp.toPx(), cap = StrokeCap.Round)
-                }
+                repeat(5) { i -> drawLine(Color.White.copy(0.10f), Offset(step * (i + 1), 0f), Offset(step * (i + 1), size.height), strokeWidth = 1.dp.toPx(), cap = StrokeCap.Round) }
             }
         }
     }
 }
 
 private fun formatMs(ms: Long): String {
-    val s = (ms / 1000).coerceAtLeast(0)
-    val h = s / 3600
-    val m = (s % 3600) / 60
-    val sec = s % 60
-    return if (h > 0) String.format(java.util.Locale.US, "%d:%02d:%02d", h, m, sec)
-    else String.format(java.util.Locale.US, "%02d:%02d", m, sec)
+    val s = (ms / 1000).coerceAtLeast(0); val h = s / 3600; val m = (s % 3600) / 60; val sec = s % 60
+    return if (h > 0) String.format(java.util.Locale.US, "%d:%02d:%02d", h, m, sec) else String.format(java.util.Locale.US, "%02d:%02d", m, sec)
 }
 
-// ────────────────────────────────────────────────────────────────────────────
-// ControlPill — 44dp, icono 18dp, active=accent pill, focus=white
-// ────────────────────────────────────────────────────────────────────────────
+// ── ControlPill ─────────────────────────────────────────────────────────────
 
 @Composable
 fun ControlPill(iconRes: Int, label: String, onClick: () -> Unit, modifier: Modifier = Modifier, active: Boolean = false) {
     var focused by remember { mutableStateOf(false) }
     val scale by animateFloatAsState(if (focused) 1.06f else 1f, tween(AppMotion.Fast, easing = AppMotion.Emphasized), label = "pillScale")
-    val bg = when {
-        focused -> Color.White
-        active -> Accent
-        else -> Color.White.copy(alpha = 0.12f)
-    }
-    val content = when {
-        focused -> OnLight
-        active -> Color.White
-        else -> Color.White.copy(alpha = 0.96f)
-    }
+    val bg = when { focused -> Color.White; active -> Accent; else -> Color.White.copy(0.12f) }
+    val fg = when { focused -> OnLight; active -> Color.White; else -> Color.White.copy(0.96f) }
     Row(
-        modifier
-            .height(44.dp)
-            .graphicsLayer { scaleX = scale; scaleY = scale }
-            .clip(AppRadius.pill)
-            .background(bg)
-            .border(
-                width = when {
-                    focused -> 2.dp
-                    active -> 1.dp
-                    else -> 0.dp
-                },
-                color = when {
-                    focused -> FocusRingInner.copy(alpha = 0.9f)
-                    active -> Accent.copy(alpha = 0.85f)
-                    else -> Color.Transparent
-                },
-                shape = AppRadius.pill
-            )
-            .clickable(remember { MutableInteractionSource() }, null, onClick = onClick)
-            .onFocusChanged { focused = it.isFocused }
-            .padding(horizontal = 14.dp),
-        verticalAlignment = Alignment.CenterVertically
+        modifier.height(42.dp).graphicsLayer { scaleX = scale; scaleY = scale }.clip(AppRadius.pill).background(bg)
+            .border(if (focused) 2.dp else if (active) 1.dp else 0.dp, if (focused) FocusInner.copy(0.92f) else Accent.copy(0.9f), AppRadius.pill)
+            .clickable(remember { MutableInteractionSource() }, null, onClick).onFocusChanged { focused = it.isFocused }
+            .padding(horizontal = 13.dp), verticalAlignment = Alignment.CenterVertically
     ) {
-        Image(painterResource(iconRes), null, Modifier.size(18.dp), colorFilter = androidx.compose.ui.graphics.ColorFilter.tint(content))
+        Image(painterResource(iconRes), null, Modifier.size(16.dp), colorFilter = androidx.compose.ui.graphics.ColorFilter.tint(fg))
         Spacer(Modifier.width(7.dp))
-        Text(label, style = androidx.compose.ui.text.TextStyle(FontFamily.SansSerif, FontWeight.SemiBold, 13.sp, letterSpacing = 0.2.sp), color = content, maxLines = 1)
+        Text(label, style = androidx.compose.ui.text.TextStyle(FontFamily.SansSerif, FontWeight.SemiBold, 12.5.sp, letterSpacing = 0.15.sp), color = fg, maxLines = 1)
     }
 }
 
-// ────────────────────────────────────────────────────────────────────────────
-// TransportButton — 56/64dp, glass 14%, primary blanca, focus halo 12dp
-// ────────────────────────────────────────────────────────────────────────────
+// ── TransportButton ───────────────────────────────────────────────────────
 
 @Composable
 fun TransportButton(iconRes: Int, contentDescription: String, onClick: () -> Unit, modifier: Modifier = Modifier, size: Dp = 56.dp, primary: Boolean = false) {
     var focused by remember { mutableStateOf(false) }
-    val scale by animateFloatAsState(if (focused) 1.12f else 1f, tween(AppMotion.Fast), label = "transportScale")
-    val bg = when {
-        focused -> Color.White
-        primary -> Color.White
-        else -> Color.White.copy(alpha = 0.14f)
-    }
+    val scale by animateFloatAsState(if (focused) 1.12f else 1f, tween(AppMotion.Fast), label = "tScale")
+    val bg = when { focused -> Color.White; primary -> Color.White; else -> Color.White.copy(0.14f) }
     Box(
-        modifier
-            .size(size)
-            .graphicsLayer { scaleX = scale; scaleY = scale }
-            .shadow(if (focused) 14.dp else 0.dp, CircleShape, clip = false)
-            .clip(CircleShape)
-            .background(bg)
-            .border(
-                width = if (focused) 2.5.dp else 1.dp,
-                color = if (focused) FocusRingInner.copy(alpha = 0.9f) else Color.White.copy(alpha = if (primary) 0.82f else 0.14f),
-                shape = CircleShape
-            )
-            .clickable(remember { MutableInteractionSource() }, null, onClick = onClick)
-            .onFocusChanged { focused = it.isFocused },
+        modifier.size(size).graphicsLayer { scaleX = scale; scaleY = scale }.shadow(if (focused) 14.dp else 0.dp, CircleShape, false)
+            .clip(CircleShape).background(bg)
+            .border(if (focused) 2.5.dp else 1.dp, if (focused) FocusInner.copy(0.92f) else Color.White.copy(if (primary) 0.86f else 0.14f), CircleShape)
+            .clickable(remember { MutableInteractionSource() }, null, onClick).onFocusChanged { focused = it.isFocused },
         contentAlignment = Alignment.Center
-    ) {
-        Image(painterResource(iconRes), contentDescription, Modifier.size(size * 0.46f), colorFilter = androidx.compose.ui.graphics.ColorFilter.tint(if (focused || primary) OnLight else Color.White))
-    }
+    ) { Image(painterResource(iconRes), contentDescription, Modifier.size(size * 0.46f), colorFilter = androidx.compose.ui.graphics.ColorFilter.tint(if (focused || primary) OnLight else Color.White)) }
 }
 
-// ────────────────────────────────────────────────────────────────────────────
-// OptionMenu — 380dp, overline + divider + filas 48dp con check
-// ────────────────────────────────────────────────────────────────────────────
+// ── OptionMenu ────────────────────────────────────────────────────────────
 
 data class PlayerOption(val label: String, val selected: Boolean, val onSelect: () -> Unit)
 
@@ -238,7 +152,7 @@ fun OptionMenu(title: String, options: List<PlayerOption>, modifier: Modifier = 
     GlassPanel(modifier.width(380.dp)) {
         Column(Modifier.padding(vertical = 12.dp)) {
             Text(title.uppercase(), style = androidx.compose.ui.text.TextStyle(FontFamily.SansSerif, FontWeight.Bold, 11.sp, letterSpacing = 1.1.sp), color = TextMuted, modifier = Modifier.padding(horizontal = 18.dp, vertical = 6.dp))
-            Box(Modifier.fillMaxWidth().padding(horizontal = 12.dp).height(1.dp).background(Color.White.copy(alpha = 0.07f)))
+            Box(Modifier.fillMaxWidth().padding(horizontal = 12.dp).height(1.dp).background(Color.White.copy(0.07f)))
             Spacer(Modifier.height(6.dp))
             options.forEach { OptionRow(it) }
         }
@@ -249,86 +163,62 @@ fun OptionMenu(title: String, options: List<PlayerOption>, modifier: Modifier = 
 private fun OptionRow(option: PlayerOption) {
     var focused by remember { mutableStateOf(false) }
     Row(
-        Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 10.dp, vertical = 2.dp)
-            .clip(AppRadius.md)
-            .background(if (focused) Color.White else if (option.selected) Color.White.copy(alpha = 0.06f) else Color.Transparent)
-            .border(if (option.selected && !focused) 1.dp else 0.dp, Color.White.copy(alpha = 0.06f), AppRadius.md)
-            .clickable(remember { MutableInteractionSource() }, null, option.onSelect)
-            .onFocusChanged { focused = it.isFocused }
-            .padding(horizontal = 12.dp, vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically
+        Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 2.dp).clip(AppRadius.md)
+            .background(if (focused) Color.White else if (option.selected) Color.White.copy(0.06f) else Color.Transparent)
+            .border(if (option.selected && !focused) 1.dp else 0.dp, Color.White.copy(0.06f), AppRadius.md)
+            .clickable(remember { MutableInteractionSource() }, null, option.onSelect).onFocusChanged { focused = it.isFocused }
+            .padding(horizontal = 12.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically
     ) {
-        Box(
-            Modifier.size(18.dp).clip(CircleShape)
-                .background(if (option.selected) Accent else Color.Transparent)
-                .border(1.8.dp, if (option.selected) Accent else Color.White.copy(alpha = 0.35f), CircleShape),
-            contentAlignment = Alignment.Center
-        ) {
-            if (option.selected) {
-                Box(Modifier.size(6.dp).clip(CircleShape).background(Color.White))
-            }
+        Box(Modifier.size(18.dp).clip(CircleShape).background(if (option.selected) Accent else Color.Transparent).border(1.8.dp, if (option.selected) Accent else Color.White.copy(0.34f), CircleShape), contentAlignment = Alignment.Center) {
+            if (option.selected) Box(Modifier.size(6.dp).clip(CircleShape).background(Color.White))
         }
         Spacer(Modifier.width(12.dp))
-        Text(option.label, style = androidx.compose.ui.text.TextStyle(FontFamily.SansSerif, if (option.selected) FontWeight.SemiBold else FontWeight.Normal, 14.sp), color = if (focused) OnLight else Color.White.copy(alpha = if (option.selected) 1f else 0.88f), maxLines = 1)
-        if (option.selected && !focused) {
-            Spacer(Modifier.weight(1f))
-            Box(Modifier.size(8.dp).clip(CircleShape).background(Accent))
-        }
+        Text(option.label, style = androidx.compose.ui.text.TextStyle(FontFamily.SansSerif, if (option.selected) FontWeight.SemiBold else FontWeight.Normal, 13.5.sp), color = if (focused) OnLight else Color.White.copy(if (option.selected) 1f else 0.86f), maxLines = 1)
+        if (option.selected && !focused) { Spacer(Modifier.weight(1f)); Box(Modifier.size(7.dp).clip(CircleShape).background(Accent)) }
     }
 }
 
-// ────────────────────────────────────────────────────────────────────────────
-// EpgChip — AHORA rojo vivo, A CONTINUACIÓN gris
-// ────────────────────────────────────────────────────────────────────────────
+// ── EpgChip ───────────────────────────────────────────────────────────────
 
 @Composable
 fun EpgChip(text: String, color: Color, modifier: Modifier = Modifier) {
-    val isLive = text.contains("AHORA", ignoreCase = true)
-    Row(
-        modifier.clip(AppRadius.xs).background(color).padding(horizontal = 8.dp, vertical = 4.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        if (isLive) {
-            Box(Modifier.size(6.dp).clip(CircleShape).background(Color.White))
-            Spacer(Modifier.width(6.dp))
-        }
-        Text(text, style = androidx.compose.ui.text.TextStyle(FontFamily.SansSerif, FontWeight.ExtraBold, 11.sp, letterSpacing = 0.7.sp), color = Color.White)
+    val live = text.contains("AHORA", true)
+    Row(modifier.clip(AppRadius.xs).background(color).padding(horizontal = 8.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+        if (live) { PulsingDot(); Spacer(Modifier.width(6.dp)) }
+        Text(text, style = androidx.compose.ui.text.TextStyle(FontFamily.SansSerif, FontWeight.ExtraBold, 11.sp, letterSpacing = 0.6.sp), color = Color.White)
     }
 }
 
-// ────────────────────────────────────────────────────────────────────────────
-// CenterPlayButton — 112dp, blanco puro, sombra 28dp
-// ────────────────────────────────────────────────────────────────────────────
+@Composable
+private fun PulsingDot() {
+    val t = rememberInfiniteTransition(label = "pulse")
+    val alpha by t.animateFloat(0.45f, 1f, infiniteRepeatable(tween(900)), label = "a")
+    Box(Modifier.size(6.dp).clip(CircleShape).background(Color.White.copy(alpha)))
+}
+
+// ── CenterPlayButton ──────────────────────────────────────────────────────
 
 @Composable
 fun CenterPlayButton(iconRes: Int, onClick: () -> Unit, modifier: Modifier = Modifier) {
     var focused by remember { mutableStateOf(false) }
     val scale by animateFloatAsState(if (focused) 1.08f else 1f, tween(AppMotion.Normal, easing = AppMotion.Emphasized), label = "centerScale")
     Box(
-        modifier.size(112.dp).graphicsLayer { scaleX = scale; scaleY = scale }
-            .shadow(28.dp, CircleShape, clip = false)
-            .clip(CircleShape).background(Color.White)
-            .border(3.dp, Color.White, CircleShape)
-            .clickable(remember { MutableInteractionSource() }, null, onClick = onClick)
-            .onFocusChanged { focused = it.isFocused },
+        modifier.size(104.dp).graphicsLayer { scaleX = scale; scaleY = scale }.shadow(28.dp, CircleShape, false)
+            .clip(CircleShape).background(Color.White).border(3.dp, Color.White, CircleShape)
+            .clickable(remember { MutableInteractionSource() }, null, onClick).onFocusChanged { focused = it.isFocused },
         contentAlignment = Alignment.Center
     ) {
-        // anillo interior premium
-        Box(Modifier.fillMaxSize().border(1.dp, Color.Black.copy(alpha = 0.06f), CircleShape))
-        Image(painterResource(iconRes), "Reproducir", Modifier.size(44.dp), colorFilter = androidx.compose.ui.graphics.ColorFilter.tint(OnLight))
+        Box(Modifier.fillMaxSize().border(1.dp, Color.Black.copy(0.06f), CircleShape))
+        Image(painterResource(iconRes), "Reproducir", Modifier.size(38.dp), colorFilter = androidx.compose.ui.graphics.ColorFilter.tint(OnLight))
     }
 }
 
-// ────────────────────────────────────────────────────────────────────────────
-// InfoChip — 4dp, 14% glass
-// ────────────────────────────────────────────────────────────────────────────
+// ── InfoChip ──────────────────────────────────────────────────────────────
 
 @Composable
 fun InfoChip(text: String, modifier: Modifier = Modifier) {
-    Box(modifier.clip(RoundedCornerShape(6.dp)).background(Color.White.copy(alpha = 0.14f)).border(1.dp, Color.White.copy(alpha = 0.08f), RoundedCornerShape(6.dp)).padding(horizontal = 9.dp, vertical = 5.dp)) {
-        Text(text, style = androidx.compose.ui.text.TextStyle(FontFamily.SansSerif, FontWeight.SemiBold, 12.sp, letterSpacing = 0.2.sp), color = Color.White.copy(alpha = 0.96f))
+    Box(modifier.clip(RoundedCornerShape(6.dp)).background(Color.White.copy(0.14f)).border(1.dp, Color.White.copy(0.08f), RoundedCornerShape(6.dp)).padding(horizontal = 9.dp, vertical = 5.dp)) {
+        Text(text, style = androidx.compose.ui.text.TextStyle(FontFamily.SansSerif, FontWeight.SemiBold, 12.sp, letterSpacing = 0.15.sp), color = Color.White.copy(0.96f))
     }
 }
 
