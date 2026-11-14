@@ -292,7 +292,7 @@ object SettingsStore {
         SkipSegmentParser.SOURCE_SKIPDB, SkipSegmentParser.SOURCE_THEINTRODB, SkipSegmentParser.SOURCE_INTRODB
     )
 
-    fun setSkipSegmentsEnabled(enabled: Boolean) {
+    fun saveSkipSegmentsEnabled(enabled: Boolean) {
         update { putBoolean("skipSegmentsEnabled", enabled) }
         skipSegmentsEnabled = enabled
         SkipSegmentService.clearCache()

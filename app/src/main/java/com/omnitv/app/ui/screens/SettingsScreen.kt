@@ -276,7 +276,7 @@ fun SettingsScreen(onSwitchProfile: () -> Unit) {
                 title = "Tramos saltables",
                 subtitle = "Botón «Saltar» con los tiempos de la comunidad. Funciona sin clave: " +
                     "las bases de datos se leen de forma anónima desde tu propia conexión",
-                trailing = { TvToggle(SettingsStore.skipSegmentsEnabled, onCheckedChange = { SettingsStore.setSkipSegmentsEnabled(it) }) }
+                trailing = { TvToggle(SettingsStore.skipSegmentsEnabled, onCheckedChange = { SettingsStore.saveSkipSegmentsEnabled(it) }) }
             )
             listOf(SkipKind.INTRO, SkipKind.RECAP, SkipKind.CREDITS).forEach { kind ->
                 SettingRow(
