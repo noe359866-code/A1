@@ -39,6 +39,8 @@ object RemoteCatalog {
     val loadingMore = mutableStateOf(false)
     val canLoadMore = mutableStateOf(false)
     val lastError = mutableStateOf("")
+    /** «Sin resultados» distinto de «no se pudo consultar el catálogo». */
+    val searchError = mutableStateOf("")
 
     /** Página de un catálogo instalado; el offset avanza con el botón del mando. */
     private data class CatalogPageState(
@@ -100,6 +102,9 @@ object RemoteCatalog {
             gridVideos.addAll((loadedRows.flatMap { it.items } + custom.flatMap { it.videos })
                 .filter { it.type == VideoType.MOVIE }.distinctBy { it.id })
             featured.value = rows.firstOrNull()?.items?.firstOrNull()
+            if (rows.isEmpty() && gridVideos.isEmpty()) {
+                lastError.value = "No se pudo cargar el catálogo. Revisa la conexión y tus addons en Ajustes."
+            }
             loadedRevision = revision
             loaded.value = true
         } finally {
@@ -191,12 +196,13 @@ object RemoteCatalog {
 
     /** Cinemeta/Nuvio + solo los catálogos instalados que declaran search. */
     suspend fun search(query: String): List<Video> {
+        searchError.value = ""
         if (query.isBlank()) return emptyList()
         val results = coroutineScope {
             val builtin = listOf(
-                async { StremioClient.fetchSearch(StremioClient.CINEMETA, "movie", "top", query).map { StremioClient.parseVideo(it, StremioClient.CINEMETA_NAME) } },
-                async { StremioClient.fetchSearch(StremioClient.CINEMETA, "series", "top", query).map { StremioClient.parseVideo(it, StremioClient.CINEMETA_NAME) } },
-                async { StremioClient.fetchSearch(StremioClient.NUVIO, "movie", "popular-movies", query).map { StremioClient.parseVideo(it, StremioClient.NUVIO_NAME) } }
+                async { StremioClient.CINEMETA_NAME to StremioClient.fetchSearchPage(StremioClient.CINEMETA, "movie", "top", query) },
+                async { StremioClient.CINEMETA_NAME to StremioClient.fetchSearchPage(StremioClient.CINEMETA, "series", "top", query) },
+                async { StremioClient.NUVIO_NAME to StremioClient.fetchSearchPage(StremioClient.NUVIO, "movie", "popular-movies", query) }
             )
             val custom = AddonRegistry.refresh().filter { it.manifest != null }.flatMap { status ->
                 val manifest = status.manifest!!
@@ -211,7 +217,14 @@ object RemoteCatalog {
                     }
                 }
             }
-            (builtin + custom).awaitAll().flatten()
+            val pages = builtin.awaitAll()
+            if (pages.all { it.second.status !in 200..299 }) {
+                searchError.value = "No se pudo consultar el catálogo remoto. Revisa la conexión e inténtalo de nuevo."
+            }
+            val fromBuiltin = pages.flatMap { (name, page) ->
+                page.metas.map { StremioClient.parseVideo(it, name) }
+            }
+            fromBuiltin + custom.awaitAll().flatten()
         }
         return results.filter { it.id.isNotBlank() }.distinctBy { it.id }.also { list -> list.forEach { CatalogRepository.registerRemote(it) } }
     }
@@ -293,20 +306,58 @@ object RemoteCatalog {
             .also { list -> list.forEach { CatalogRepository.registerRemote(it) } }
     }
 
-    /** Caché de catálogos por plataforma (para «Solo en» y «Plataformas»). */
-    private val providerCache = java.util.concurrent.ConcurrentHashMap<Int, List<Video>>()
+    /* ---------------- Caché de plataformas y estudios ------------------ */
 
-    /** [fetchProvider] con caché por id de plataforma. */
+    private const val CACHE_TTL_MS = 15 * 60 * 1000L
+    private data class CacheEntry(val videos: List<Video>, val at: Long)
+
+    private val providerCache = java.util.concurrent.ConcurrentHashMap<Int, CacheEntry>()
+    private val studioCache = java.util.concurrent.ConcurrentHashMap<Int, CacheEntry>()
+    private val providerLocks = java.util.concurrent.ConcurrentHashMap<Int, Mutex>()
+    private val studioLocks = java.util.concurrent.ConcurrentHashMap<Int, Mutex>()
+
+    @Volatile
+    private var cacheRevision = -1
+
+    /** Un cambio de addons/ajustes invalida todo; si no, la entrada caduca a los 15 min. */
+    private fun syncCaches(revision: Int) {
+        if (cacheRevision != revision) {
+            providerCache.clear()
+            studioCache.clear()
+            cacheRevision = revision
+        }
+    }
+
+    private fun java.util.concurrent.ConcurrentHashMap<Int, CacheEntry>.fresh(id: Int): List<Video>? {
+        val entry = get(id) ?: return null
+        return if (System.currentTimeMillis() - entry.at < CACHE_TTL_MS) entry.videos else {
+            remove(id)
+            null
+        }
+    }
+
+    /** `getOrPut` es de Kotlin, no `computeIfAbsent` (API 24) para conservar minSdk 22. */
+    private fun mutexFor(map: java.util.concurrent.ConcurrentHashMap<Int, Mutex>, id: Int): Mutex =
+        synchronized(map) { map.getOrPut(id) { Mutex() } }
+
+    /** [fetchProvider] con caché con TTL, un solo fetch por id y sin revisión vieja. */
     suspend fun fetchProviderCached(provider: StreamingProvider): List<Video> =
-        providerCache[provider.id] ?: fetchProvider(provider).also { providerCache[provider.id] = it }
+        mutexFor(providerLocks, provider.id).withLock {
+            val revision = SettingsStore.revision
+            syncCaches(revision)
+            providerCache.fresh(provider.id) ?: fetchProvider(provider).also { list ->
+                if (cacheRevision == revision) providerCache[provider.id] = CacheEntry(list, System.currentTimeMillis())
+            }
+        }
 
-    /** Caché de catálogos por estudio (sweetfox.app). */
-    private val studioCache = java.util.concurrent.ConcurrentHashMap<Int, List<Video>>()
-
-    /** Catálogo real de un estudio («Por estudio»), con caché. */
+    /** Catálogo real de un estudio («Por estudio»), con la misma política de caché. */
     suspend fun fetchStudio(studio: Studio): List<Video> =
-        studioCache[studio.id] ?: SweetFoxClient.fetchStudio(studio.id).also { list ->
-            list.forEach { CatalogRepository.registerRemote(it) }
-            studioCache[studio.id] = list
+        mutexFor(studioLocks, studio.id).withLock {
+            val revision = SettingsStore.revision
+            syncCaches(revision)
+            studioCache.fresh(studio.id) ?: SweetFoxClient.fetchStudio(studio.id).also { list ->
+                list.forEach { CatalogRepository.registerRemote(it) }
+                if (cacheRevision == revision) studioCache[studio.id] = CacheEntry(list, System.currentTimeMillis())
+            }
         }
 }

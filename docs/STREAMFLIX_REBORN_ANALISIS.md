@@ -47,17 +47,29 @@ interface Extractor {
 
 ---
 
-## 2. Qué nos llevamos a Omni TV (implementado)
+## 2. Qué hay realmente en Omni TV (estado 2026-11-14)
 
-No copiamos scraping completo — adaptamos patrones para Android TV + Stremio/Nuvio híbrido:
+No copiamos scraping completo: el catálogo es Stremio/Nuvio y la reproducción
+es `StreamHub`. De la investigación solo queda lo que está **cableado**:
 
-1. **Provider.kt** — interfaz limpia para futuros providers locales (CB01/AnimeUnity template) que pueden vivir junto a addons Stremio
-2. **Extractor.kt** — host resolvers pluggables; implementamos 4 críticos: `Mixdrop`, `Streamtape`, `DoodStream`, `Voe` (cubren 70% de embeds de Streamflix), con headers y caching
-3. **SafeGo/Uprot resolvers** — diálogos nativos TV con D-pad (numeric pad + image grid), session cache, mutex — evita WebView con ads en TV
-4. **WebView blocker** — `WebViewBlocker` con host blocklist y JS interface para popunder suppression (para casos fallback)
-5. **ProviderRegistry** — registra providers/extractores, ordena por `directFirst`, integra con `StreamHub` como fuente extra
+1. **Extractores Kotlin** (`app/src/main/java/com/omnitv/app/plugins/`):
+   `Mixdrop`, `Streamtape`, `DoodStream`, `Voe`, `Turbovio` y `Rpmvid`.
+   `ExtractorRegistry` compara el host real (no `url.contains(...)`), cachea
+   éxitos y valida el enlace con `NetPolicy`. Todos usan `AddonHttp`.
+2. **`EmbedRefiner`** (`data/`): adapta esos extractores a `StreamSource`.
+   Si un addon entrega la página de un embed, se resuelve a MP4/HLS directo y
+   se propagan cabeceras y subtítulos externos hasta Media3
+   (`StreamMediaSource`). Si el addon ya entrega un enlace directo, no toca nada.
+3. **Cronet para imágenes**: `CronetClient` devuelve bytes (no texto UTF-8) y
+   `cronetSupport()` instala el fetcher en el `ImageLoader` singleton de Coil
+   desde `MainActivity`. Solo para hosts con bloqueo 403.
+4. **Puentes externos**: Nuvio, Cloudstream y FFmpeg siguen en `tools/`; la TV
+   no ejecuta JS de repositorios ni carga DEX.
 
-Se deja `ExtractorBridge` para que Nuvio scrapers JS (All-in-One 68) puedan delegar a estos extractores si su `providers/*.js` devuelve embed host conocido.
+**Eliminado por no estar conectado:** el contrato `Provider`/`Server`,
+`ProviderRegistry`, `SafeGoResolver`/`UprotResolver`, `WebViewBlocker` y el
+`WebViewResolver` con JavaScript. No se añadió `jsoup` como dependencia: el
+cliente HTTP común hace el scraping de cinejoy/sweetfox y de los embeds.
 
 ---
 
@@ -65,10 +77,6 @@ Se deja `ExtractorBridge` para que Nuvio scrapers JS (All-in-One 68) puedan dele
 
 `git.gay` TLS falló para `git clone`/`archive.zip` (gnutls_handshake), pero HTML fetch OK para `providers/`, `extractors/`, `utils/` listings y commit history. Se infirió contrato de nombres, commit messages y estructura; implementación es adaptación limpia, no copia literal (licencia Streamflix AGPL-like).
 
-Próximo paso: añadir `jsoup` + 1 provider real (CB01) cuando se tenga mirror accesible.
-
-
-
-## Estado actualizado
-
-Este análisis era histórico. `ProviderRegistry` y su provider plantilla fueron eliminados. La reproducción usa `StreamHub`; las extensiones Cloudstream se delegan a un runtime externo mediante `tools/cloudstream-bridge`, no a este registro local.
+Este documento se conserva como **contexto histórico**, no como lista de
+funcionalidades pendientes. Para el contrato vigente ver
+`docs/STREAM-ADDON-PROTOCOL.md` y `README.md`.

@@ -39,7 +39,7 @@ La recodificación de vídeo consume CPU y puede no seguir tiempo real en equipo
 
 ## Configurar el televisor
 
-1. Escanea el QR de Ajustes → Vincular.
+1. Escanea el QR de Ajustes → Vincular e introduce en el móvil el código de 6 caracteres que muestra el televisor (el QR solo lleva la dirección del panel).
 2. En **Compatibilidad multimedia · FFmpeg externo**, guarda `http://IP-DEL-EQUIPO:8790`.
 3. En **Añadir APIs**, guarda `FFMPEG_BRIDGE=UN_TOKEN_LARGO` si el puente usa token.
 4. Abre Ajustes → **Comprobar manifests y puentes**. El estado debe decir que FFmpeg está conectado.

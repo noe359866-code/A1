@@ -7,9 +7,13 @@ import java.net.URI
 import java.net.URL
 
 /**
- * HTTP JSON para addons y puentes. Cada redirección se valida con [NetPolicy],
- * el cuerpo está limitado y se admite un objeto o array en la raíz.
- * Un POST no se reenvía automáticamente a otro destino.
+ * HTTP para addons, puentes y scraping de catálogos. Cada redirección se
+ * valida con [NetPolicy], el cuerpo está limitado y se admite un objeto o
+ * array en la raíz. Un POST no se reenvía automáticamente a otro destino.
+ *
+ * Es el **único** cliente HTTP de la app: así el límite de 4 MB, la política
+ * de red y el fallback DNS (DoH) no dependen de que cada scraper recuerde
+ * aplicarlos.
  */
 internal object AddonHttp {
     const val MAX_BODY = 4 * 1024 * 1024
@@ -19,8 +23,17 @@ internal object AddonHttp {
         val result = request("GET", url, null, headers)
         if (result.value != null || !result.dnsFailure) return result.value
         // DoH solo sustituye una resolución DNS fallida, no un HTTP 404/500.
-        val fallback = Doh.retry(url) ?: return null
+        val fallback = Doh.retry(url)?.takeIf { it.length <= MAX_BODY } ?: return null
         return parseJson(fallback)
+    }
+
+    /** GET con estado HTTP: quien llama puede distinguir 429 de «sin datos». */
+    fun getJsonWithStatus(url: String, headers: Map<String, String> = emptyMap()): Result {
+        val result = request("GET", url, null, headers)
+        if (result.value != null || !result.dnsFailure) return result
+        val fallback = Doh.retry(url)?.takeIf { it.length <= MAX_BODY } ?: return result
+        val value = parseJson(fallback)
+        return result.copy(value = value, dnsFailure = false, status = if (value != null) 200 else result.status, raw = fallback)
     }
 
     fun postJson(
@@ -30,11 +43,32 @@ internal object AddonHttp {
         readTimeoutMs: Int = 10_000
     ): Any? = request("POST", url, body, headers, readTimeoutMs).value
 
-    /** GET con estado HTTP: quien llama puede distinguir 429 de «sin datos». */
-    fun getJsonWithStatus(url: String, headers: Map<String, String> = emptyMap()): Result =
-        request("GET", url, null, headers)
+    /** Cuerpo de texto (HTML, manifiesto…), sin parsear como JSON. */
+    fun getText(url: String, headers: Map<String, String> = emptyMap()): String? =
+        getTextWithMeta(url, headers).text
 
-    internal data class Result(val value: Any?, val dnsFailure: Boolean = false, val status: Int = 0)
+    /** Como [getText], pero conserva la URL final tras redirecciones válidas. */
+    fun getTextWithMeta(url: String, headers: Map<String, String> = emptyMap()): TextResult {
+        if (!NetPolicy.isAllowed(url)) return TextResult(null, url)
+        val withAccept = if (headers.keys.any { it.equals("Accept", true) }) headers else headers + ("Accept" to "text/html")
+        val result = request("GET", url, null, withAccept)
+        if (result.raw != null || !result.dnsFailure) {
+            return TextResult(result.raw, result.finalUrl.ifBlank { url }, result.status)
+        }
+        val fallback = Doh.retry(url)?.takeIf { it.length <= MAX_BODY }
+            ?: return TextResult(null, url, result.status)
+        return TextResult(fallback, url, 200)
+    }
+
+    internal data class Result(
+        val value: Any?,
+        val dnsFailure: Boolean = false,
+        val status: Int = 0,
+        val raw: String? = null,
+        val finalUrl: String = ""
+    )
+
+    internal data class TextResult(val text: String?, val finalUrl: String, val status: Int = 0)
 
     internal fun request(
         method: String,
@@ -75,15 +109,16 @@ internal object AddonHttp {
                 if (body != null) connection.outputStream.use { it.write(body.toByteArray(Charsets.UTF_8)) }
                 val code = connection.responseCode
                 if (code in 300..399) {
-                    if (method != "GET") return Result(null)
-                    val location = connection.getHeaderField("Location") ?: return Result(null)
-                    val next = runCatching { URI(current).resolve(location).toString() }.getOrNull() ?: return Result(null)
-                    if (!NetPolicy.isAllowed(next)) return Result(null)
+                    if (method != "GET") return Result(null, status = code)
+                    val location = connection.getHeaderField("Location") ?: return Result(null, status = code)
+                    val next = runCatching { URI(current).resolve(location).toString() }.getOrNull() ?: return Result(null, status = code)
+                    if (!NetPolicy.isAllowed(next)) return Result(null, status = code)
                     current = next
                     return@repeat
                 }
                 if (code !in 200..299) return Result(null, status = code)
-                return Result(parseJson(readLimited(connection) ?: return Result(null, status = code)), status = code)
+                val text = readLimited(connection) ?: return Result(null, status = code)
+                return Result(parseJson(text), status = code, raw = text, finalUrl = current)
             } catch (_: java.net.UnknownHostException) {
                 return Result(null, dnsFailure = true)
             } catch (_: Exception) {

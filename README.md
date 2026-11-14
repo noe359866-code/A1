@@ -37,11 +37,11 @@ Omni TV es una aplicación **exclusiva para Android TV / Google TV** con estánd
 | **Solo Android TV** | `leanback` requerido, `touchscreen` opcional, `LEANBACK_LAUNCHER` + banner 320×180 |
 | **Diseño Apple TV** | Superficies #16161C, tarjetas con escala 1.08 y borde blanco, botones píldora, velos degradados |
 | **Navegación D-pad** | Pestañas tvOS, `focusRestorer`, foco inicial inteligente en cada pantalla |
-| **Perfiles Netflix** | Selector con avatares ilustrados, modo infantil, Mi Lista y Continuar viendo por perfil |
+| **Perfiles Netflix** | Selector con avatares ilustrados, modo infantil con PIN parental opcional, Mi Lista y Continuar viendo por perfil |
 | **Reproductor Xuper TV** | Información del título/siguiente, multi-servidor, ABR HLS, audio/subs/calidad, zoom, ±10s, temporizador de pausa |
 | **Catálogo real** | Cinemeta + Nuvio + addons del usuario + cinejoy (plataformas) + sweetfox (estudios) |
 | **Búsqueda con mando** | Teclado propio lateral (37 teclas), también para nombres de perfil; búsqueda sin distinguir acentos/mayúsculas |
-| **Vinculación segura** | Servidor :8080 + QR + código de 6 caracteres, rate-limit, cifrado Keystore AES-GCM |
+| **Vinculación segura** | Servidor :8080 + QR solo con la URL, código de 6 caracteres por `POST /unlock`, sesión con cookie `HttpOnly`/`SameSite=Strict`, regeneración de código, rate-limit, cifrado Keystore AES-GCM |
 
 ---
 
@@ -56,7 +56,7 @@ Omni TV es una aplicación **exclusiva para Android TV / Google TV** con estánd
 | 4 | **Buscar** | Campo + chips de género + teclado D-pad + resultados combinados local/remoto |
 | 5 | **Detalle** | Fondo con backdrop + velos, match %, metadatos completos, episodios, reparto, Más como esto |
 | 6 | **Reproductor** | Media3 con todos los controles tvOS: EPG, servidores, calidad, audio, subtítulos, aspecto, velocidad, timer |
-| 7 | **Ajustes** | Tarjetas: Perfil, Vinculación (QR), Reproducción, Calidad, Red (DoH), Sistema |
+| 7 | **Ajustes** | Tarjetas: Perfil, Control parental, Vinculación (QR + sesión), Reproducción, Calidad, Red (DoH), Sistema |
 
 ---
 
@@ -119,6 +119,8 @@ Basado en Media3 ExoPlayer con investigación de Xuper TV:
 - **Protocolo:** `GET {base}/stream/{type}/{id}.json` (Stremio) o `GET {base}/stream/{type}/{id}` (simple) — ver `docs/STREAM-ADDON-PROTOCOL.md`
 - **Configuración:** addons Stremio por `manifest.json`; proyectos simples por URL base; repositorios Nuvio y puente JS en campos separados del panel QR
 - **Flujo:** consulta paralela (timeout 10s), deduplicación, límite 24 enlaces, paso al reproductor multi-servidor
+- **Embeds:** `EmbedRefiner` resuelve Mixdrop/Streamtape/Dood/Voe/Turbovio/Rpmvid a enlaces directos y propaga sus cabeceras y subtítulos (VTT/SRT) hasta Media3; matching por host real
+- **Un solo cliente HTTP:** `AddonHttp` centraliza addons, puentes, scraping y extractores (redirecciones validadas, 4 MB, DoH tras fallo DNS). Cronet/Coil solo para imágenes con 403
 - **Política de red:** solo `https://` hacia internet; `http://` únicamente en LAN privada — validado por `NetPolicy`
 - **Sin fallback demo:** si no hay enlaces, mensaje claro "Sin fuentes disponibles · configura un addon"
 
@@ -138,7 +140,8 @@ Puente Cloudstream: `tools/cloudstream-bridge/` (runtime externo). Puente de str
 - `backup_rules.xml` (API ≤30) y `data_extraction_rules.xml` (API ≥31) excluyen `omni_tv_settings.xml`
 - Claves migradas automáticamente de texto plano → cifrado en primer arranque
 - API 22 (sin Keystore AES): guardado sin cifrar con aviso honesto en UI
-- Panel web: código de 6 caracteres `SecureRandom`, rate-limit 5 intentos → 60s bloqueo, límites 16KB/64KB, headers `no-store`/`nosniff`/`DENY`
+- Panel web: código de 6 caracteres `SecureRandom`, rate-limit 5 intentos → 60s bloqueo, límites 16KB/64KB, headers `no-store`/`nosniff`/`DENY`/`Cross-Origin-*-Policy`
+- `POST /save` rechaza `Origin` ajeno y `Sec-Fetch-Site: cross-site` antes de validar el código (mitigación CSRF)
 
 ---
 
@@ -189,8 +192,10 @@ A1/
 │       ├── java/com/omnitv/app/
 │       │   ├── MainActivity.kt
 │       │   ├── OmniTvApp.kt
-│       │   ├── data/          # Models, Profile, Stores, Catalog, Stremio, Remote, Cinejoy, SweetFox, NetPolicy, Doh, SecretBox, Pairing
-│       │   ├── player/        # PlayerScreen (Media3) + PlayerUi
+│       │   ├── data/          # Models, Profile, Stores, Catalog, Stremio, Remote, Cinejoy, SweetFox, NetPolicy, Doh, SecretBox, Pairing, EmbedRefiner
+│       │   ├── network/       # CronetClient + CoilCronetFetcher (instalados en MainActivity)
+│       │   ├── player/        # PlayerScreen (Media3) + PlayerUi + StreamMediaSource
+│       │   ├── plugins/       # ExtractorRegistry + extractores de embeds
 │       │   └── ui/
 │       │       ├── theme/     # Color, AppType, Theme, Dimens
 │       │       ├── components/# Cards, Hero, Pills, Keyboard, Profile tiles
@@ -211,9 +216,12 @@ A1/
 ./gradlew assembleDebug         # APK debug
 ./gradlew testDebugUnitTest     # Tests JVM
 ./gradlew lint                  # Lint leanback
+./gradlew assembleRelease       # APK de release
 ```
 
-CI (`.github/workflows/ci.yml`): contrato TV + tests + assembleDebug + lint en cada push/PR. Ver también `docs/ANDROID_TV_REVIEW.md`.
+**Firma de release:** sin variables de entorno se usa la keystore *debug* (sideload). Para producción, define `OMNITV_KEYSTORE_FILE`, `OMNITV_KEYSTORE_PASSWORD`, `OMNITV_KEY_ALIAS` y `OMNITV_KEY_PASSWORD`; `release.yml` decodifica el keystore desde los secretos `OMNITV_KEYSTORE_*` del repositorio y anuncia el modo de firma en la release.
+
+CI (`.github/workflows/ci.yml`): contrato TV + tests + `assembleDebug` + `assembleRelease` (firma debug de reserva) + lint en cada push/PR. Ver también `docs/ANDROID_TV_REVIEW.md`.
 
 > **Emulador:** AVD Android TV (1080p), API 34 recomendado. App solo en launcher TV (`LEANBACK_LAUNCHER`).
 

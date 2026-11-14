@@ -83,4 +83,9 @@ object AddonRegistry {
 }
 
 /** Resultado tipado de un catálogo; distingue fallo de una respuesta vacía. */
-data class CatalogPage(val metas: List<JSONObject>, val hasMore: Boolean)
+data class CatalogPage(
+    val metas: List<JSONObject>,
+    val hasMore: Boolean,
+    /** 0 = sin conexión/DNS; 200 = respuesta válida; 429/5xx = error remoto. */
+    val status: Int = 200
+)

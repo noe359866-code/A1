@@ -8,14 +8,17 @@ import coil.fetch.FetchResult
 import coil.fetch.Fetcher
 import coil.fetch.SourceResult
 import coil.request.Options
-import okhttp3.OkHttpClient
+import com.omnitv.app.data.NetPolicy
 import okio.Buffer
-import okio.ByteString.Companion.toByteString
+import java.net.URI
 
 /**
- * Coil fetcher que usa Cronet para hosts con 403 (animeonline.ninja, tmdb con protección)
- * Se registra como fallback solo para esos hosts; el resto usa Coil default (OkHttp)
- * Evita re-descargar posters que OkHttp no puede por JA3.
+ * Fetcher de Coil que usa Cronet solo para los hosts con bloqueo 403. Si no
+ * aplica devuelve `null` y Coil continúa con su `HttpUriFetcher` (OkHttp).
+ *
+ * Se registra en el `ImageLoader` singleton desde `MainActivity`; antes la
+ * extensión `cronetSupport` construía un OkHttpClient que nadie usaba y el
+ * fetcher quedaba sin instalar. Además se conservan los bytes originales.
  */
 class CronetFetcher(
     private val url: String,
@@ -24,40 +27,32 @@ class CronetFetcher(
 ) : Fetcher {
 
     override suspend fun fetch(): FetchResult? {
-        val shouldUseCronet = url.contains("animeonline.ninja", true) ||
-                              url.contains("ww3.animeonline", true) ||
-                              options.headers["Use-Cronet"] == "true"
-
-        if (!shouldUseCronet) return null // deja que Coil use default
-
-        val data = CronetClient.get(url, ArtworkHeaders.forImage(url))?.body?.toByteArray()
-            ?: return null
-
+        if (!needsCronet()) return null
+        val response = CronetClient.get(url, ArtworkHeaders.forImage(url)) ?: return null
+        if (response.statusCode !in 200..299 || response.bodyBytes.isEmpty()) return null
         return SourceResult(
-            source = ImageSource(source = Buffer().write(data), context = context),
+            source = ImageSource(source = Buffer().write(response.bodyBytes), context = context),
             mimeType = null,
             dataSource = DataSource.NETWORK
         )
     }
 
-    class Factory(private val context: Context) : Fetcher.Factory<coil.request.ImageRequest> {
-        override fun create(data: coil.request.ImageRequest, options: Options, imageLoader: ImageLoader): Fetcher? {
-            val url = data.data.toString()
-            return if (url.startsWith("http")) CronetFetcher(url, options, context) else null
+    private fun needsCronet(): Boolean {
+        val host = runCatching { URI(url).host?.lowercase().orEmpty() }.getOrDefault("")
+        val blockedHost = host == "animeonline.ninja" || host.endsWith(".animeonline.ninja")
+        return blockedHost || options.headers["Use-Cronet"] == "true"
+    }
+
+    /** `data` ya viene mapeado por Coil (String/Uri/HttpUrl), no es el ImageRequest. */
+    class Factory(private val context: Context) : Fetcher.Factory<Any> {
+        override fun create(data: Any, options: Options, imageLoader: ImageLoader): Fetcher? {
+            val url = data.toString()
+            if (!url.startsWith("http", true) || !NetPolicy.isAllowed(url)) return null
+            return CronetFetcher(url, options, context)
         }
     }
 }
 
-fun ImageLoader.Builder.cronetSupport(context: Context): ImageLoader.Builder {
-    // OkHttp con UA Chrome para fallback + Coil Coil
-    val okHttp = OkHttpClient.Builder()
-        .addInterceptor { chain ->
-            val req = chain.request().newBuilder()
-                .header("User-Agent", ArtworkHeaders.CHROME_UA)
-                .header("Accept", "image/avif,image/webp,*/*")
-                .build()
-            chain.proceed(req)
-        }.build()
-    // Nota: Coil 2.x usa OkHttp via coil-network; aquí solo aseguramos headers
-    return this
-}
+/** Instala el fetcher antes de los componentes por defecto de Coil. */
+fun ImageLoader.Builder.cronetSupport(context: Context): ImageLoader.Builder =
+    components { add(CronetFetcher.Factory(context), Any::class.java) }

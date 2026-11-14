@@ -180,8 +180,9 @@ fun SearchScreen(onOpenDetail: (Video) -> Unit) {
                     )
                     results.isEmpty() -> EmptyState(
                         iconRes = R.drawable.ic_search,
-                        title = "Sin resultados para «$query»",
-                        subtitle = "Prueba con otro término o género"
+                        title = if (RemoteCatalog.searchError.value.isNotBlank()) "No se pudo buscar en el catálogo"
+                        else "Sin resultados para «$query»",
+                        subtitle = RemoteCatalog.searchError.value.ifBlank { "Prueba con otro término o género" }
                     )
                     else -> Column(Modifier.fillMaxSize()) {
                         Text(

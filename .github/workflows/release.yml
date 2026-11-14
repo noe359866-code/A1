@@ -37,6 +37,26 @@ jobs:
           SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
           if [ -x "$SDKMANAGER" ]; then yes | "$SDKMANAGER" --licenses > /dev/null; fi
 
+      - name: Preparar firma de producción (si hay secretos)
+        env:
+          OMNITV_KEYSTORE_BASE64: ${{ secrets.OMNITV_KEYSTORE_BASE64 }}
+          OMNITV_KEYSTORE_PASSWORD: ${{ secrets.OMNITV_KEYSTORE_PASSWORD }}
+          OMNITV_KEY_ALIAS: ${{ secrets.OMNITV_KEY_ALIAS }}
+          OMNITV_KEY_PASSWORD: ${{ secrets.OMNITV_KEY_PASSWORD }}
+        run: |
+          if [ -n "$OMNITV_KEYSTORE_BASE64" ] && [ -n "$OMNITV_KEYSTORE_PASSWORD" ] && [ -n "$OMNITV_KEY_ALIAS" ]; then
+            echo "$OMNITV_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/omnitv-release.jks"
+            echo "OMNITV_KEYSTORE_FILE=$RUNNER_TEMP/omnitv-release.jks" >> "$GITHUB_ENV"
+            echo "OMNITV_KEYSTORE_PASSWORD=$OMNITV_KEYSTORE_PASSWORD" >> "$GITHUB_ENV"
+            echo "OMNITV_KEY_ALIAS=$OMNITV_KEY_ALIAS" >> "$GITHUB_ENV"
+            echo "OMNITV_KEY_PASSWORD=${OMNITV_KEY_PASSWORD:-$OMNITV_KEYSTORE_PASSWORD}" >> "$GITHUB_ENV"
+            echo "SIGNING_MODE=keystore de producción" >> "$GITHUB_ENV"
+            echo "::notice::APK firmado con keystore de producción"
+          else
+            echo "SIGNING_MODE=keystore debug (sideload)" >> "$GITHUB_ENV"
+            echo "::warning::Sin secretos OMNITV_KEYSTORE_*: el APK se firma con debug"
+          fi
+
       - name: Build APK release
         run: |
           set -o pipefail
@@ -89,8 +109,10 @@ jobs:
             3. En la TV: Ajustes → Seguridad → permitir orígenes desconocidos
 
             **Novedades:**
-            - Reproductor cinemático premium (scrims, timeline 3m, EPG LIVE, auto-next 10s)
-            - Fix 403 imágenes/streams (Cronet JA3 + WebView clearance)
-            - Plugins Streamflix-compat + Nuvio All-in-One + Stremio
+            - Reproductor cinemático premium (scrims, timeline 3m, auto-next 10s)
+            - Extractores de embeds cableados a StreamHub, con cabeceras y subtítulos externos hasta Media3
+            - Cliente HTTP único (AddonHttp) para addons y scraping; Cronet instalado en el ImageLoader de Coil
+            - Cachés de plataforma/estudio con TTL y errores de red distinguibles en Home/Buscar
+            - Panel de vinculación con rechazo de orígenes cruzados
 
-            _APK firmado con keystore debug para sideload. Para Play Store se requiere firma de producción._
+            _Firma: ${{ env.SIGNING_MODE }}. Configura los secretos `OMNITV_KEYSTORE_BASE64`, `OMNITV_KEYSTORE_PASSWORD`, `OMNITV_KEY_ALIAS` y `OMNITV_KEY_PASSWORD` para publicar con clave de producción._

@@ -24,8 +24,10 @@ import kotlin.concurrent.thread
  * Seguridad: cualquiera en la misma red puede llegar a este puerto, así que
  * **sin el código de emparejamiento no se entrega ni se acepta nada** — la
  * página sin código solo muestra el campo para introducirlo (ver
- * [PairingRouter] y [PairingPortal]). Los intentos fallidos se limitan por
- * cliente ([AttemptGuard]) y el tamaño de las peticiones está acotado.
+ * [PairingRouter] y [PairingPortal]). El código ya no viaja en la URL del QR:
+ * se canjea por una sesión [SessionGuard] con cookie `HttpOnly`/`SameSite=Strict`.
+ * Los intentos fallidos se limitan por cliente ([AttemptGuard]), el guardado
+ * rechaza orígenes cruzados y el tamaño de las peticiones está acotado.
  */
 object PairingServer {
 
@@ -113,8 +115,13 @@ object PairingServer {
     /** URL del panel (se muestra debajo del QR, como el ejemplo del usuario). */
     fun panelUrl(): String = localIpv4().takeIf { it.isNotEmpty() }?.let { "http://$it:$PORT/" }.orEmpty()
 
-    /** URL de emparejamiento con código (la que codifica el QR). */
-    fun pairingUrl(): String = panelUrl().takeIf { it.isNotEmpty() }?.let { "$it?code=${SettingsStore.pairingCode}" }.orEmpty()
+    /**
+     * URL que codifica el QR: **solo la dirección del panel**, sin el código.
+     * El móvil introduce el código por `POST /unlock` y recibe una cookie de
+     * sesión; así el secreto no queda en el historial, en `Referer` ni en
+     * capturas del QR compartidas.
+     */
+    fun pairingUrl(): String = panelUrl()
 
     /** Los ajustes reales del televisor, vistos desde el panel. */
     private object SettingsPanelStore : PanelStore {
@@ -171,32 +178,43 @@ object PairingServer {
     }
 
     private fun respond(socket: Socket, response: PanelResponse) {
-        val reason = when (response.status) {
-            200 -> "OK"
-            400 -> "Bad Request"
-            403 -> "Forbidden"
-            404 -> "Not Found"
-            413 -> "Payload Too Large"
-            429 -> "Too Many Requests"
-            else -> "Error"
-        }
         val bytes = response.body.toByteArray(Charsets.UTF_8)
-        val header = buildString {
-            append("HTTP/1.1 ${response.status} $reason\r\n")
-            append("Content-Type: ${response.contentType}\r\n")
-            append("Content-Length: ${bytes.size}\r\n")
-            append("Connection: close\r\n")
-            append("Cache-Control: no-store\r\n")
-            // El código viaja en la URL del QR: que no se filtre a otros sitios
-            append("Referrer-Policy: no-referrer\r\n")
-            append("X-Content-Type-Options: nosniff\r\n")
-            append("X-Frame-Options: DENY\r\n")
-            append("\r\n")
-        }
+        val header = panelResponseHeaders(response, bytes.size)
         socket.getOutputStream().apply {
             write(header.toByteArray(Charsets.UTF_8))
             write(bytes)
             flush()
         }
+    }
+}
+
+/**
+ * Cabeceras HTTP del panel, como función pura para poder probarlas en la JVM.
+ * [extraHeaders] se escribe tal cual (p. ej. `Set-Cookie`); el llamador es
+ * responsable de que no contengan saltos de línea ni datos del televisor.
+ */
+internal fun panelResponseHeaders(response: PanelResponse, bodyBytes: Int): String {
+    val reason = when (response.status) {
+        200 -> "OK"
+        400 -> "Bad Request"
+        403 -> "Forbidden"
+        404 -> "Not Found"
+        413 -> "Payload Too Large"
+        429 -> "Too Many Requests"
+        else -> "Error"
+    }
+    return buildString {
+        append("HTTP/1.1 ${response.status} $reason\r\n")
+        append("Content-Type: ${response.contentType}\r\n")
+        append("Content-Length: $bodyBytes\r\n")
+        append("Connection: close\r\n")
+        append("Cache-Control: no-store\r\n")
+        append("Referrer-Policy: no-referrer\r\n")
+        append("X-Content-Type-Options: nosniff\r\n")
+        append("X-Frame-Options: DENY\r\n")
+        append("Cross-Origin-Resource-Policy: same-origin\r\n")
+        append("Cross-Origin-Opener-Policy: same-origin\r\n")
+        response.extraHeaders.forEach { append(it).append("\r\n") }
+        append("\r\n")
     }
 }

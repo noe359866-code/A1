@@ -96,8 +96,11 @@ fun HomeScreen(
                         )
                         Spacer(Modifier.height(12.dp))
                         Text(
-                            if (kidsOnly) "El perfil infantil no carga catálogos remotos sin clasificación."
-                            else "Comprueba tu conexión o vuelve a intentarlo más tarde.",
+                            when {
+                                kidsOnly -> "El perfil infantil no carga catálogos remotos sin clasificación."
+                                RemoteCatalog.lastError.value.isNotBlank() -> RemoteCatalog.lastError.value
+                                else -> "Comprueba tu conexión o vuelve a intentarlo más tarde."
+                            },
                             style = AppType.metadata, color = TextSecondary
                         )
                     }

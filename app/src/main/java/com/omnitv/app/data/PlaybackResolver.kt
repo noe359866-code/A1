@@ -13,7 +13,15 @@ object PlaybackResolver {
     suspend fun resolve(video: Video): PlaybackResolution = mutex.withLock {
         val direct = video.playbackSources
         val resolved = StreamHub.resolve(video)
-        val sources = (resolved + direct).filter { NetPolicy.isAllowed(it.url) }.distinctBy { it.url }
+        val combined = (resolved + direct)
+            .filter { NetPolicy.isAllowed(it.url) }
+            .distinctBy { it.url }
+        // Los embeds se convierten aquí en enlaces directos, con sus headers y
+        // subtítulos, antes de entregárselos al reproductor multi-servidor.
+        val sources = EmbedRefiner.refineAll(combined)
+            .filter { NetPolicy.isAllowed(it.url) }
+            .distinctBy { it.url }
+            .take(24)
         PlaybackResolution(
             sources,
             if (sources.isNotEmpty()) "${sources.size} fuentes disponibles"

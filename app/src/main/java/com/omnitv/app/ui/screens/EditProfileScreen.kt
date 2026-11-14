@@ -163,13 +163,14 @@ fun EditProfileScreen(
                         onSaved()
                     }
                 )
-                if (canDelete && existing != null) {
+                val deletable = existing?.takeIf { canDelete }
+                if (deletable != null) {
                     PillButton(
                         text = "Eliminar",
                         primary = false,
                         danger = true,
                         onClick = {
-                            ProfileStore.delete(existing.id)
+                            ProfileStore.delete(deletable.id)
                             onDeleted()
                         }
                     )

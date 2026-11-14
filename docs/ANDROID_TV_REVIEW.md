@@ -40,32 +40,104 @@ La revisión encontró diferencias importantes entre esa intención y la impleme
 - StreamHub acepta también la forma simple documentada con un array JSON en la raíz.
 - CI comprueba el contrato TV, ejecuta tests, compila debug y ejecuta lint. El recuento de tests ahora falla si no se ejecuta ninguno. Release también pasa tests y lint antes de empaquetar.
 
+### Segunda pasada · integración y corrección de errores
+
+- **Extractores cableados**: `EmbedRefiner` conecta `ExtractorRegistry` con
+  `PlaybackResolver`. `StreamSource` y `StreamLink` llevan `subtitles`, y
+  `StreamMediaSource` registra esos subtítulos en el `MediaItem` (mismo host,
+  para no filtrar cabeceras privadas). El matching de dominios ahora compara
+  el host real, no sub cadenas de la URL.
+- **Un único cliente HTTP**: `AddonHttp.getText`/`getTextWithMeta` sustituyen a
+  los `HttpURLConnection` propios de cinejoy/sweetfox, Jsoup en extractores y
+  al OkHttp heredado de Cronet. Redirecciones, 4 MB, DoH y `NetPolicy`
+  se aplican en un solo sitio. `getJsonWithStatus` también reintenta por DoH.
+- **Cronet/Coil corregidos**: `CronetClient` devuelve `ByteArray` (antes
+  corrompía JPEG al pasar por `String`), limita hilos/cuerpo y valida
+  redirecciones; `cronetSupport()` instala el fetcher en el `ImageLoader`
+  singleton. Se eliminó `WebViewResolver` (JS sin timeout/cancelación).
+- **Caché y errores**: plataformas/estudios con TTL de 15 min, un `Mutex` por
+  id e invalidación por `SettingsStore.revision`. Home y Buscar distinguen
+  «sin resultados» de «no se pudo consultar el catálogo».
+- **Vinculación**: `/save` rechaza `Origin` ajeno y `Sec-Fetch-Site:
+  cross-site`; nuevas cabeceras `Cross-Origin-*-Policy`. El código seguía en la
+  URL del QR; se movió a `POST` + cookie en la tercera pasada.
+- **Detalle**: episodios por tandas de 20 con «Mostrar más», en lugar de
+  componer toda la temporada en un `Column`.
+- **Release**: `app/build.gradle.kts` admite `OMNITV_KEYSTORE_*`; sin secretos
+  mantiene debug para sideload. `release.yml` decodifica el keystore y anuncia
+  el modo de firma. Ya no es obligatorio publicar con clave de depuración.
+- **Limpieza**: fuera `Provider.kt`, `SafeGoResolver.kt`, `WebViewResolver.kt`,
+  dependencias `jsoup`/`okhttp` y el `OkHttpClient` muerto de `cronetSupport`.
+  Documentación histórica corregida. Tests nuevos para refiner, registro,
+  cabeceras/subtítulos, `getText` y origen cruzado.
+- **Avisos del compilador**: condición siempre verdadera en `EditProfileScreen`
+  y `LocalLifecycleOwner` obsoleto migrados a `androidx.lifecycle.compose`.
+  CI ya compila también `assembleRelease` en cada push.
+
+### Tercera pasada · sesión del panel, PIN parental y mantenimiento
+
+- **El QR ya no contiene el código**: `PairingServer.pairingUrl()` devuelve
+  solo `http://IP:8080/`. El móvil envía el código de 6 caracteres por
+  `POST /unlock`; el formulario ya no es un `GET` con `?code=` y la página
+  desbloqueada no lleva un `<input hidden name="code">`. Se conserva la
+  compatibilidad con enlaces antiguos con código, pero el flujo del QR no lo
+  usa.
+- **Sesión temporal**: `SessionGuard` canjea el código por un token aleatorio
+  de 24 bytes en la cookie `omnitv_session` (`HttpOnly`, `SameSite=Strict`,
+  `Path=/`, 10 min con renovación en cada respuesta autenticada). La sesión
+  está ligada a la IP del cliente y a una huella SHA-256 del código vigente:
+  **regenerar el código en Ajustes invalida todas las sesiones abiertas**.
+  `PairingServer.respond()` ahora escribe `PanelResponse.extraHeaders`, y las
+  cabeceras se construyen en la función pura `panelResponseHeaders()` para
+  poder probarlas en la JVM.
+- **CSRF**: `/unlock` aplica el mismo filtro de `Origin`/`Sec-Fetch-Site` que
+  `/save`; la cookie `SameSite=Strict` añade una segunda barrera. No se ha
+  añadido un token por formulario: el panel sigue siendo HTTP en la LAN y
+  quien conozca el código puede abrir una sesión desde la IP correcta.
+- **PIN parental**: `ParentalPin` guarda solo `SHA-256(salt || pin)` con salt
+  aleatorio (nunca el PIN en claro); `SettingsStore` permite activar, quitar y
+  regenerar el código. `PinDialog` es un teclado D-pad de 4 cifras con
+  confirmación al crearlo, 5 fallos → 30 s de bloqueo local y foco inicial en
+  el propio teclado. Un perfil infantil con PIN no puede salir a un perfil
+  estándar, gestionar perfiles ni ver Ajustes sin verificarlo. Es un bloqueo
+  de **uso doméstico**, no una restricción del sistema operativo.
+- **Mantenimiento**: Gradle 8.9 → **8.10.2** (compatible con AGP 8.7.2 y
+  Kotlin 2.0.20 en este proyecto Android no multiplataforma). Quedan las
+  versiones de librerías de 2024 y las ramas `arena/*` huérfanas.
+- **Tests nuevos**: `ParentalPinTest` (formato, salt, huella, verificación) y
+  `PairingSessionTest` (POST, cookie, IP, caducidad, rotación de código,
+  origen cruzado, HTML sin código y emisión de `Set-Cookie`). Los tests
+  anteriores de `PairingRouterTest` siguen cubriendo la compatibilidad con
+  `?code=`.
+
 ## Hallazgos que siguen abiertos
 
 | Prioridad | Zona | Hallazgo / trabajo necesario |
 |---|---|---|
-| Alta | Validación en dispositivo | No hay TV ni emulador conectado en este entorno. Falta comprobar foco, overscan, teclado, Home/Atrás, HLS, audio/subtítulos y consumo de memoria en API 22 y en una TV actual. |
-| Alta | Distribución | Release se firma con la clave debug. Sirve para sideload de confianza, **no como firma de producción ni para una distribución pública fiable**. No se ha publicado un APK ni un release. |
-| Parcial | Red / addons | Addons/StreamHub/Nuvio usan `AddonHttp` con redirecciones validadas y cuerpos limitados. Cronet y otros clientes heredados aún mantienen sus propios límites/rutas. |
-| Resuelta en la integración posterior | Plugins / Nuvio | Repositorios persistidos y conectados a StreamHub mediante puente JS externo; sin motor JS embebido. Ver `NUVIO_INVESTIGACION.md`. `ProviderRegistry` fue eliminado. |
-| Resuelta en la mejora posterior | Catálogo | `CatalogRepository` ya no contiene títulos ni servidores demo; la portada tiene estado vacío y el progreso ficticio de perfiles nuevos fue retirado. |
-| Resuelta en la integración posterior | Streams | StreamHub descubre `stream` en manifests instalados, proyectos base y Nuvio; cabeceras por fuente llegan a Media3. |
-| Media | Streams / Media3 | Los headers y subtítulos externos que devuelven los extractores no viajan en `StreamSource` hasta Media3. El formato se deduce de `.m3u8`; no hay DASH ni soporte torrent. |
-| Media | Búsqueda / caché | Los fallos remotos se degradan a listas vacías, sin distinguir ausencia de resultados de falta de red. Las cachés de plataforma/estudio no caducan ni ofrecen reintento; una recarga concurrente puede publicar una revisión antigua. |
-| Media | Infantil | El filtro local TP/7+ no es un control parental: cualquier usuario puede cambiar de perfil y no hay PIN. Las clasificaciones remotas no se tratan como una política parental completa. |
-| Media | Seguridad local | El panel usa HTTP en LAN y el código viaja en la URL del QR. Tiene límite de intentos, pero falta endurecimiento CSRF/origen y una revisión de exposición en redes de invitados/VPN. Las claves solo se cifran en reposo a partir de API 23. |
-| Media | WebView / Coil | `WebViewResolver` no está conectado al flujo principal y necesita revisión de hilo principal, timeout y cancelación. `CronetFetcher`/`cronetSupport` tampoco están instalados en un `ImageLoader` de la app; Coil no recibe automáticamente ese supuesto fallback 403. |
-| Baja | UI / memoria | Detalle compone todos los episodios de una temporada en un `Column`; temporadas largas deberían usar una lista perezosa. El héroe y los textos con escala de fuente grande necesitan pruebas de overscan/accesibilidad. |
-| Baja | Mantenimiento | Hay imports/código experimental sin uso, avisos de versiones y documentación histórica que afirma más funciones de las que realmente están cableadas. Gradle 8.9 genera aviso de versión antigua en CI. |
+| Alta | Validación en dispositivo | No hay TV ni emulador conectado en este entorno. Falta comprobar foco, overscan, teclado, Home/Atrás, HLS/DASH, audio/subtítulos externos y consumo de memoria en API 22 y en una TV actual. Sigue siendo el bloqueo principal. |
+| Media | Distribución | Ya se admite keystore de producción (`OMNITV_KEYSTORE_*`); **hay que configurar los secretos y verificar el APK firmado** antes de distribución pública. Sin ellos el release sigue siendo debug/sideload. |
+| Resuelta | Red / addons | Un único `AddonHttp` para addons, puentes, scraping y extractores. Cronet valida redirecciones y cuerpo, y ya no hay clientes paralelos sin política. |
+| Resuelta | Plugins / extractores | `ProviderRegistry`, `Provider`/`Server`, resolvers de captcha y `WebViewResolver` eliminados. Los 6 extractores sí están cableados vía `EmbedRefiner`; sin motor JS embebido. |
+| Resuelta | Catálogo | Sin títulos demo; cachés de plataforma/estudio con TTL, bloqueo por id e invalidación por revisión. |
+| Resuelta | Errores remotos | `CatalogPage.status`, `RemoteCatalog.lastError` y `searchError` distinguen fallo de red/429 de una búsqueda sin resultados. |
+| Resuelta | Streams / Media3 | Headers por fuente, subtítulos externos (VTT/SRT/TTML) y HLS/DASH llegan a Media3. Sigue **sin soporte torrent** (infoHash/magnet se descartan por diseño). |
+| Parcial | Infantil | Ya hay PIN de 4 cifras con huella con salt y límite de intentos para salir de un perfil infantil, gestionar perfiles y abrir Ajustes. Sigue siendo un bloqueo de uso doméstico: no impide desinstalar la app, borrar datos ni usar el sistema; las clasificaciones remotas no son una política parental completa. |
+| Parcial | Seguridad local | QR sin código, `POST /unlock`, cookie de sesión ligada a IP/código, regeneración que invalida sesiones y rechazo de orígenes cruzados en `/unlock` y `/save`. Quedan: HTTP sin TLS en la LAN, compatibilidad heredada con `?code=`, ausencia de token CSRF por formulario y claves en claro solo en API 22. Revisar exposición en redes de invitados/VPN. |
+| Resuelta | WebView / Coil | `WebViewResolver` eliminado; `CronetFetcher` instalado en el `ImageLoader` singleton y corregido para no corromper imágenes binarias. |
+| Resuelta | UI / memoria | Detalle compone episodios por tandas de 20. El héroe y los textos con escala grande aún necesitan prueba de overscan/accesibilidad (incluida en «Validación en dispositivo»). |
+| Baja | Mantenimiento | Código experimental, docs históricos y avisos del compilador corregidos; Gradle actualizado a 8.10.2 (CI ya solo anota que no es la última versión). Persisten versiones Kotlin/Media3/Compose de 2024 y 9 ramas `arena/*` huérfanas en GitHub. |
 
 ## Validación
 
 - `python3 tools/check_android_tv.py`: **correcto** localmente.
 - `python3 -m py_compile tools/check_android_tv.py tools/omni-stream-bridge/bridge.py`: correcto.
 - `git diff --check`: correcto.
-- CI final del código corregido (`03719b4`): **[ejecución 43554360259](https://github.com/noe359866-code/A1/actions/runs/43554360259), correcta**. Contrato TV, **98 tests / 0 fallos**, `assembleDebug` y `lintDebug` pasan. Los errores de lint detectados durante la revisión (API 24 y opt-in de Media3) se corrigieron; no se creó un baseline para ocultarlos.
+- CI de la primera pasada (`03719b4`): **[ejecución 43554360259](https://github.com/noe359866-code/A1/actions/runs/43554360259), correcta**. Contrato TV, **98 tests / 0 fallos**, `assembleDebug` y `lintDebug` pasan. Los errores de lint (API 24 y opt-in de Media3) se corrigieron; no se creó un baseline.
+- Segunda pasada: `python3 tools/check_android_tv.py` y `node --test` de los tres puentes Node correctos en local (7/7). CI final **[ejecución 43637640574](https://github.com/noe359866-code/A1/actions/runs/43637640574), correcta**: **175 tests / 0 fallos**, `assembleDebug`, `assembleRelease` (R8 con firma debug de reserva) y `lintDebug`; sin avisos del compilador. Se añadieron tests JVM para `EmbedRefiner`, `ExtractorRegistry`, `StreamResponse`, `AddonHttp.getText` y origen cruzado.
+- Tercera pasada: contrato TV, `py_compile`, los tres puentes Node (7/7) y `git diff --check` correctos en local. CI final **[ejecución 43641480670](https://github.com/noe359866-code/A1/actions/runs/43641480670), correcta**: **192 tests / 0 fallos**, `assembleDebug`, `assembleRelease` y `lintDebug`; sin avisos del compilador. Se añadieron `ParentalPinTest` y `PairingSessionTest` (17 tests nuevos). El primer intento (`43641194366`) falló por dos errores de sintaxis ya corregidos en `2c58435`.
+- Release `v1.2.0` ya publicado con `OmniTV-v1.2.0.apk`; esta pasada añade la firma de producción opcional sin cambiar el `versionCode`/`versionName` del árbol.
 - Puente Python: prueba local de `/health`, `/stream/movie/tt1375666.json` y `/stream/series/tt0944947:1:2` contra un servidor temporal en loopback; las tres respuestas fueron correctas. Sigue siendo un puente de ejemplo, no un resolver de producción.
-- CI conserva avisos de mantenimiento (por ejemplo, Gradle 8.9 antiguo); no son errores de compilación.
+- CI ya no arrastra el aviso de Gradle 8.9. Quedan dos anotaciones de mantenimiento: Gradle 8.10.2 «no es la última versión» (subir más exigiría actualizar Kotlin/AGP) y la migración futura de `ubuntu-latest`; ninguna es un error de compilación.
 - El entorno local no tiene Java ni Android SDK, por eso la compilación y los tests Android se ejecutan en GitHub Actions, no se simulan localmente.
 - No se ha probado reproducción con servicios externos ni se garantiza disponibilidad de cinejoy/sweetfox/Nuvio/addons de terceros.
 
@@ -76,5 +148,5 @@ La revisión encontró diferencias importantes entre esa intención y la impleme
 3. D-pad arriba/abajo/izquierda/derecha/OK/Atrás en todas las pantallas; ningún control fuera del área segura.
 4. Home durante vídeo y tráiler: silencio/pausa; volver: posición guardada; pantalla de TV puede descansar normalmente al navegar.
 5. MP4/HLS reales, cambio de servidor, pista de audio/subtítulos, error y reintento, siguiente episodio y temporizador.
-6. QR desde otro equipo de la LAN, código incorrecto/bloqueo, cierre del puerto al salir de la app y ausencia de claves en backups.
+6. QR desde otro equipo de la LAN: comprobar que la URL no lleva código, introducirlo por el formulario, sesión con cookie, regenerar el código para cerrar sesiones, código incorrecto/bloqueo, PIN infantil, cierre del puerto al salir de la app y ausencia de claves en backups.
 7. Repetir con red lenta/sin red, escala de fuente grande y overscan activado.
