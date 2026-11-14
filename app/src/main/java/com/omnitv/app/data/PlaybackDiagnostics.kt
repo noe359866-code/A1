@@ -36,10 +36,10 @@ data class CodecReport(
         fun fromJson(text: String): CodecReport? = runCatching {
             val obj = JSONObject(text)
             fun track(prefix: String): TrackFacts? {
-                val mime = obj.optString("$prefixMime").takeIf { it.isNotBlank() && it != "null" }
-                val codecs = obj.optString("$prefixCodecs").takeIf { it.isNotBlank() && it != "null" }
-                if (mime == null && codecs == null && !obj.has("$prefixSupported")) return null
-                return TrackFacts(mime, codecs, obj.optBoolean("$prefixSupported", true))
+                val mime = obj.optString("${prefix}Mime").takeIf { it.isNotBlank() && it != "null" }
+                val codecs = obj.optString("${prefix}Codecs").takeIf { it.isNotBlank() && it != "null" }
+                if (mime == null && codecs == null && !obj.has("${prefix}Supported")) return null
+                return TrackFacts(mime, codecs, obj.optBoolean("${prefix}Supported", true))
             }
             val error = obj.optString("error").takeIf { it.isNotBlank() } ?: return null
             val video = track("video")

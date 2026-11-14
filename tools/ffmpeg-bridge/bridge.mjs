@@ -14,7 +14,7 @@
 import http from 'node:http';
 import { spawn } from 'node:child_process';
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
-import { mkdir, readFile, readdir, rm, stat } from 'node:fs/promises';
+import { mkdir, readFile, rm, stat } from 'node:fs/promises';
 import { createReadStream } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
