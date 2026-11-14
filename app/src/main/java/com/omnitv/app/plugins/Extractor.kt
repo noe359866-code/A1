@@ -2,7 +2,7 @@ package com.omnitv.app.plugins
 
 /**
  * Extractor — resuelve un embed (mixdrop, streamtape, dood…) a URL directo.
- * Inspirado en `app/src/main/java/com/streamflixreborn/streamflix/extractors/*`
+ * Inspirado en `app/src/main/java/com/streamflixreborn/streamflix/extractors/[host]`
  * Cada host tiene 1 archivo; aquí unificamos interfaz.
  */
 interface Extractor {
