@@ -12,7 +12,7 @@ streams de Stremio.
 ## Cómo entregar streams a Omni TV
 
 Cualquier proyecto puede entregar streams añadiendo su URL desde
-**Ajustes → Vincular → 🎬 Añadir addons de streams** (o desde el panel web
+**Ajustes → Vincular → 🎬 Proyectos de streams (URL base)** (o desde el panel web
 del QR). Omni TV le pedirá los enlaces de cada título con:
 
 ```
@@ -48,7 +48,7 @@ Parámetros:
 
 Campos reconocidos:
 
-- `url` (obligatorio) — enlace directo reproducible (`.mp4` o `.m3u8`). Los
+- `url` (obligatorio) — enlace directo reproducible (progresivo, `.m3u8` o `.mpd`). Los
   campos solo-torrent (`infoHash` sin `url`) se ignoran.
   - `https://` se acepta siempre.
   - `http://` **solo vale si el host está en tu red local**: una IP privada
@@ -62,7 +62,9 @@ Campos reconocidos:
 - `name` / `label` — nombre del servidor (se muestra en el menú
   multi-servidor del reproductor).
 - `title` — descripción adicional (calidad, idioma…).
-- `quality` — `2160p / 1080p / 720p / 480p` (si no viene, se deduce).
+- `quality` — `2160p / 1440p / 1080p / 720p / 480p` (si no viene, se deduce).
+- `headers` o `behaviorHints.proxyHeaders.request` — cabeceras HTTP por fuente para Media3.
+- `behaviorHints.notWebReady: true` — se descarta; no hay motor P2P.
 - `ytId` / `infoHash` / `fileIdx` — se ignoran (sin motor de torrents ni
   YouTube embebido).
 
@@ -81,7 +83,7 @@ También se acepta un array directo `[{ "label", "url" }]` sin envoltorio.
 ## Comportamiento del addon interno
 
 1. Al abrir un título remoto, **Omni Streams consulta en paralelo** todos
-   los proyectos configurados (10 s máx. por proyecto).
+   los addons/proyectos configurados (10 s máx. por adaptador).
 2. Normaliza y deduplica los enlaces y los pasa al **reproductor
    multi-servidor** (menú de servidores, fallback automático si un enlace
    cae, calidad/audio/subtítulos cuando Media3 los detecta).
@@ -108,3 +110,9 @@ todo el menú multi-servidor del reproductor.
 **Puente de referencia listo para copiar** (Python y Kotlin, con el punto
 de enganche para tus resolvers y guía de cableado CloudStream-style):
 [`tools/omni-stream-bridge/`](../tools/omni-stream-bridge/README.md).
+
+## No confundir con addons Stremio instalados ni con plugins Nuvio
+
+- Un addon Stremio se instala por su `manifest.json`; Omni TV lee sus capacidades y conserva la configuración de la URL.
+- Un repositorio Nuvio (`scrapers[]`) se guarda en el campo **Plugins Nuvio** y necesita el puente JS de `tools/nuvio-bridge/` (`POST /scrape/{id}`).
+- Este documento describe solo el protocolo GET de proyectos simples/Omni Streams.

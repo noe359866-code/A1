@@ -77,7 +77,7 @@ Basado en Media3 ExoPlayer con investigación de Xuper TV:
 
 - **Información:** título actual y siguiente episodio/relacionado; no es una guía EPG con horarios
 - **Multi-servidor:** Conmutación automática conservando posición
-- **Adaptativo:** HLS ABR + selector manual (Auto / 1080p / 720p...)
+- **Adaptativo:** HLS/DASH ABR + selector manual (Auto / 1080p / 720p...)
 - **Pistas:** Audio, subtítulos, calidad vía `DefaultTrackSelector`
 - **Aspecto:** Ajustar / Llenar / Zoom / 16:9 / 4:3 / 21:9
 - **Transporte:** ⏪10s / 10s⏩, barra con buffer, D-pad directo
@@ -115,12 +115,12 @@ Basado en Media3 ExoPlayer con investigación de Xuper TV:
 `StreamHub` orquesta los enlaces de reproducción:
 
 - **Protocolo:** `GET {base}/stream/{type}/{id}.json` (Stremio) o `GET {base}/stream/{type}/{id}` (simple) — ver `docs/STREAM-ADDON-PROTOCOL.md`
-- **Configuración:** Ajustes → Vincular → añadir URLs de streams
+- **Configuración:** addons Stremio por `manifest.json`; proyectos simples por URL base; repositorios Nuvio y puente JS en campos separados del panel QR
 - **Flujo:** consulta paralela (timeout 10s), deduplicación, límite 24 enlaces, paso al reproductor multi-servidor
 - **Política de red:** solo `https://` hacia internet; `http://` únicamente en LAN privada — validado por `NetPolicy`
 - **Sin fallback demo:** si no hay enlaces, mensaje claro "Sin fuentes disponibles · configura un addon"
 
-Puente de referencia: `tools/omni-stream-bridge/` (Python + Kotlin) — conecta tus resolvers en `resolve()`.
+Puente de streams simples: `tools/omni-stream-bridge/` (Python + Kotlin). Puente de plugins Nuvio: `tools/nuvio-bridge/` (Node 20+, ejecución JS externa). Guía completa: [Stremio y Nuvio](docs/NUVIO_INVESTIGACION.md). Los repositorios Nuvio sin puente no ejecutan scrapers.
 
 ---
 
@@ -129,7 +129,7 @@ Puente de referencia: `tools/omni-stream-bridge/` (Python + Kotlin) — conecta 
 | Dato | Almacenamiento | Cifrado | Backup |
 |------|---------------|---------|--------|
 | Claves API `NOMBRE=clave` | `omni_tv_settings` | AES-256-GCM Keystore (Android 6+) | **Excluido** |
-| Cuenta / addons / streams | `omni_tv_settings` | No (URLs) | **Excluido** |
+| Cuenta / addons / streams / repos y puente Nuvio | `omni_tv_settings` | No (URLs) | **Excluido** |
 | Código emparejamiento | `omni_tv_settings` | No | **Excluido** |
 | Perfiles / Mi Lista | `omni_tv_profiles` | No | Incluido |
 
