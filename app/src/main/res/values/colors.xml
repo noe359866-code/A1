@@ -1,8 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Paleta inspirada en tvOS / modo oscuro de Apple -->
     <color name="background">#FF0B0B0F</color>
+    <color name="background_soft">#FF111116</color>
     <color name="surface">#FF16161C</color>
+    <color name="surface_elevated">#FF1E1E26</color>
     <color name="accent">#FF0A84FF</color>
+    <color name="accent_green">#FF30D158</color>
     <color name="ic_launcher_background">#FF0B0B0F</color>
 </resources>
