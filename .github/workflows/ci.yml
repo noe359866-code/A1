@@ -79,6 +79,14 @@ jobs:
           set -o pipefail
           ./gradlew --no-daemon :app:assembleDebug :app:assembleRelease 2>&1 | tee build-app.log
 
+      - name: Subir APK release (temporal)
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: omnitv-release-apk
+          path: app/build/outputs/apk/release/*.apk
+          if-no-files-found: ignore
+
       - name: Lint Android
         run: |
           set -o pipefail
