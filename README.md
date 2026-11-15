@@ -217,10 +217,27 @@ A1/
 
 > **Guía completa:** [docs/COMPILAR_APK.md](docs/COMPILAR_APK.md) — revisión del proyecto, firma, instalación en la TV y problemas conocidos.
 
-### El camino corto: el botón de GitHub (sin instalar nada)
+### ⬇️ Descargar el APK (un clic, sin ZIP)
+
+**[Descargar OmniTV.apk](https://github.com/noe359866-code/A1/releases/download/latest/OmniTV.apk)**
+
+Ese enlace es **permanente**: siempre apunta al último APK compilado desde `main`
+y el archivo baja ya con el nombre `OmniTV.apk`, listo para instalar. No hay que
+descomprimir nada ni entrar en *Artifacts*.
+
+- **Última compilación (rodante):** [`releases/tag/latest`](https://github.com/noe359866-code/A1/releases/tag/latest) — se actualiza en cada push a `main`.
+- **Versiones estables:** [`releases`](https://github.com/noe359866-code/A1/releases) — cada etiqueta `v*` publica `OmniTV.apk` + la copia `OmniTV-<versión>.apk`.
+- Cada release incluye el **SHA-256 del archivo** y el **SHA-256 del certificado** de firma.
+
+```bash
+adb connect <IP_DE_LA_TV>:5555
+adb install -r OmniTV.apk
+```
+
+### El botón de GitHub (compilar a mano)
 
 1. Pestaña **Actions** → **«Generar APK (Android TV)»** → **Run workflow**.
-2. En ~10 min el APK queda en *Artifacts → `OmniTV-apk`* (y opcionalmente como Release).
+2. En ~10 min el APK queda adjunto a la release `latest` (descarga directa) y también en *Artifacts → `OmniTV-apk-<versión>`* (ZIP, para auditar el run).
 3. El resumen del run indica versión, tamaño, SHA-256 del archivo y huella de firma.
 
 `.github/workflows/apk.yml` compila `assembleRelease` (o `debug`), ejecuta los tests y publica el APK. Funciona también al subir una etiqueta `v*`.

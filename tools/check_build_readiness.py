@@ -182,6 +182,53 @@ for workflow in (".github/workflows/ci.yml", ".github/workflows/apk.yml"):
     else:
         ok.append(f"Workflow disponible: {workflow}")
 
+# ------------------------------------- 6. Descarga directa del APK (sin ZIP)
+# Un artefacto de Actions siempre se empaqueta en un ZIP. Para que el usuario
+# pueda bajar `OmniTV.apk` con un clic, la release debe adjuntar el APK con ese
+# nombre exacto y existir una release «latest» que no caduque.
+APK_NAME = "OmniTV.apk"
+
+for workflow in (".github/workflows/apk.yml", ".github/workflows/release.yml"):
+    path = ROOT / workflow
+    if not path.exists():
+        continue
+    text = read(path)
+    name = workflow.rsplit("/", 1)[-1]
+    if 'OUT="' + APK_NAME + '"' not in text:
+        errors.append(f"{name}: no genera el APK con nombre fijo {APK_NAME} (rompería la descarga directa)")
+        continue
+    if APK_NAME not in text.split("files:", 1)[-1]:
+        errors.append(f"{name}: la Release no adjunta {APK_NAME}")
+        continue
+    ok.append(f"{name}: publica {APK_NAME} (descarga directa, sin ZIP)")
+
+apk_workflow = ROOT / ".github/workflows/apk.yml"
+if apk_workflow.exists():
+    text = read(apk_workflow)
+    if 'tag_name: latest' not in text:
+        errors.append(
+            "apk.yml: falta la release rodante con etiqueta «latest» "
+            "(el enlace permanente /releases/download/latest/OmniTV.apk dejaría de funcionar)"
+        )
+    else:
+        ok.append("apk.yml: release rodante «latest» activa")
+
+    # Las etiquetas v* las publica release.yml; si apk.yml también las tomara,
+    # dos workflows escribirían la misma release.
+    trigger = text.split("jobs:", 1)[0]
+    if re.search(r"^\s+tags:", trigger, re.M):
+        warnings.append("apk.yml: también se dispara con etiquetas v*; release.yml ya las publica")
+
+    if "/releases/download/latest/" not in text:
+        warnings.append("apk.yml: el cuerpo de la release no menciona el enlace permanente")
+
+# Enlaces de descarga en la documentación: si alguien cambia el nombre del
+# archivo, los enlaces del README y de la guía quedarían roto.
+for doc in ("README.md", "docs/COMPILAR_APK.md"):
+    path = ROOT / doc
+    if path.exists() and "releases/download/latest/" not in read(path):
+        warnings.append(f"{doc}: no documenta el enlace de descarga directa")
+
 # Un workflow roto de YAML sólo se descubre cuando GitHub lo rechaza: lo
 # validamos aquí si PyYAML está disponible (no es obligatorio).
 try:  # pragma: no cover - depende del entorno

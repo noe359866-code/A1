@@ -29,13 +29,14 @@ on:
         required: false
         default: ""
   push:
-    # Cada push a main compila el APK y lo deja como artefacto descargable:
-    # así siempre hay una compilación reciente verificada sin pulsar nada.
+    # Cada push a main compila el APK y actualiza la Release «latest», que es
+    # la que da el enlace permanente de descarga directa. Así siempre hay un
+    # OmniTV.apk descargable sin pulsar nada.
     # Nota: este workflow no hace push al repositorio, así que no se repite
     # a sí mismo (el GITHUB_TOKEN tampoco generaría un evento nuevo).
+    # Las etiquetas v* las publica release.yml: dos workflows publicando la
+    # misma release competirían por el mismo tag.
     branches: [main]
-    tags:
-      - "v*"
 
 permissions:
   contents: write
@@ -83,11 +84,17 @@ jobs:
           if [ -z "$VARIANT" ]; then VARIANT="release"; fi
           echo "VARIANT=$VARIANT" >> "$GITHUB_ENV"
 
-          # En un push de etiqueta siempre se publica; en manual, solo si se pide.
+          # Dos releases distintas:
+          #  - PUBLISH:      release versionada (v1.3.0…), al marcar «publicar».
+          #  - PUBLISH_DEV:  release rodante con etiqueta fija «latest», en cada
+          #                  push a main. Da el enlace permanente
+          #                  /releases/download/latest/OmniTV.apk
           PUBLISH="false"
-          if [ "${{ github.event_name }}" = "push" ] && [ "${GITHUB_REF_TYPE:-}" = "tag" ]; then PUBLISH="true"; fi
+          PUBLISH_DEV="false"
           if [ "${{ github.event.inputs.publicar }}" = "true" ]; then PUBLISH="true"; fi
+          if [ "${GITHUB_REF_TYPE:-}" = "branch" ]; then PUBLISH_DEV="true"; fi
           echo "PUBLISH=$PUBLISH" >> "$GITHUB_ENV"
+          echo "PUBLISH_DEV=$PUBLISH_DEV" >> "$GITHUB_ENV"
 
       - name: Preparar firma (si hay secretos)
         env:
@@ -133,15 +140,22 @@ jobs:
             echo "::error::$line"
           done || true
 
-      - name: Renombrar y verificar el APK
+      - name: Preparar el APK (nombre fijo OmniTV.apk)
         id: apk
         run: |
           set -euo pipefail
           APK=$(ls -1 app/build/outputs/apk/"$VARIANT"/*.apk | head -n1)
           VERSION=$(sed -nE 's/.*versionName *= *"([^"]+)".*/\1/p' app/build.gradle.kts | head -n1)
           CODE=$(sed -nE 's/.*versionCode *= *([0-9]+).*/\1/p' app/build.gradle.kts | head -n1)
-          OUT="OmniTV-${VERSION}-${VARIANT}.apk"
+
+          # Dos nombres del mismo binario:
+          #  - OmniTV.apk                → enlace permanente /releases/latest/download/OmniTV.apk
+          #                                (se sobrescribe en cada release, sin ZIP)
+          #  - OmniTV-<versión>.apk      → copia fechada para archivar y comparar
+          OUT="OmniTV.apk"
+          ARCHIVED="OmniTV-${VERSION}.apk"
           cp "$APK" "$OUT"
+          cp "$APK" "$ARCHIVED"
           SHA=$(sha256sum "$OUT" | cut -d' ' -f1)
           SIZE=$(du -h "$OUT" | cut -f1)
 
@@ -151,13 +165,14 @@ jobs:
             CERT=$("$APKSIGNER" verify --print-certs "$OUT" | sed -nE 's/.*certificate SHA-256 digest: *(.*)/\1/p' | head -n1)
           fi
 
-          # Etiqueta: la del push si es una etiqueta; si no, v<versión>.
+          # Etiqueta de la release versionada (la «latest» usa otra fija).
           TAG="v${VERSION}"
-          if [ "${GITHUB_REF_TYPE:-}" = "tag" ]; then TAG="${GITHUB_REF_NAME}"; fi
+          echo "BUILD_DATE=$(date -u +'%Y-%m-%d %H:%M UTC')" >> "$GITHUB_ENV"
 
-          ls -lh "$OUT"
+          ls -lh "$OUT" "$ARCHIVED"
           {
             echo "file=$OUT"
+            echo "archived=$ARCHIVED"
             echo "version=$VERSION"
             echo "code=$CODE"
             echo "sha=$SHA"
@@ -170,7 +185,8 @@ jobs:
             echo
             echo "| Dato | Valor |"
             echo "|---|---|"
-            echo "| Archivo | \`$OUT\` |"
+            echo "| Descarga directa (sin ZIP) | [\`$OUT\`](https://github.com/${{ github.repository }}/releases/download/latest/$OUT) |"
+            echo "| Archivo versionado | \`$ARCHIVED\` |"
             echo "| Versión | $VERSION (versionCode $CODE) |"
             echo "| Tamaño | $SIZE |"
             echo "| Firma | $SIGNING_MODE |"
@@ -182,27 +198,111 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: OmniTV-apk-${{ steps.apk.outputs.version }}
-          path: ${{ steps.apk.outputs.file }}
+          path: |
+            ${{ steps.apk.outputs.file }}
+            ${{ steps.apk.outputs.archived }}
           if-no-files-found: error
           retention-days: 90
 
-      - name: Publicar Release (opcional)
+      # Release rodante: misma etiqueta SIEMPRE («latest»), así el enlace
+      # /releases/download/latest/OmniTV.apk nunca cambia y el navegador
+      # descarga el .apk directamente, sin ZIP y sin pasar por Artifacts.
+      - name: Publicar Release «latest» (descarga directa permanente)
+        if: env.PUBLISH_DEV == 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: latest
+          name: OmniTV — última compilación
+          prerelease: false
+          make_latest: false
+          generate_release_notes: false
+          files: |
+            ${{ steps.apk.outputs.file }}
+            ${{ steps.apk.outputs.archived }}
+          body: |
+            ### ⬇️ Descarga directa
+
+            # [Descargar OmniTV.apk](https://github.com/${{ github.repository }}/releases/download/latest/OmniTV.apk)
+
+            Enlace permanente, sin ZIP y sin descomprimir:
+
+            ```
+            https://github.com/${{ github.repository }}/releases/download/latest/OmniTV.apk
+            ```
+
+            Se corresponde con la **versión ${{ steps.apk.outputs.version }}**
+            (versionCode ${{ steps.apk.outputs.code }}), compilada desde
+            `main` el ${{ env.BUILD_DATE }}.
+
+            | Dato | Valor |
+            |---|---|
+            | SHA-256 del archivo | `${{ steps.apk.outputs.sha }}` |
+            | SHA-256 del certificado | `${{ steps.apk.outputs.cert }}` |
+            | Firma | ${{ env.SIGNING_MODE }} |
+            | Commit | `${{ github.sha }}` |
+
+            También disponible la copia archivable
+            [`OmniTV-${{ steps.apk.outputs.version }}.apk`](https://github.com/${{ github.repository }}/releases/download/latest/${{ steps.apk.outputs.archived }}).
+
+            **Instalar en la TV:**
+
+            ```bash
+            adb connect <IP_DE_LA_TV>:5555
+            adb install -r OmniTV.apk
+            ```
+
+            O descarga el archivo y ábrelo desde la TV (requiere permitir
+            orígenes desconocidos en Ajustes → Seguridad).
+
+      - name: Publicar Release con descarga directa
         if: env.PUBLISH == 'true'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.apk.outputs.tag }}
           name: OmniTV ${{ steps.apk.outputs.version }}
           generate_release_notes: true
-          files: ${{ steps.apk.outputs.file }}
+          # Se publican dos veces el mismo binario:
+          #  - OmniTV.apk            → enlace permanente que nunca cambia
+          #  - OmniTV-<versión>.apk  → copia archivable de esta versión
+          files: |
+            ${{ steps.apk.outputs.file }}
+            ${{ steps.apk.outputs.archived }}
+          # Marca esta release como la más reciente del repositorio.
+          make_latest: true
           body: |
             ### OmniTV ${{ steps.apk.outputs.version }} — Android TV
 
-            **Instalación (sideload):**
-            1. Descarga `${{ steps.apk.outputs.file }}`
-            2. Llévalo a la TV con `adb install -r` o «Send Files to TV»
-            3. En la TV: Ajustes → Seguridad → permitir orígenes desconocidos
+            ## ⬇️ Descarga directa (sin ZIP)
 
-            **Integridad**
-            - SHA-256 del archivo: `${{ steps.apk.outputs.sha }}`
-            - SHA-256 del certificado: `${{ steps.apk.outputs.cert }}`
-            - Firma: ${{ env.SIGNING_MODE }}
+            **[OmniTV.apk](https://github.com/${{ github.repository }}/releases/latest/download/OmniTV.apk)**
+
+            Ese enlace es **permanente**: siempre apunta al último APK publicado y
+            el archivo se descarga con el nombre `OmniTV.apk`, sin descomprimir nada.
+            Para esta versión concreta:
+            [`${{ steps.apk.outputs.archived }}`](https://github.com/${{ github.repository }}/releases/download/${{ steps.apk.outputs.tag }}/${{ steps.apk.outputs.archived }})
+
+            ## 📺 Instalación en la TV
+
+            1. Descarga `OmniTV.apk` (o instálalo con `adb`).
+            2. Llévalo a la TV con `adb install -r OmniTV.apk`, un USB o «Send Files to TV».
+            3. En la TV: Ajustes → Seguridad → permitir orígenes desconocidos.
+
+            ```bash
+            adb connect <IP_DE_LA_TV>:5555
+            adb install -r OmniTV.apk
+            ```
+
+            ## 🔐 Integridad
+
+            | Dato | Valor |
+            |---|---|
+            | Versión | `${{ steps.apk.outputs.version }}` (versionCode ${{ steps.apk.outputs.code }}) |
+            | SHA-256 del archivo | `${{ steps.apk.outputs.sha }}` |
+            | SHA-256 del certificado | `${{ steps.apk.outputs.cert }}` |
+            | Firma | ${{ env.SIGNING_MODE }} |
+
+            Para comprobar la descarga antes de instalarla:
+
+            ```bash
+            sha256sum OmniTV.apk   # debe coincidir con el SHA-256 de arriba
+            ```
