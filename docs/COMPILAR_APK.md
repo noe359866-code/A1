@@ -64,8 +64,13 @@ No hace falta instalar nada: GitHub compila y te da el APK descargable.
      **SHA-256 del certificado de firma**.
 5. Descomprime y pasa el `.apk` a la TV (§5).
 
-El workflow también se dispara al subir una etiqueta (`git tag v1.3.0 && git
-push origin v1.3.0`); en ese caso publica la Release automáticamente.
+El workflow también se dispara **solo** en dos casos más:
+
+- **Cada push a `main`** → compila el APK y lo deja como artefacto
+  `OmniTV-apk-<versión>` (sin publicar Release). Así siempre hay una compilación
+  reciente descargable y verificada.
+- **Al subir una etiqueta** (`git tag v1.3.0 && git push origin v1.3.0`) →
+  además publica la Release automáticamente.
 
 ---
 

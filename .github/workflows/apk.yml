@@ -29,6 +29,11 @@ on:
         required: false
         default: ""
   push:
+    # Cada push a main compila el APK y lo deja como artefacto descargable:
+    # así siempre hay una compilación reciente verificada sin pulsar nada.
+    # Nota: este workflow no hace push al repositorio, así que no se repite
+    # a sí mismo (el GITHUB_TOKEN tampoco generaría un evento nuevo).
+    branches: [main]
     tags:
       - "v*"
 
@@ -80,7 +85,7 @@ jobs:
 
           # En un push de etiqueta siempre se publica; en manual, solo si se pide.
           PUBLISH="false"
-          if [ "${{ github.event_name }}" = "push" ]; then PUBLISH="true"; fi
+          if [ "${{ github.event_name }}" = "push" ] && [ "${GITHUB_REF_TYPE:-}" = "tag" ]; then PUBLISH="true"; fi
           if [ "${{ github.event.inputs.publicar }}" = "true" ]; then PUBLISH="true"; fi
           echo "PUBLISH=$PUBLISH" >> "$GITHUB_ENV"
 
@@ -148,7 +153,7 @@ jobs:
 
           # Etiqueta: la del push si es una etiqueta; si no, v<versión>.
           TAG="v${VERSION}"
-          if [ "${{ github.event_name }}" = "push" ]; then TAG="${{ github.ref_name }}"; fi
+          if [ "${GITHUB_REF_TYPE:-}" = "tag" ]; then TAG="${GITHUB_REF_NAME}"; fi
 
           ls -lh "$OUT"
           {
@@ -176,7 +181,7 @@ jobs:
       - name: Subir el APK
         uses: actions/upload-artifact@v7
         with:
-          name: OmniTV-apk
+          name: OmniTV-apk-${{ steps.apk.outputs.version }}
           path: ${{ steps.apk.outputs.file }}
           if-no-files-found: error
           retention-days: 90
