@@ -38,11 +38,17 @@ Revisión completa del repositorio antes de dejarlo listo para generar el APK:
    clave de depuración no puede actualizar una instalación firmada con
    producción (y al revés). Ahora hay un script y una sección dedicada (§4).
 
-> La compilación se validó en CI (GitHub Actions), sobre un árbol idéntico al de
-> `main` **más estas tres correcciones de import**; ese árbol ya pasó
-> `testDebugUnitTest` + `assembleDebug` + `assembleRelease` + `lintDebug` en
-> verde. En el entorno donde se hizo esta revisión no hay JDK ni Android SDK,
-> por eso el APK final se genera con los pasos de §2 o §3.
+> **La compilación ya está verificada en GitHub Actions.** El workflow
+> «Generar APK (Android TV)» se ejecutó sobre `main` y terminó en verde
+> (`Compilar APK`, run 43722259559):
+>
+> - `testDebugUnitTest` + `assembleRelease` con R8 → **BUILD SUCCESSFUL**
+> - APK publicado como artefacto: **`OmniTV-apk-1.3.0`, 12,3 MB** (12 931 307 bytes)
+> - Pasos de preparación, renombrado/verificación y subida: todos en verde
+>
+> El artefacto se conserva 90 días. En el entorno de esta revisión no hay JDK ni
+> Android SDK, así que la verificación se hizo íntegramente en CI; el binario se
+> descarga desde *Artifacts* (§2).
 
 ---
 
