@@ -213,20 +213,51 @@ A1/
 
 ---
 
-## 🚀 Compilación
+## 🚀 Compilación y APK
+
+> **Guía completa:** [docs/COMPILAR_APK.md](docs/COMPILAR_APK.md) — revisión del proyecto, firma, instalación en la TV y problemas conocidos.
+
+### El camino corto: el botón de GitHub (sin instalar nada)
+
+1. Pestaña **Actions** → **«Generar APK (Android TV)»** → **Run workflow**.
+2. En ~10 min el APK queda en *Artifacts → `OmniTV-apk`* (y opcionalmente como Release).
+3. El resumen del run indica versión, tamaño, SHA-256 del archivo y huella de firma.
+
+`.github/workflows/apk.yml` compila `assembleRelease` (o `debug`), ejecuta los tests y publica el APK. Funciona también al subir una etiqueta `v*`.
+
+### En local
 
 ```bash
-# Requisitos: JDK 17, Android SDK 35, Android Studio Ladybug+
+# Requisitos: JDK 17 + Android SDK 35 (ANDROID_HOME o local.properties)
+tools/build-apk.sh              # release (tests + R8) → dist/OmniTV-<version>-release.apk
+tools/build-apk.sh debug        # debug, más rápido
+tools/build-apk.sh release --skip-tests
+
 ./gradlew installDebug          # Instalar en TV/emulador conectado
 ./gradlew assembleDebug         # APK debug
 ./gradlew testDebugUnitTest     # Tests JVM
-./gradlew lint                  # Lint leanback
+./gradlew lintDebug             # Lint leanback
 ./gradlew assembleRelease       # APK de release
 ```
 
-**Firma de release:** sin variables de entorno se usa la keystore *debug* (sideload). Para producción, define `OMNITV_KEYSTORE_FILE`, `OMNITV_KEYSTORE_PASSWORD`, `OMNITV_KEY_ALIAS` y `OMNITV_KEY_PASSWORD`; `release.yml` decodifica el keystore desde los secretos `OMNITV_KEYSTORE_*` del repositorio y anuncia el modo de firma en la release.
+`tools/build-apk.sh` valida el proyecto antes de compilar y al final imprime versión, tamaño, SHA-256 y huella de firma.
 
-CI (`.github/workflows/ci.yml`): contrato TV + tests + `assembleDebug` + `assembleRelease` (firma debug de reserva) + lint en cada push/PR. Ver también `docs/ANDROID_TV_REVIEW.md`.
+### Comprobaciones previas
+
+```bash
+python3 tools/check_build_readiness.py   # wrapper, catálogo de versiones, versión, firma, workflows
+python3 tools/check_android_tv.py        # contrato de Android TV (leanback, banner, sin launcher móvil)
+```
+
+Ambas corren en local y en CI; `check_build_readiness.py` detecta en un segundo fallos que antes sólo aparecían tras varios minutos de Gradle (una dependencia con alias inexistente en `libs.versions.toml`, el wrapper ausente, una firma a medio configurar).
+
+### Firma
+
+- **Sin secretos** el APK se firma con la clave *debug*: sirve para sideload, no para Play Store.
+- **Producción:** `tools/signing/generar-keystore.sh` crea `signing/omnitv-release.jks` y muestra los cuatro secretos (`OMNITV_KEYSTORE_BASE64`, `OMNITV_KEYSTORE_PASSWORD`, `OMNITV_KEY_ALIAS`, `OMNITV_KEY_PASSWORD`) que se pegan en Settings → Secrets → Actions. Localmente, define `OMNITV_KEYSTORE_FILE`, `OMNITV_KEYSTORE_PASSWORD`, `OMNITV_KEY_ALIAS` y `OMNITV_KEY_PASSWORD`.
+- La firma no cambia entre versiones: si cambia, la TV no acepta la actualización (`adb uninstall com.omnitv.app` y reinstalar).
+
+CI (`.github/workflows/ci.yml`): preparación + contrato TV + tests + `assembleDebug` + `assembleRelease` + lint en cada push/PR. Ver también [ANDROID_TV_REVIEW.md](docs/ANDROID_TV_REVIEW.md).
 
 > **Emulador:** AVD Android TV (1080p), API 34 recomendado. App solo en launcher TV (`LEANBACK_LAUNCHER`).
 

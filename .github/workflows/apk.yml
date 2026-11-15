@@ -1,0 +1,203 @@
+# Genera el APK de Android TV desde GitHub, sin instalar nada en tu máquina.
+#
+# Cómo se usa (2 clics):
+#   1. Pestaña «Actions» → «Generar APK (Android TV)» → «Run workflow».
+#   2. Al terminar (~10 min), el APK queda en el artefacto «OmniTV-apk».
+#      Si además marcas «publicar», aparece como Release descargable.
+#
+# También se ejecuta al subir una etiqueta v* (ej: v1.3.0).
+#
+# Diferencia con release.yml: este workflow SIEMPRE deja un APK descargable
+# (artefacto), sin exigir keystore de producción y sin publicar una Release a
+# menos que se pida. Es el botón «dame el APK» del proyecto.
+name: Generar APK (Android TV)
+
+on:
+  workflow_dispatch:
+    inputs:
+      variant:
+        description: "Variante a compilar"
+        type: choice
+        options: [release, debug]
+        default: release
+      publicar:
+        description: "Publicar también una Release con el APK"
+        type: boolean
+        default: false
+      version:
+        description: "versionName para esta compilación (vacío = la del proyecto)"
+        required: false
+        default: ""
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: apk-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  apk:
+    name: Compilar APK
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+
+    steps:
+      - name: Descargar el código
+        uses: actions/checkout@v7
+
+      - name: JDK 17
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Preparar Gradle
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          cache-provider: basic
+
+      - name: Aceptar las licencias del SDK de Android
+        run: |
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          if [ -x "$SDKMANAGER" ]; then yes | "$SDKMANAGER" --licenses > /dev/null; fi
+
+      # Falla en segundos —y con un mensaje claro— si al proyecto le falta algo
+      # para compilar (catálogo de versiones, wrapper, firma a medias…).
+      - name: Preparación del proyecto
+        run: |
+          python3 tools/check_build_readiness.py
+          python3 tools/check_android_tv.py
+
+      - name: Variante y publicación
+        run: |
+          VARIANT="${{ github.event.inputs.variant }}"
+          if [ -z "$VARIANT" ]; then VARIANT="release"; fi
+          echo "VARIANT=$VARIANT" >> "$GITHUB_ENV"
+
+          # En un push de etiqueta siempre se publica; en manual, solo si se pide.
+          PUBLISH="false"
+          if [ "${{ github.event_name }}" = "push" ]; then PUBLISH="true"; fi
+          if [ "${{ github.event.inputs.publicar }}" = "true" ]; then PUBLISH="true"; fi
+          echo "PUBLISH=$PUBLISH" >> "$GITHUB_ENV"
+
+      - name: Preparar firma (si hay secretos)
+        env:
+          OMNITV_KEYSTORE_BASE64: ${{ secrets.OMNITV_KEYSTORE_BASE64 }}
+          OMNITV_KEYSTORE_PASSWORD: ${{ secrets.OMNITV_KEYSTORE_PASSWORD }}
+          OMNITV_KEY_ALIAS: ${{ secrets.OMNITV_KEY_ALIAS }}
+          OMNITV_KEY_PASSWORD: ${{ secrets.OMNITV_KEY_PASSWORD }}
+        run: |
+          if [ -n "${OMNITV_KEYSTORE_BASE64:-}" ] && [ -n "${OMNITV_KEYSTORE_PASSWORD:-}" ] && [ -n "${OMNITV_KEY_ALIAS:-}" ]; then
+            echo "$OMNITV_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/omnitv-release.jks"
+            {
+              echo "OMNITV_KEYSTORE_FILE=$RUNNER_TEMP/omnitv-release.jks"
+              echo "OMNITV_KEYSTORE_PASSWORD=$OMNITV_KEYSTORE_PASSWORD"
+              echo "OMNITV_KEY_ALIAS=$OMNITV_KEY_ALIAS"
+              echo "OMNITV_KEY_PASSWORD=${OMNITV_KEY_PASSWORD:-$OMNITV_KEYSTORE_PASSWORD}"
+              echo "SIGNING_MODE=producción"
+            } >> "$GITHUB_ENV"
+            echo "::notice::APK firmado con la keystore de producción"
+          else
+            echo "SIGNING_MODE=depuración (sideload)" >> "$GITHUB_ENV"
+            echo "::warning::Sin secretos OMNITV_KEYSTORE_*: el APK se firmará con la clave de depuración. No sirve para actualizar una instalación firmada con producción."
+          fi
+
+      - name: Versión para esta compilación
+        if: github.event.inputs.version != ''
+        run: |
+          # Reescribe sólo el versionName; el versionCode se mantiene.
+          sed -i -E "s/versionName *= *\"[^\"]*\"/versionName = \"${{ github.event.inputs.version }}\"/" app/build.gradle.kts
+          grep -nE "versionCode|versionName" app/build.gradle.kts
+
+      - name: Tests y compilación
+        run: |
+          set -o pipefail
+          TASK="assembleRelease"
+          if [ "$VARIANT" = "debug" ]; then TASK="assembleDebug"; fi
+          ./gradlew --no-daemon :app:testDebugUnitTest ":app:$TASK" 2>&1 | tee build-apk.log
+
+      - name: Mostrar errores si falla
+        if: failure()
+        run: |
+          tail -n 250 build-apk.log || true
+          grep -E "^(e: |FAILURE|Execution failed|What went wrong)" build-apk.log | head -n 30 | while read -r line; do
+            echo "::error::$line"
+          done || true
+
+      - name: Renombrar y verificar el APK
+        id: apk
+        run: |
+          set -euo pipefail
+          APK=$(ls -1 app/build/outputs/apk/"$VARIANT"/*.apk | head -n1)
+          VERSION=$(sed -nE 's/.*versionName *= *"([^"]+)".*/\1/p' app/build.gradle.kts | head -n1)
+          CODE=$(sed -nE 's/.*versionCode *= *([0-9]+).*/\1/p' app/build.gradle.kts | head -n1)
+          OUT="OmniTV-${VERSION}-${VARIANT}.apk"
+          cp "$APK" "$OUT"
+          SHA=$(sha256sum "$OUT" | cut -d' ' -f1)
+          SIZE=$(du -h "$OUT" | cut -f1)
+
+          APKSIGNER=$(ls -d "$ANDROID_HOME"/build-tools/*/apksigner 2>/dev/null | sort -V | tail -n1 || true)
+          CERT=""
+          if [ -n "$APKSIGNER" ]; then
+            CERT=$("$APKSIGNER" verify --print-certs "$OUT" | sed -nE 's/.*certificate SHA-256 digest: *(.*)/\1/p' | head -n1)
+          fi
+
+          # Etiqueta: la del push si es una etiqueta; si no, v<versión>.
+          TAG="v${VERSION}"
+          if [ "${{ github.event_name }}" = "push" ]; then TAG="${{ github.ref_name }}"; fi
+
+          ls -lh "$OUT"
+          {
+            echo "file=$OUT"
+            echo "version=$VERSION"
+            echo "code=$CODE"
+            echo "sha=$SHA"
+            echo "cert=$CERT"
+            echo "tag=$TAG"
+          } >> "$GITHUB_OUTPUT"
+
+          {
+            echo "### APK generado"
+            echo
+            echo "| Dato | Valor |"
+            echo "|---|---|"
+            echo "| Archivo | \`$OUT\` |"
+            echo "| Versión | $VERSION (versionCode $CODE) |"
+            echo "| Tamaño | $SIZE |"
+            echo "| Firma | $SIGNING_MODE |"
+            echo "| SHA-256 del archivo | \`$SHA\` |"
+            echo "| SHA-256 del certificado | \`${CERT:-no disponible}\` |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Subir el APK
+        uses: actions/upload-artifact@v7
+        with:
+          name: OmniTV-apk
+          path: ${{ steps.apk.outputs.file }}
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Publicar Release (opcional)
+        if: env.PUBLISH == 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.apk.outputs.tag }}
+          name: OmniTV ${{ steps.apk.outputs.version }}
+          generate_release_notes: true
+          files: ${{ steps.apk.outputs.file }}
+          body: |
+            ### OmniTV ${{ steps.apk.outputs.version }} — Android TV
+
+            **Instalación (sideload):**
+            1. Descarga `${{ steps.apk.outputs.file }}`
+            2. Llévalo a la TV con `adb install -r` o «Send Files to TV»
+            3. En la TV: Ajustes → Seguridad → permitir orígenes desconocidos
+
+            **Integridad**
+            - SHA-256 del archivo: `${{ steps.apk.outputs.sha }}`
+            - SHA-256 del certificado: `${{ steps.apk.outputs.cert }}`
+            - Firma: ${{ env.SIGNING_MODE }}

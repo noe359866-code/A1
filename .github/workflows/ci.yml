@@ -56,6 +56,12 @@ jobs:
       - name: Contrato de Android TV
         run: python3 tools/check_android_tv.py
 
+      # Detecta en segundos un alias inexistente en libs.versions.toml, un
+      # wrapper ausente o una firma a medio configurar: son los fallos que
+      # antes sólo aparecían tras varios minutos de compilación.
+      - name: Preparación del proyecto (utilizable para APK)
+        run: python3 tools/check_build_readiness.py
+
       # `pipefail` es imprescindible: sin él, el código de salida sería el de `tee`
       # y un fallo de Gradle pasaría por bueno.
       - name: Puente Nuvio (HTTP y worker JS)

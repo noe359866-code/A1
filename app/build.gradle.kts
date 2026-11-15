@@ -23,8 +23,11 @@ android {
         // Android TV: API 22+ (Media3 y Compose soportan 21, pero casi ningún televisor es 21).
         minSdk = 22
         targetSdk = 34
-        versionCode = 3
-        versionName = "1.2.0"
+        // versionCode debe subir con cada publicación: Android rechaza una
+        // actualización con un código menor o igual que el instalado.
+        // (v1.2.0 se publicó con el código 3.)
+        versionCode = 4
+        versionName = "1.3.0"
     }
 
     signingConfigs {
