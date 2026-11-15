@@ -32,6 +32,7 @@ import coil.compose.AsyncImage
 import com.omnitv.app.data.Studio
 import com.omnitv.app.data.Studios
 import com.omnitv.app.ui.theme.AppRadius
+import com.omnitv.app.ui.theme.AppStroke
 import com.omnitv.app.ui.theme.AppSpacing
 import com.omnitv.app.ui.theme.AppType
 import com.omnitv.app.ui.theme.GlassFill
