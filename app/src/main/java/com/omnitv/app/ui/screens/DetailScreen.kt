@@ -259,11 +259,7 @@ fun DetailScreen(
                     if (full.hasRating) {
                         Text(
                             "${full.matchPercent} % para ti",
-                            style = androidx.compose.ui.text.TextStyle(
-                                fontFamily = FontFamily.SansSerif,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 19.sp
-                            ),
+                            style = AppType.controlLabel,
                             color = AccentGreen
                         )
                     }
@@ -564,11 +560,7 @@ private fun EpisodeRow(episode: Episode, onClick: () -> Unit) {
     ) {
         Text(
             "${episode.number}",
-            style = androidx.compose.ui.text.TextStyle(
-                fontFamily = FontFamily.SansSerif,
-                fontWeight = FontWeight.Bold,
-                fontSize = 28.sp
-            ),
+            style = AppType.sectionTitle,
             color = if (focused) TextPrimary else TextSecondary,
             modifier = Modifier.width(34.dp)
         )
@@ -599,11 +591,7 @@ private fun EpisodeRow(episode: Episode, onClick: () -> Unit) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     episode.title,
-                    style = androidx.compose.ui.text.TextStyle(
-                        fontFamily = FontFamily.SansSerif,
-                        fontWeight = FontWeight.SemiBold,
-                        fontSize = 20.sp
-                    ),
+                    style = AppType.cardHeading,
                     color = TextPrimary,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis

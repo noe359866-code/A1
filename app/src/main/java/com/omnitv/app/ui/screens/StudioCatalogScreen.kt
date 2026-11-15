@@ -163,7 +163,7 @@ fun StudioCatalogScreen(
                     columns = GridCells.Fixed(5),
                     contentPadding = PaddingValues(bottom = 56.dp),
                     horizontalArrangement = Arrangement.spacedBy(20.dp),
-                    verticalArrangement = Arrangement.spacedBy(24.dp)
+                    verticalArrangement = Arrangement.spacedBy(32.dp)
                 ) {
                     items(filtered, key = { it.id }) { video ->
                         PosterCard(

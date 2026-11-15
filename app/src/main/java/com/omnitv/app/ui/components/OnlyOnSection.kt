@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -30,19 +31,18 @@ import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import androidx.compose.material.Text
 import coil.compose.AsyncImage
+import com.omnitv.app.data.Providers
 import com.omnitv.app.data.RemoteCatalog
 import com.omnitv.app.data.StreamingProvider
 import com.omnitv.app.data.Video
 import com.omnitv.app.ui.theme.Accent
 import com.omnitv.app.ui.theme.AppRadius
 import com.omnitv.app.ui.theme.AppSpacing
+import com.omnitv.app.ui.theme.AppStroke
 import com.omnitv.app.ui.theme.AppType
 import com.omnitv.app.ui.theme.GlassFill
 import com.omnitv.app.ui.theme.TextPrimary
@@ -59,9 +59,8 @@ fun OnlyOnSection(
     onSeeAll: (StreamingProvider) -> Unit,
     onOpenPlatforms: () -> Unit
 ) {
-    // Las 7 plataformas del selector, en el orden del «Only on» original
     val selector = remember {
-        listOf(8, 9, 1899, 337, 350, 2303, 15).mapNotNull { com.omnitv.app.data.Providers.byId(it) }
+        listOf(8, 9, 1899, 337, 350, 2303, 15).mapNotNull { Providers.byId(it) }
     }
     var selected by remember { mutableStateOf(selector.first()) }
     var videos by remember(selected.id) { mutableStateOf<List<Video>>(emptyList()) }
@@ -79,11 +78,7 @@ fun OnlyOnSection(
             Text("Solo en ", style = AppType.sectionTitle, color = TextPrimary)
             Text(
                 selected.name,
-                style = androidx.compose.ui.text.TextStyle(
-                    fontFamily = androidx.compose.ui.text.font.FontFamily.SansSerif,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 26.sp
-                ),
+                style = AppType.sectionTitle,
                 color = Accent
             )
         }
@@ -151,12 +146,8 @@ private fun ProviderLogoChip(
             .clip(AppRadius.md)
             .background(if (selected) GlassFill.copy(alpha = 0.95f) else GlassFill)
             .then(
-                // Regla única de la app: **foco = blanco** (siempre 3 dp),
-                // **selección = azul**. Antes el foco azul y el blanco se
-                // alternaban según el componente y no había forma de saber si
-                // un elemento estaba enfocado o seleccionado.
                 when {
-                    focused -> Modifier.border(3.dp, Color.White, AppRadius.md)
+                    focused -> Modifier.border(AppStroke.focus, Color.White, AppRadius.md)
                     selected -> Modifier.border(2.dp, Accent, AppRadius.md)
                     else -> Modifier.border(1.dp, Color.White.copy(alpha = 0.10f), AppRadius.md)
                 }
@@ -181,7 +172,7 @@ private fun ProviderLogoChip(
     }
 }
 
-/** Chip «Más» → abre la pestaña Plataformas (como el «More›» original). */
+/** Chip «Más» → abre la pestaña Plataformas. */
 @Composable
 private fun MoreChip(onClick: () -> Unit) {
     var focused by remember { mutableStateOf(false) }
@@ -190,7 +181,7 @@ private fun MoreChip(onClick: () -> Unit) {
             .clip(AppRadius.md)
             .background(if (focused) Accent else GlassFill)
             .then(
-                if (focused) Modifier.border(3.dp, Color.White, AppRadius.md)
+                if (focused) Modifier.border(AppStroke.focus, Color.White, AppRadius.md)
                 else Modifier.border(1.dp, Color.White.copy(alpha = 0.10f), AppRadius.md)
             )
             .clickable(
@@ -221,8 +212,7 @@ private fun SeeAllCard(provider: StreamingProvider, onClick: () -> Unit) {
             .clip(AppRadius.md)
             .background(if (focused) Accent.copy(alpha = 0.35f) else GlassFill)
             .then(
-                // Foco = blanco; el azul se queda como relleno de «activo».
-                if (focused) Modifier.border(3.dp, Color.White, AppRadius.md)
+                if (focused) Modifier.border(AppStroke.focus, Color.White, AppRadius.md)
                 else Modifier.border(1.dp, Color.White.copy(alpha = 0.10f), AppRadius.md)
             )
             .clickable(
@@ -238,11 +228,7 @@ private fun SeeAllCard(provider: StreamingProvider, onClick: () -> Unit) {
             Spacer(Modifier.height(6.dp))
             Text(
                 "${provider.name} ›",
-                style = androidx.compose.ui.text.TextStyle(
-                    fontFamily = androidx.compose.ui.text.font.FontFamily.SansSerif,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 17.sp
-                ),
+                style = AppType.cardTitle,
                 color = TextSecondary,
                 textAlign = TextAlign.Center,
                 maxLines = 1,

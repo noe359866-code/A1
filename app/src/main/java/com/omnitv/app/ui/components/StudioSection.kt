@@ -86,7 +86,7 @@ fun StudioTile(
             .clip(AppRadius.md)
             .background(if (focused) GlassFill.copy(alpha = 0.95f) else GlassFill)
             .then(
-                if (focused) Modifier.border(3.dp, Color.White, AppRadius.md)
+                if (focused) Modifier.border(AppStroke.focus, Color.White, AppRadius.md)
                 else Modifier.border(1.dp, Color.White.copy(alpha = 0.10f), AppRadius.md)
             )
             .clickable(

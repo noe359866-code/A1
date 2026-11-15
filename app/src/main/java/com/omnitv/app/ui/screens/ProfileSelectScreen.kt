@@ -6,11 +6,13 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -32,9 +34,11 @@ import com.omnitv.app.ui.components.PillButton
 import com.omnitv.app.ui.components.PinDialog
 import com.omnitv.app.ui.components.ProfileTile
 import com.omnitv.app.ui.components.RequestTvFocus
+import com.omnitv.app.ui.theme.Accent
 import com.omnitv.app.ui.theme.AppType
 import com.omnitv.app.ui.theme.Background
 import com.omnitv.app.ui.theme.TextPrimary
+import com.omnitv.app.ui.theme.TextSecondary
 
 /** Acción que queda en espera de verificar el PIN parental. */
 private sealed interface PendingAction {
@@ -44,12 +48,11 @@ private sealed interface PendingAction {
 }
 
 /**
- * Puerta de entrada de la app, igual que Netflix:
- * «¿Quién está viendo?» con los avatares de los perfiles.
+ * Puerta de entrada de la app, diseñada para Android TV:
+ * «¿Quién está viendo?» con los avatares ilustrados y navegación D-pad.
  *
  * Si hay un PIN parental y el perfil activo es infantil, salir a un perfil
- * estándar (o abrir la gestión de perfiles) exige el PIN. Es un bloqueo de
- * uso doméstico: no sustituye a un control de acceso del sistema.
+ * estándar o abrir la gestión de perfiles exige el PIN.
  */
 @Composable
 fun ProfileSelectScreen(
@@ -58,14 +61,18 @@ fun ProfileSelectScreen(
     onAddProfile: () -> Unit
 ) {
     val profiles = ProfileStore.profiles
+    val currentId = ProfileStore.currentProfileId
     val pinRequired = SettingsStore.parentalPinEnabled && ProfileStore.currentProfile?.isKids == true
     var pending by remember { mutableStateOf<PendingAction?>(null) }
 
-    // Foco inicial en el primer perfil: con el mando, el foco por defecto cae
-    // en «Gestionar perfiles» y el primer OK no entra a ver nada. Mientras
-    // esté abierta la capa del PIN, el foco debe quedarse en su teclado.
-    val firstProfileFocus = remember { FocusRequester() }
-    if (pending == null) RequestTvFocus(firstProfileFocus, key = profiles.firstOrNull()?.id)
+    // Foco inicial en el perfil activo (o el primero de la lista):
+    // el usuario pulsa OK y entra inmediatamente a su perfil.
+    val initialFocus = remember { FocusRequester() }
+    val initialProfileIndex = remember(profiles, currentId) {
+        val idx = profiles.indexOfFirst { it.id == currentId }
+        if (idx >= 0) idx else 0
+    }
+    if (pending == null) RequestTvFocus(initialFocus, key = profiles.firstOrNull()?.id)
 
     fun runAction(action: PendingAction) = when (action) {
         is PendingAction.Select -> onSelected(action.profile)
@@ -79,13 +86,15 @@ fun ProfileSelectScreen(
 
     Box(Modifier.fillMaxSize().background(Background)) {
         Column(
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 48.dp, vertical = 32.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
-            Text("OMNI TV", style = AppType.brandMark, color = com.omnitv.app.ui.theme.Accent)
+            Text("OMNI TV", style = AppType.brandMark, color = Accent)
 
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(14.dp))
 
             Text(
                 "¿Quién está viendo?",
@@ -94,18 +103,31 @@ fun ProfileSelectScreen(
                 textAlign = TextAlign.Center
             )
 
-            Spacer(Modifier.height(52.dp))
+            Spacer(Modifier.height(8.dp))
+
+            Text(
+                "Elige tu perfil para continuar o gestiona tus cuentas",
+                style = AppType.body,
+                color = TextSecondary,
+                textAlign = TextAlign.Center
+            )
+
+            Spacer(Modifier.height(48.dp))
 
             Row(
-                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(28.dp, Alignment.CenterHorizontally)
+                Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(28.dp, Alignment.CenterHorizontally),
+                verticalAlignment = Alignment.CenterVertically
             ) {
                 profiles.forEachIndexed { index, profile ->
                     ProfileTile(
                         profile = profile,
+                        isActive = profile.id == currentId,
                         onClick = { request(PendingAction.Select(profile)) },
-                        modifier = if (index == 0) {
-                            Modifier.focusRequester(firstProfileFocus)
+                        modifier = if (index == initialProfileIndex) {
+                            Modifier.focusRequester(initialFocus)
                         } else {
                             Modifier
                         }
@@ -114,7 +136,7 @@ fun ProfileSelectScreen(
                 AddProfileTile(onClick = { request(PendingAction.Add) })
             }
 
-            Spacer(Modifier.height(56.dp))
+            Spacer(Modifier.height(48.dp))
 
             PillButton(
                 text = "Gestionar perfiles",

@@ -17,14 +17,15 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -38,18 +39,17 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import androidx.compose.ui.text.style.TextOverflow
 import com.omnitv.app.ui.components.RequestTvFocus
-import androidx.compose.material.Text
 import com.omnitv.app.ui.theme.Accent
 import com.omnitv.app.ui.theme.AppRadius
+import com.omnitv.app.ui.theme.AppStroke
+import com.omnitv.app.ui.theme.AppType
 import com.omnitv.app.ui.theme.OnLight
 import com.omnitv.app.ui.theme.SurfaceBright
 import com.omnitv.app.ui.theme.TextSecondary
@@ -109,9 +109,8 @@ fun ControlPill(
             .clip(AppRadius.pill)
             .background(background)
             .then(
-                // 2 dp: esto no es el anillo de foco (que va a 3), sino el filo
-                // de «opción activa»; a 3 dp se comía el relleno del botón.
                 if (active && !focused) Modifier.border(2.dp, Accent.copy(alpha = 0.8f), AppRadius.pill)
+                else if (focused) Modifier.border(AppStroke.focus, Color.White, AppRadius.pill)
                 else Modifier
             )
             .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onClick)
@@ -123,16 +122,12 @@ fun ControlPill(
             painter = painterResource(iconRes),
             contentDescription = null,
             modifier = Modifier.size(21.dp),
-            colorFilter = androidx.compose.ui.graphics.ColorFilter.tint(contentColor)
+            colorFilter = ColorFilter.tint(contentColor)
         )
         Spacer(Modifier.width(9.dp))
         Text(
             label,
-            style = androidx.compose.ui.text.TextStyle(
-                fontFamily = FontFamily.SansSerif,
-                fontWeight = FontWeight.SemiBold,
-                fontSize = 19.sp
-            ),
+            style = AppType.controlLabel,
             color = contentColor,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
@@ -141,7 +136,7 @@ fun ControlPill(
     }
 }
 
-/** Botón de transporte cuadrado redondeado (⏪ ▶ ⏩) sin texto. */
+/** Botón de transporte circular (⏪ ▶ ⏩) sin texto. */
 @Composable
 fun TransportButton(
     iconRes: Int,
@@ -166,7 +161,7 @@ fun TransportButton(
             .graphicsLayer { scaleX = scale; scaleY = scale }
             .clip(CircleShape)
             .background(background)
-            .then(if (focused) Modifier.border(3.dp, Color.White, CircleShape) else Modifier)
+            .then(if (focused) Modifier.border(AppStroke.focus, Color.White, CircleShape) else Modifier)
             .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onClick)
             .onFocusChanged { focused = it.isFocused },
         contentAlignment = Alignment.Center
@@ -175,7 +170,7 @@ fun TransportButton(
             painter = painterResource(iconRes),
             contentDescription = contentDescription,
             modifier = Modifier.size(size * 0.44f),
-            colorFilter = androidx.compose.ui.graphics.ColorFilter.tint(
+            colorFilter = ColorFilter.tint(
                 if (focused || primary) OnLight else ControlWhite
             )
         )
@@ -207,12 +202,7 @@ fun OptionMenu(
         ) {
             Text(
                 title.uppercase(),
-                style = androidx.compose.ui.text.TextStyle(
-                    fontFamily = FontFamily.SansSerif,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 16.sp,
-                    letterSpacing = 1.sp
-                ),
+                style = AppType.menuHeader,
                 color = TextSecondary,
                 modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)
             )
@@ -233,7 +223,7 @@ private fun OptionRow(option: PlayerOption, modifier: Modifier = Modifier) {
             .padding(horizontal = 10.dp, vertical = 2.dp)
             .clip(AppRadius.sm)
             .background(if (focused) Color.White.copy(alpha = 0.18f) else Color.Transparent)
-            .then(if (focused) Modifier.border(3.dp, Color.White, AppRadius.sm) else Modifier)
+            .then(if (focused) Modifier.border(AppStroke.focus, Color.White, AppRadius.sm) else Modifier)
             .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = option.onSelect)
             .onFocusChanged { focused = it.isFocused }
             .padding(horizontal = 12.dp, vertical = 12.dp),
@@ -245,25 +235,21 @@ private fun OptionRow(option: PlayerOption, modifier: Modifier = Modifier) {
                 .clip(CircleShape)
                 .background(if (option.selected) Accent else Color.Transparent)
                 .then(
-                    if (!option.selected) Modifier.border(3.dp, Color.White.copy(alpha = 0.35f), CircleShape)
+                    if (!option.selected) Modifier.border(2.dp, Color.White.copy(alpha = 0.35f), CircleShape)
                     else Modifier
                 )
         )
         Spacer(Modifier.width(12.dp))
         Text(
             option.label,
-            style = androidx.compose.ui.text.TextStyle(
-                fontFamily = FontFamily.SansSerif,
-                fontWeight = if (option.selected) FontWeight.SemiBold else FontWeight.Normal,
-                fontSize = 19.sp
-            ),
+            style = AppType.controlLabel,
             color = if (focused) Color.White else ControlWhite.copy(alpha = if (option.selected) 1f else 0.8f)
         )
     }
 }
 
 /* -------------------------------------------------------------------------- */
-/*  Franja informativa (no EPG XMLTV)                                        */
+/*  Franja informativa (reproducción / estado)                                */
 /* -------------------------------------------------------------------------- */
 
 @Composable
@@ -272,16 +258,11 @@ fun EpgChip(text: String, color: Color, modifier: Modifier = Modifier) {
         modifier
             .clip(AppRadius.xs)
             .background(color)
-            .padding(horizontal = 7.dp, vertical = 2.dp)
+            .padding(horizontal = 8.dp, vertical = 3.dp)
     ) {
         Text(
             text,
-            style = androidx.compose.ui.text.TextStyle(
-                fontFamily = FontFamily.SansSerif,
-                fontWeight = FontWeight.Bold,
-                fontSize = 14.sp,
-                letterSpacing = 0.8.sp
-            ),
+            style = AppType.chip,
             color = Color.White
         )
     }
@@ -302,7 +283,7 @@ fun CenterPlayButton(iconRes: Int, onClick: () -> Unit, modifier: Modifier = Mod
             .graphicsLayer { scaleX = scale; scaleY = scale }
             .clip(CircleShape)
             .background(Color.White.copy(alpha = 0.92f))
-            .border(3.dp, Color.White, CircleShape)
+            .border(AppStroke.focus, Color.White, CircleShape)
             .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onClick)
             .onFocusChanged { focused = it.isFocused },
         contentAlignment = Alignment.Center
@@ -311,7 +292,7 @@ fun CenterPlayButton(iconRes: Int, onClick: () -> Unit, modifier: Modifier = Mod
             painter = painterResource(iconRes),
             contentDescription = "Reproducir",
             modifier = Modifier.size(44.dp),
-            colorFilter = androidx.compose.ui.graphics.ColorFilter.tint(OnLight)
+            colorFilter = ColorFilter.tint(OnLight)
         )
     }
 }
@@ -327,11 +308,7 @@ fun InfoChip(text: String, modifier: Modifier = Modifier) {
     ) {
         Text(
             text,
-            style = androidx.compose.ui.text.TextStyle(
-                fontFamily = FontFamily.SansSerif,
-                fontWeight = FontWeight.SemiBold,
-                fontSize = 15.sp
-            ),
+            style = AppType.chip,
             color = ControlWhite
         )
     }
