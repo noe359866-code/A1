@@ -23,3 +23,12 @@ out/
 # Sistema
 .DS_Store
 __pycache__/
+
+# Firma del APK: la keystore privada NUNCA va a git (ver tools/signing/)
+signing/*.jks
+signing/*.keystore
+signing/*.p12
+signing/SECRETS-*.txt
+
+# APK compilados en local
+dist/

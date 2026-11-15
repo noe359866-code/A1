@@ -52,6 +52,7 @@ import com.omnitv.app.ui.components.TvChip
 import com.omnitv.app.ui.components.StudioTile
 import com.omnitv.app.ui.theme.Accent
 import com.omnitv.app.ui.theme.AppRadius
+import com.omnitv.app.ui.theme.AppStroke
 import com.omnitv.app.ui.theme.AppType
 import com.omnitv.app.ui.theme.Background
 import com.omnitv.app.ui.theme.GlassFill
