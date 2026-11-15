@@ -37,6 +37,16 @@ class CatalogRepositoryTest {
     }
 
     @Test
+    fun `una tarjeta de anime no borra el IMDb descubierto en la ficha`() {
+        val id = "mal:5114"
+        val full = video(id).copy(type = VideoType.ANIME, source = "Jikan", streamId = "tt0421357")
+        CatalogRepository.registerRemote(full)
+        val card = video(id, title = "Tarjeta").copy(type = VideoType.ANIME, source = "Jikan")
+        CatalogRepository.registerRemote(card)
+        assertEquals("tt0421357", CatalogRepository.find(id)!!.streamId)
+    }
+
+    @Test
     fun `siguiente es el proximo episodio y no un relacionado por genero`() {
         val id = "tt-test-next"
         val episodes = listOf(

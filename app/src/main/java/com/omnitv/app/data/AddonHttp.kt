@@ -28,8 +28,12 @@ internal object AddonHttp {
     }
 
     /** GET con estado HTTP: quien llama puede distinguir 429 de «sin datos». */
-    fun getJsonWithStatus(url: String, headers: Map<String, String> = emptyMap()): Result {
-        val result = request("GET", url, null, headers)
+    fun getJsonWithStatus(
+        url: String,
+        headers: Map<String, String> = emptyMap(),
+        readTimeoutMs: Int = 10_000
+    ): Result {
+        val result = request("GET", url, null, headers, readTimeoutMs)
         if (result.value != null || !result.dnsFailure) return result
         val fallback = Doh.retry(url)?.takeIf { it.length <= MAX_BODY } ?: return result
         val value = parseJson(fallback)

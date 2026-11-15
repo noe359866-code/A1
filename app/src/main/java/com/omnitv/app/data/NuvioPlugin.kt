@@ -157,8 +157,18 @@ internal object NuvioBridgeRequest {
         val parts = videoId.split(':')
         val tmdb = videoId.startsWith("tmdb:")
         val canonical = if (tmdb) "tmdb:${parts.getOrNull(1).orEmpty()}" else parts.first()
-        val season = parts.getOrNull(if (tmdb) 2 else 1)?.toIntOrNull()
-        val episode = parts.getOrNull(if (tmdb) 3 else 2)?.toIntOrNull()
+        val anime = AnimeIds.isAnime(videoId)
+        val animeEpisode = AnimeIds.episodeParts(videoId)
+        val season = when {
+            anime -> animeEpisode?.first
+            tmdb -> parts.getOrNull(2)?.toIntOrNull()
+            else -> parts.getOrNull(1)?.toIntOrNull()
+        }
+        val episode = when {
+            anime -> animeEpisode?.second
+            tmdb -> parts.getOrNull(3)?.toIntOrNull()
+            else -> parts.getOrNull(2)?.toIntOrNull()
+        }
         val extra = JSONObject().apply {
             put("tmdbId", canonical.takeIf { it.startsWith("tmdb:") }?.removePrefix("tmdb:"))
             put("imdbId", canonical.takeIf { it.startsWith("tt") })

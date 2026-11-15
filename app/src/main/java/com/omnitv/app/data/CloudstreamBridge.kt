@@ -65,8 +65,18 @@ object CloudstreamBridge {
         val (type, id) = StreamHub.stremioId(video) ?: ("movie" to video.id)
         val parts = id.split(':')
         val tmdb = id.startsWith("tmdb:")
-        val season = parts.getOrNull(if (tmdb) 2 else 1)?.toIntOrNull()
-        val episode = parts.getOrNull(if (tmdb) 3 else 2)?.toIntOrNull()
+        val anime = AnimeIds.isAnime(id)
+        val animeEpisode = AnimeIds.episodeParts(id)
+        val season = when {
+            anime -> animeEpisode?.first
+            tmdb -> parts.getOrNull(2)?.toIntOrNull()
+            else -> parts.getOrNull(1)?.toIntOrNull()
+        }
+        val episode = when {
+            anime -> animeEpisode?.second
+            tmdb -> parts.getOrNull(3)?.toIntOrNull()
+            else -> parts.getOrNull(2)?.toIntOrNull()
+        }
         return JSONObject().apply {
             put("title", if ('~' in video.id) video.title.substringBefore(" · ") else video.title)
             put("type", type)

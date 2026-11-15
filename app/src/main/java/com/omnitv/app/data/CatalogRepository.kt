@@ -23,7 +23,10 @@ object CatalogRepository {
                 cast = video.cast.ifEmpty { old.cast },
                 episodes = video.episodes.ifEmpty { old.episodes },
                 metaAddonUrl = video.metaAddonUrl ?: old.metaAddonUrl,
-                remoteType = video.remoteType ?: old.remoteType
+                remoteType = video.remoteType ?: old.remoteType,
+                // La ficha completa de anime puede aportar un IMDb externo;
+                // una tarjeta posterior no debe borrar ese id de stream.
+                streamId = video.streamId ?: old.streamId
             )
             remoteCache[video.id] = merged
         }
