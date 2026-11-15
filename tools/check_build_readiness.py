@@ -222,6 +222,18 @@ if apk_workflow.exists():
     if "/releases/download/latest/" not in text:
         warnings.append("apk.yml: el cuerpo de la release no menciona el enlace permanente")
 
+    # /releases/latest/download/OmniTV.apk sólo resuelve si alguna release está
+    # marcada como «Latest». Si la rodante no lo pide, el enlace corto acabaría
+    # apuntando a una versión antigua (o a una que ya no adjunta el archivo).
+    rolling = text.split('tag_name: latest', 1)
+    if len(rolling) > 1 and 'make_latest: true' not in rolling[1][:600]:
+        errors.append(
+            "apk.yml: la release «latest» no usa make_latest: true; "
+            "/releases/latest/download/OmniTV.apk podría apuntar a una release antigua"
+        )
+    elif len(rolling) > 1:
+        ok.append("apk.yml: la release «latest» se marca como Latest")
+
 # Enlaces de descarga en la documentación: si alguien cambia el nombre del
 # archivo, los enlaces del README y de la guía quedarían roto.
 for doc in ("README.md", "docs/COMPILAR_APK.md"):
