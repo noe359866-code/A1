@@ -24,8 +24,14 @@ Parámetros:
 
 | Parámetro | Valores | Ejemplo |
 |---|---|---|
-| `{tipo}` | `movie` \| `series` | `series` |
-| `{id}` | id del contenido (IMDb `tt…`, TMDB `tmdb:…`) y, para episodios, `id:temporada:episodio` | `tt7366338:1:2` |
+| `{tipo}` | `movie` \| `series` \| `anime` (reintento para ids nativos de anime) | `series` |
+| `{id}` | IMDb `tt…`, TMDB `tmdb:…`, Jikan `mal:…`, Kitsu `kitsu:…`; para episodios `id:temporada:episodio` | `tt7366338:1:2` |
+
+> El catálogo **Anime** usa metadatos de Jikan/Kitsu, no streams. Si un addon
+> declara `idPrefixes` con `mal:`/`kitsu:` y `types` con `series` o `anime`,
+> Omni TV le pedirá enlaces con ese id. Para ids nativos sin enlaces en
+> `series`, se reintenta una vez con `type: anime`. Ver
+> [ANIME_CATALOG.md](ANIME_CATALOG.md).
 
 ### Forma 1 — Protocolo Stremio (recomendada)
 

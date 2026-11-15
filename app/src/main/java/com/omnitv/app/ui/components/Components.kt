@@ -116,22 +116,27 @@ fun TopTabBar(
     modifier: Modifier = Modifier,
     trailing: @Composable () -> Unit = {}
 ) {
+    // Con seis pestañas, seis etiquetas de 20 sp no caben sin recortar la
+    // barra: las no seleccionadas se compactan a icono y solo la pestaña
+    // activa/enfocada despliega su nombre. El icono conserva contentDescription.
+    val compact = tabs.size > 5
     Column(modifier.fillMaxWidth()) {
         Row(
             Modifier
                 .fillMaxWidth()
                 .padding(start = 48.dp, end = 48.dp, top = 22.dp, bottom = 14.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
+            horizontalArrangement = Arrangement.spacedBy(if (compact) 6.dp else 10.dp)
         ) {
             // Marca de la app (como el logo de Netflix en su barra superior)
             Text("Omni", style = AppType.brand, color = TextPrimary)
             Text("TV", style = AppType.brand, color = Accent)
-            Spacer(Modifier.width(22.dp))
+            Spacer(Modifier.width(if (compact) 12.dp else 22.dp))
             tabs.forEach { tab ->
                 TabPill(
                     tab = tab,
                     selected = tab.route == currentRoute,
+                    compact = compact,
                     onClick = { onSelect(tab) }
                 )
             }
@@ -149,9 +154,10 @@ fun TopTabBar(
 }
 
 @Composable
-private fun TabPill(tab: TabItem, selected: Boolean, onClick: () -> Unit) {
+private fun TabPill(tab: TabItem, selected: Boolean, compact: Boolean, onClick: () -> Unit) {
     var focused by remember { mutableStateOf(false) }
     val scale by animateFloatAsState(if (focused) 1.06f else 1f, tween(150), label = "tabScale")
+    val showLabel = !compact || selected || focused
 
     val background = when {
         focused -> Color.White
@@ -162,6 +168,7 @@ private fun TabPill(tab: TabItem, selected: Boolean, onClick: () -> Unit) {
 
     Row(
         modifier = Modifier
+            .then(if (compact) Modifier.widthIn(min = 48.dp) else Modifier)
             .graphicsLayer { scaleX = scale; scaleY = scale }
             .clip(AppRadius.lg)
             .background(background)
@@ -170,17 +177,19 @@ private fun TabPill(tab: TabItem, selected: Boolean, onClick: () -> Unit) {
             .then(if (focused) Modifier.border(3.dp, Background.copy(alpha = 0.85f), AppRadius.lg) else Modifier)
             .clickable(onClick = onClick)
             .onFocusChanged { focused = it.isFocused }
-            .padding(horizontal = 22.dp, vertical = 12.dp),
+            .padding(horizontal = if (compact) 14.dp else 22.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Image(
             painter = painterResource(tab.iconRes),
-            contentDescription = null,
-            modifier = Modifier.size(22.dp),
+            contentDescription = if (showLabel) null else tab.label,
+            modifier = Modifier.size(if (compact) 20.dp else 22.dp),
             colorFilter = androidx.compose.ui.graphics.ColorFilter.tint(content)
         )
-        Spacer(Modifier.width(10.dp))
-        Text(tab.label, style = AppType.tab, color = content)
+        if (showLabel) {
+            Spacer(Modifier.width(if (compact) 8.dp else 10.dp))
+            Text(tab.label, style = AppType.tab, color = content)
+        }
     }
 }
 

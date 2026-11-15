@@ -217,14 +217,17 @@ object RemoteCatalog {
                     }
                 }
             }
+            val anime = async { AnimeCatalog.search(query) }
             val pages = builtin.awaitAll()
-            if (pages.all { it.second.status !in 200..299 }) {
+            val customResults = custom.awaitAll().flatten()
+            val animeResults = anime.await()
+            if (pages.all { it.second.status !in 200..299 } && customResults.isEmpty() && animeResults.isEmpty()) {
                 searchError.value = "No se pudo consultar el catálogo remoto. Revisa la conexión e inténtalo de nuevo."
             }
             val fromBuiltin = pages.flatMap { (name, page) ->
                 page.metas.map { StremioClient.parseVideo(it, name) }
             }
-            fromBuiltin + custom.awaitAll().flatten()
+            fromBuiltin + customResults + animeResults
         }
         return results.filter { it.id.isNotBlank() }.distinctBy { it.id }.also { list -> list.forEach { CatalogRepository.registerRemote(it) } }
     }
@@ -237,6 +240,8 @@ object RemoteCatalog {
      * El caché conserva tanto el id canónico como el id de navegación.
      */
     suspend fun fetchDetail(video: Video): Video? {
+        // Jikan/Kitsu no son addons Stremio: delegan en su cliente propio.
+        if (AnimeIds.isAnime(video.id)) return AnimeCatalog.fetchDetail(video)
         val installed = AddonRegistry.refresh()
         val types = video.remoteType?.let { listOf(it) } ?: listOf("movie", "series")
         var type = types.first()

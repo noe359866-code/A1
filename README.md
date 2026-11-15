@@ -40,6 +40,7 @@ Omni TV es una aplicación **exclusiva para Android TV / Google TV** con estánd
 | **Perfiles Netflix** | Selector con avatares ilustrados, modo infantil con PIN parental opcional, Mi Lista y Continuar viendo por perfil |
 | **Reproductor Xuper TV** | Información del título/siguiente, multi-servidor, ABR HLS, audio/subs/calidad, zoom, ±10s, temporizador de pausa |
 | **Catálogo real** | Cinemeta + Nuvio + addons del usuario + cinejoy (plataformas) + sweetfox (estudios) |
+| **Catálogo anime** | Pestaña solo anime con Jikan (MyAnimeList) y Kitsu: filas curadas, búsqueda, episodios reales, filtro por fuente y clasificación por edad ([detalle](docs/ANIME_CATALOG.md)) |
 | **Búsqueda con mando** | Teclado propio lateral (37 teclas), también para nombres de perfil; búsqueda sin distinguir acentos/mayúsculas |
 | **Vinculación segura** | Servidor :8080 + QR solo con la URL, código de 6 caracteres por `POST /unlock`, sesión con cookie `HttpOnly`/`SameSite=Strict`, regeneración de código, rate-limit, cifrado Keystore AES-GCM |
 
@@ -52,11 +53,12 @@ Omni TV es una aplicación **exclusiva para Android TV / Google TV** con estánd
 | 0 | **Perfiles** | "¿Quién está viendo?" con avatares, KIDS chip, Gestionar/Añadir |
 | 1 | **Inicio** | Héroe cinematográfico + filas dinámicas (Mi Lista, Continuar viendo, catálogo real, Solo en..., Por estudio) |
 | 2 | **Películas** | Rejilla 5 columnas del catálogo real, contador y estados vacíos profesionales |
-| 3 | **Plataformas** | 17 proveedores (Netflix, Disney+, HBO...) + 24 estudios (Marvel, Pixar, Ghibli...) con catálogos reales |
-| 4 | **Buscar** | Campo + chips de género + teclado D-pad + resultados combinados local/remoto |
-| 5 | **Detalle** | Fondo con backdrop + velos, match %, metadatos completos, episodios, reparto, Más como esto |
-| 6 | **Reproductor** | Media3 con todos los controles tvOS: EPG, servidores, calidad, audio, subtítulos, aspecto, velocidad, timer |
-| 7 | **Ajustes** | Tarjetas: Perfil, Control parental, Vinculación (QR + sesión), Reproducción, Calidad, Red (DoH), Sistema |
+| 3 | **Anime** | Filas Jikan/Kitsu, filtro Todos/Jikan/Kitsu, rejilla exclusiva de anime, episodios reales y «Cargar más» |
+| 4 | **Plataformas** | 17 proveedores (Netflix, Disney+, HBO...) + 24 estudios (Marvel, Pixar, Ghibli...) con catálogos reales |
+| 5 | **Buscar** | Campo + chips de género + teclado D-pad + resultados combinados local/remoto/anime |
+| 6 | **Detalle** | Fondo con backdrop + velos, match %, metadatos completos, episodios, reparto, Más como esto |
+| 7 | **Reproductor** | Media3 con todos los controles tvOS: EPG, servidores, calidad, audio, subtítulos, aspecto, velocidad, timer |
+| 8 | **Ajustes** | Tarjetas: Perfil, Control parental, Vinculación (QR + sesión), Reproducción, Calidad, Red (DoH), Sistema |
 
 ---
 
@@ -106,9 +108,11 @@ Basado en Media3 ExoPlayer con investigación de Xuper TV:
 | **Nuvio** `catalog.nuvio.tv` | Tendencias, Netflix/Disney+, documentales, familia (TMDB) |
 | **cinejoy.pk** | 17 plataformas con catálogo por proveedor (parser HTML tolerante) |
 | **sweetfox.app** | 24 estudios con catálogos reales (parser con filtros y orden) |
+| **Jikan** `api.jikan.moe/v4` | Anime de MyAnimeList: top, temporada actual, búsqueda, ficha completa y episodios (`mal:…`) |
+| **Kitsu** `kitsu.app/api/edge` | Anime JSON:API: tendencias, mejor valoradas, búsqueda, ficha y episodios (`kitsu:…`) |
 | **Addons usuario** | Manifests Stremio añadidos vía QR/panel web |
 
-> Todos los parsers son tolerantes: si la web cambia, la sección aparece vacía con mensaje profesional — nunca con datos falsos.
+> Todos los parsers son tolerantes: si la web cambia, la sección aparece vacía con mensaje profesional — nunca con datos falsos. La pestaña **Anime** y sus fuentes se describen en [ANIME_CATALOG.md](docs/ANIME_CATALOG.md): Jikan/Kitsu aportan metadatos, no streams.
 
 ---
 
@@ -178,6 +182,7 @@ Solución: teclado propio superpuesto:
 - **Foco:** anillo 3dp blanco siempre visible + escala 1.08 + sombra; regla: foco=blanco, seleccionado=azul
 - **Contraste:** TextMuted 6:1 para texto; TextTertiary solo para adornos
 - **Componentes unificados:** PosterCard, PillButton, TvChip, TvToggle, HeroBanner, SectionRow — un patrón, una implementación
+- **Barra de 6 pestañas:** la activa/enfocada muestra etiqueta; el resto se compacta a icono con `contentDescription`, sin recortes ni desbordamiento
 
 ---
 
@@ -192,17 +197,17 @@ A1/
 │       ├── java/com/omnitv/app/
 │       │   ├── MainActivity.kt
 │       │   ├── OmniTvApp.kt
-│       │   ├── data/          # Models, Profile, Stores, Catalog, Stremio, Remote, Cinejoy, SweetFox, NetPolicy, Doh, SecretBox, Pairing, EmbedRefiner
+│       │   ├── data/          # Models, Profile, Stores, Catalog, Stremio, Remote, Anime (Jikan/Kitsu), Cinejoy, SweetFox, NetPolicy, Doh, SecretBox, Pairing, EmbedRefiner
 │       │   ├── network/       # CronetClient + CoilCronetFetcher (instalados en MainActivity)
 │       │   ├── player/        # PlayerScreen (Media3) + PlayerUi + StreamMediaSource
 │       │   ├── plugins/       # ExtractorRegistry + extractores de embeds
 │       │   └── ui/
 │       │       ├── theme/     # Color, AppType, Theme, Dimens
 │       │       ├── components/# Cards, Hero, Pills, Keyboard, Profile tiles
-│       │       └── screens/   # Home, Movies, Search, Detail, Platforms, Settings...
+│       │       └── screens/   # Home, Movies, Anime, Search, Detail, Platforms, Settings...
 │       └── res/drawable/ + mipmap/ + values/ + xml/
 ├── gradle/libs.versions.toml
-├── docs/  STREAM-ADDON-PROTOCOL.md  XUPER-TV-RESEARCH.md
+├── docs/  ANIME_CATALOG.md  STREAM-ADDON-PROTOCOL.md  XUPER-TV-RESEARCH.md
 └── tools/  omni-stream-bridge/  nuvio-bridge/  cloudstream-bridge/  ffmpeg-bridge/
 ```
 

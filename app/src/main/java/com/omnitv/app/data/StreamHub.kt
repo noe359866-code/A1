@@ -58,7 +58,12 @@ class ProjectStreamAddon(
 
     override suspend fun resolve(video: Video): List<StreamLink> {
         val (type, videoId) = StreamHub.stremioId(video) ?: return emptyList()
-        return resolve(type, videoId)
+        val links = resolve(type, videoId)
+        if (links.isNotEmpty() || !AnimeIds.isAnime(videoId)) return links
+        // Algunos addons de anime anuncian `type: anime` en lugar de `series`.
+        // Se reintenta solo con ids nativos de Jikan/Kitsu y sin streams previos.
+        val alternate = AnimeIds.alternateType(type) ?: return links
+        return resolve(alternate, videoId)
     }
 
     suspend fun resolve(type: String, videoId: String): List<StreamLink> = withContext(Dispatchers.IO) {

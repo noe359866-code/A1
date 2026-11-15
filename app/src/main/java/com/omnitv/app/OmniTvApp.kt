@@ -38,6 +38,7 @@ import com.omnitv.app.player.PlayerScreen
 import com.omnitv.app.ui.components.ProfileBadge
 import com.omnitv.app.ui.components.TabItem
 import com.omnitv.app.ui.components.TvScaffold
+import com.omnitv.app.ui.screens.AnimeScreen
 import com.omnitv.app.ui.screens.DetailScreen
 import com.omnitv.app.ui.screens.EditProfileScreen
 import com.omnitv.app.ui.screens.HomeScreen
@@ -66,6 +67,7 @@ object Routes {
     const val EDIT_PROFILE = "editProfile/{profileId}"
     const val HOME = "home"
     const val MOVIES = "movies"
+    const val ANIME = "anime"
     const val PLATFORMS = "platforms"
     const val SEARCH = "search"
     const val SETTINGS = "settings"
@@ -90,6 +92,7 @@ object Routes {
 private val appTabs = listOf(
     TabItem("Inicio", Routes.HOME, R.drawable.ic_home),
     TabItem("Películas", Routes.MOVIES, R.drawable.ic_film),
+    TabItem("Anime", Routes.ANIME, R.drawable.ic_anime),
     TabItem("Plataformas", Routes.PLATFORMS, R.drawable.ic_platforms),
     TabItem("Buscar", Routes.SEARCH, R.drawable.ic_search),
     TabItem("Ajustes", Routes.SETTINGS, R.drawable.ic_settings)
@@ -167,6 +170,13 @@ fun OmniTvApp() {
             composable(Routes.MOVIES) {
                 TvScaffold(appTabs, currentRoute, navController::selectTab, trailing = profileBadge) {
                     MoviesScreen(
+                        onOpenDetail = { navController.navigate(Routes.detail(it.id.substringBefore('~'))) }
+                    )
+                }
+            }
+            composable(Routes.ANIME) {
+                TvScaffold(appTabs, currentRoute, navController::selectTab, trailing = profileBadge) {
+                    AnimeScreen(
                         onOpenDetail = { navController.navigate(Routes.detail(it.id.substringBefore('~'))) }
                     )
                 }
