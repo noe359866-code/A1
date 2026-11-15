@@ -93,6 +93,38 @@ jobs:
           echo "APK_OUT=$OUT" >> $GITHUB_ENV
           echo "APK_TAG=$TAG" >> $GITHUB_ENV
 
+      - name: Verificar firma del APK
+        # La firma debe ser siempre la misma (signing/CERT_SHA256.txt). Si no
+        # coincide, Android no instalaría esta versión como actualización de
+        # las anteriores, así que no se publica la release.
+        run: |
+          set -euo pipefail
+          APK=$(ls app/build/outputs/apk/release/*.apk | head -n1)
+          norm() { tr -d ': \n' | tr 'A-Z' 'a-z'; }
+          APKSIGNER=$(ls -d "$ANDROID_HOME"/build-tools/*/apksigner 2>/dev/null | sort -V | tail -n1 || true)
+          if [ -n "$APKSIGNER" ]; then
+            "$APKSIGNER" verify --print-certs "$APK" > apk-signature.txt
+            SHA=$(grep 'certificate SHA-256 digest' apk-signature.txt | head -n1 | awk '{print $NF}' | norm)
+          else
+            SHA=$(keytool -printcert -jarfile "$APK" | grep 'SHA256:' | head -n1 | sed 's/.*SHA256: *//' | norm)
+          fi
+          if [ -z "$SHA" ]; then
+            echo "::error::No se pudo leer la firma del APK"
+            exit 1
+          fi
+          if [ -f signing/CERT_SHA256.txt ]; then
+            EXPECTED=$(norm < signing/CERT_SHA256.txt)
+            if [ "$SHA" != "$EXPECTED" ]; then
+              echo "::error::La firma del APK ($SHA) no coincide con la firma publicada ($EXPECTED). Usa el keystore de producción (secretos OMNITV_KEYSTORE_*)."
+              exit 1
+            fi
+          fi
+          CERT=$(echo "$SHA" | tr 'a-z' 'A-Z' | sed 's/../&:/g; s/:$//')
+          FILE_SHA=$(sha256sum "$APK" | cut -d' ' -f1)
+          echo "CERT_SHA256=$CERT" >> "$GITHUB_ENV"
+          echo "APK_FILE_SHA256=$FILE_SHA" >> "$GITHUB_ENV"
+          echo "::notice::Firma del APK verificada: $CERT"
+
       - name: Crear Release en GitHub
         uses: softprops/action-gh-release@v2
         with:
@@ -115,4 +147,10 @@ jobs:
             - Cachés de plataforma/estudio con TTL y errores de red distinguibles en Home/Buscar
             - Panel de vinculación con rechazo de orígenes cruzados
 
-            _Firma: ${{ env.SIGNING_MODE }}. Configura los secretos `OMNITV_KEYSTORE_BASE64`, `OMNITV_KEYSTORE_PASSWORD`, `OMNITV_KEY_ALIAS` y `OMNITV_KEY_PASSWORD` para publicar con clave de producción._
+            **Firma del APK** (SHA-256 del certificado; es la misma en todas las versiones):
+            `${{ env.CERT_SHA256 }}`
+
+            **SHA-256 del archivo** `${{ env.APK_OUT }}`:
+            `${{ env.APK_FILE_SHA256 }}`
+
+            _Modo de firma: ${{ env.SIGNING_MODE }}._

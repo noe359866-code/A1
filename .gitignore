@@ -23,3 +23,12 @@ out/
 # Sistema
 .DS_Store
 __pycache__/
+
+# Firma de release: la keystore privada y sus credenciales NUNCA van a git.
+# (El certificado público y su huella sí se versionan en signing/.)
+signing/*.p12
+signing/*.jks
+signing/*.keystore
+signing/*.pem
+!signing/omnitv-release-cert.pem
+signing/SECRETS-*.txt

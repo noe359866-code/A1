@@ -228,6 +228,28 @@ A1/
 
 CI (`.github/workflows/ci.yml`): contrato TV + tests + `assembleDebug` + `assembleRelease` (firma debug de reserva) + lint en cada push/PR. Ver también `docs/ANDROID_TV_REVIEW.md`.
 
+### 🔏 Firma del APK (v1.0.0 en adelante)
+
+Todas las versiones de OmniTV se firman con **la misma clave de producción**. Android solo instala una actualización si su firma coincide con la de la versión instalada; por eso la firma no cambia entre releases.
+
+| Dato | Valor |
+|------|-------|
+| Versión | `1.0.0` (`versionCode` 4) |
+| Algoritmo | RSA 4096, SHA-256, válido hasta 2056 |
+| Alias | `omnitv` |
+| **SHA-256 del certificado** | `1D:79:6F:17:50:61:C0:12:57:CB:F5:18:5B:09:5A:FF:55:5A:FB:BE:08:F5:D2:00:A2:E6:AF:29:9B:F0:33:01` |
+
+Para comprobar la firma de un APK descargado (con `apksigner` de build-tools):
+
+```bash
+apksigner verify --print-certs OmniTV-v1.0.0.apk | grep "SHA-256 digest"
+```
+
+- El certificado público está en [`signing/omnitv-release-cert.pem`](signing/omnitv-release-cert.pem) y la huella esperada en [`signing/CERT_SHA256.txt`](signing/CERT_SHA256.txt).
+- La keystore privada (`signing/omnitv-release.p12`) **no está en git** (ignorada). Debe guardarse fuera del repositorio: si se pierde, no se pueden publicar actualizaciones que las instalaciones existentes acepten.
+- `release.yml` verifica la firma del APK antes de publicar y **falla** si no coincide con `signing/CERT_SHA256.txt`. La huella aparece también en el cuerpo de cada release.
+- Secretos necesarios en GitHub (Settings → Secrets and variables → Actions): `OMNITV_KEYSTORE_BASE64`, `OMNITV_KEYSTORE_PASSWORD`, `OMNITV_KEY_ALIAS`, `OMNITV_KEY_PASSWORD`.
+
 > **Emulador:** AVD Android TV (1080p), API 34 recomendado. App solo en launcher TV (`LEANBACK_LAUNCHER`).
 
 ---
