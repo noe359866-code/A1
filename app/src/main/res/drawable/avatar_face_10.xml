@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Avatar 10 · Azul noche / Astronauta -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="200dp"
+    android:height="200dp"
+    android:viewportWidth="200"
+    android:viewportHeight="200">
+
+    <!-- Cara (cuadrado redondeado) -->
+    <path
+        android:fillColor="#FF1E293B"
+        android:pathData="M44,10 h112 a34,34 0 0 1 34,34 v112 a34,34 0 0 1 -34,34 h-112 a34,34 0 0 1 -34,-34 v-112 a34,34 0 0 1 34,-34 z" />
+
+    <!-- Casco / Visor dorado -->
+    <path
+        android:fillColor="#FFF59E0B"
+        android:pathData="M48,56 h104 a22,22 0 0 1 22,22 v44 a22,22 0 0 1 -22,22 h-104 a22,22 0 0 1 -22,-22 v-44 a22,22 0 0 1 22,-22 z" />
+
+    <!-- Reflejo visor -->
+    <path
+        android:fillColor="#FFFFFBEB"
+        android:pathData="M62,68 h40 a8,8 0 0 1 8,8 v10 a8,8 0 0 1 -8,8 h-40 a8,8 0 0 1 -8,-8 v-10 a8,8 0 0 1 8,-8 z" />
+
+    <!-- Ojos dentro del visor -->
+    <path android:fillColor="#FF78350F" android:pathData="M80,108 m-8,0 a8,8 0 1,0 16,0 a8,8 0 1,0 -16,0" />
+    <path android:fillColor="#FF78350F" android:pathData="M120,108 m-8,0 a8,8 0 1,0 16,0 a8,8 0 1,0 -16,0" />
+</vector>

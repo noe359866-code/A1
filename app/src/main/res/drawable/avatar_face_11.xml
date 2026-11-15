@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Avatar 11 · Púrpura / Gatito -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="200dp"
+    android:height="200dp"
+    android:viewportWidth="200"
+    android:viewportHeight="200">
+
+    <!-- Cara (cuadrado redondeado) -->
+    <path
+        android:fillColor="#FF7C3AED"
+        android:pathData="M44,10 h112 a34,34 0 0 1 34,34 v112 a34,34 0 0 1 -34,34 h-112 a34,34 0 0 1 -34,-34 v-112 a34,34 0 0 1 34,-34 z" />
+
+    <!-- Orejitas -->
+    <path android:fillColor="#FF5B21B6" android:pathData="M38,28 L68,14 L62,48 Z" />
+    <path android:fillColor="#FF5B21B6" android:pathData="M162,28 L132,14 L138,48 Z" />
+    <path android:fillColor="#FFF472B6" android:pathData="M44,30 L62,20 L58,42 Z" />
+    <path android:fillColor="#FFF472B6" android:pathData="M156,30 L138,20 L142,42 Z" />
+
+    <!-- Ojos grandes y alegres -->
+    <path android:fillColor="#FFFFFFFF" android:pathData="M72,82 m-14,0 a14,14 0 1,0 28,0 a14,14 0 1,0 -28,0" />
+    <path android:fillColor="#FF181822" android:pathData="M74,82 m-9,0 a9,9 0 1,0 18,0 a9,9 0 1,0 -18,0" />
+    <path android:fillColor="#FFFFFFFF" android:pathData="M72,78 m-4,0 a4,4 0 1,0 8,0 a4,4 0 1,0 -8,0" />
+
+    <path android:fillColor="#FFFFFFFF" android:pathData="M128,82 m-14,0 a14,14 0 1,0 28,0 a14,14 0 1,0 -28,0" />
+    <path android:fillColor="#FF181822" android:pathData="M126,82 m-9,0 a9,9 0 1,0 18,0 a9,9 0 1,0 -18,0" />
+    <path android:fillColor="#FFFFFFFF" android:pathData="M124,78 m-4,0 a4,4 0 1,0 8,0 a4,4 0 1,0 -8,0" />
+
+    <!-- Naricita y boquita -->
+    <path android:fillColor="#FFF472B6" android:pathData="M100,102 L94,94 L106,94 Z" />
+    <path
+        android:pathData="M88,114 Q100,122 100,108 Q100,122 112,114"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="6"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000" />
+
+    <!-- Bigotes -->
+    <path android:pathData="M48,102 L32,98 M48,112 L30,116" android:strokeColor="#FFFFFFFF" android:strokeWidth="5" android:strokeLineCap="round" />
+    <path android:pathData="M152,102 L168,98 M152,112 L170,116" android:strokeColor="#FFFFFFFF" android:strokeWidth="5" android:strokeLineCap="round" />
+</vector>

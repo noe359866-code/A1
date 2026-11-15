@@ -6,24 +6,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 
 /**
- * Escala tipográfica de Omni TV.
+ * Escala tipográfica unificada de Omni TV para Android TV (10 pies).
  *
- * Estética Apple: pesos altos, interletraje cerrado y jerarquía muy marcada.
- * (SF Pro no se distribuye; usamos la sans-serif del sistema con métricas
- * equivalentes.)
- *
- * **Escala de 10 pies.** La app solo se usa en un televisor, a 2–3 m del sofá.
- * Un televisor de 1080p se declara normalmente como 960 × 540 dp (densidad 320),
- * así que el lienzo de diseño es pequeño y, aun así, el texto tiene que verse a
- * tres metros: el cuerpo base son 21 sp y nada baja de 15 sp. La escala anterior
- * (cuerpo de 16 sp, metadatos de 14 sp, chips de 11 sp) era de móvil: a esa
- * distancia no se lee.
- *
- * Referencias: guía de diseño de Android TV (cuerpo recomendado 18–24 sp,
- * mínimo legible 12 sp) y las recomendaciones de accesibilidad de Google TV.
+ * Estética inspirada en tvOS / Apple TV y adaptada a la distancia de salón (2–3 m):
+ * pesos definidos, interletraje cerrado y jerarquía consistente.
  */
 object AppType {
-    /** Título del héroe: 54 sp (antes 46). */
+    /** Título del héroe: 54 sp. */
     val hero = TextStyle(
         fontFamily = FontFamily.SansSerif,
         fontWeight = FontWeight.Bold,
@@ -32,7 +21,7 @@ object AppType {
         letterSpacing = (-1.0).sp
     )
 
-    /** Título de pantalla: 40 sp (antes 34). */
+    /** Título de pantalla: 40 sp. */
     val screenTitle = TextStyle(
         fontFamily = FontFamily.SansSerif,
         fontWeight = FontWeight.Bold,
@@ -41,7 +30,7 @@ object AppType {
         letterSpacing = (-0.6).sp
     )
 
-    /** Título de sección: 27 sp (antes 21). */
+    /** Título de sección y diálogos: 27 sp. */
     val sectionTitle = TextStyle(
         fontFamily = FontFamily.SansSerif,
         fontWeight = FontWeight.SemiBold,
@@ -50,7 +39,23 @@ object AppType {
         letterSpacing = (-0.25).sp
     )
 
-    /** Título dentro de una tarjeta: 18 sp (antes 15). */
+    /** Título de tarjetas en ajustes / tarjetas destacadas: 22 sp. */
+    val cardHeading = TextStyle(
+        fontFamily = FontFamily.SansSerif,
+        fontWeight = FontWeight.SemiBold,
+        fontSize = 22.sp,
+        lineHeight = 28.sp
+    )
+
+    /** Nombres de perfil: 22 sp. */
+    val profileName = TextStyle(
+        fontFamily = FontFamily.SansSerif,
+        fontWeight = FontWeight.SemiBold,
+        fontSize = 22.sp,
+        lineHeight = 28.sp
+    )
+
+    /** Título dentro de una tarjeta de póster: 18 sp. */
     val cardTitle = TextStyle(
         fontFamily = FontFamily.SansSerif,
         fontWeight = FontWeight.SemiBold,
@@ -58,7 +63,7 @@ object AppType {
         lineHeight = 23.sp
     )
 
-    /** Texto corrido: 21 sp (antes 16). Es el cuerpo base de la app. */
+    /** Texto corrido base de la app: 21 sp. */
     val body = TextStyle(
         fontFamily = FontFamily.SansSerif,
         fontWeight = FontWeight.Normal,
@@ -66,7 +71,15 @@ object AppType {
         lineHeight = 29.sp
     )
 
-    /** Metadatos (año, duración, ★, «3 resultados»): 18 sp (antes 14). */
+    /** Elementos de control y categorías en ajustes/reproductor: 19 sp. */
+    val controlLabel = TextStyle(
+        fontFamily = FontFamily.SansSerif,
+        fontWeight = FontWeight.SemiBold,
+        fontSize = 19.sp,
+        lineHeight = 24.sp
+    )
+
+    /** Metadatos (año, duración, ★, resultados): 18 sp. */
     val metadata = TextStyle(
         fontFamily = FontFamily.SansSerif,
         fontWeight = FontWeight.Medium,
@@ -74,14 +87,14 @@ object AppType {
         lineHeight = 24.sp
     )
 
-    /** Texto de botón: 21 sp (antes 16). */
+    /** Texto de botón: 21 sp. */
     val button = TextStyle(
         fontFamily = FontFamily.SansSerif,
         fontWeight = FontWeight.SemiBold,
         fontSize = 21.sp
     )
 
-    /** Pestañas de la barra superior: 20 sp (antes 15). */
+    /** Pestañas de la barra superior: 20 sp. */
     val tab = TextStyle(
         fontFamily = FontFamily.SansSerif,
         fontWeight = FontWeight.SemiBold,
@@ -89,10 +102,8 @@ object AppType {
     )
 
     /**
-     * Etiquetas en versalitas («NOMBRE», «AVATAR», «HD»): 15 sp (antes 11).
-     *
-     * Es el tamaño más pequeño de la app; con interletraje amplio las
-     * mayúsculas se leen bien a distancia.
+     * Etiquetas en versalitas («NOMBRE», «AVATAR», «HD», «KIDS»): 15 sp.
+     * Mínimo legible para TV de salón con interletraje amplio.
      */
     val chip = TextStyle(
         fontFamily = FontFamily.SansSerif,
@@ -101,14 +112,22 @@ object AppType {
         letterSpacing = 1.0.sp
     )
 
-    /** Tiempos del reproductor: 19 sp (antes 13). */
+    /** Cabeceras de menú de opciones: 16 sp versalitas. */
+    val menuHeader = TextStyle(
+        fontFamily = FontFamily.SansSerif,
+        fontWeight = FontWeight.Bold,
+        fontSize = 16.sp,
+        letterSpacing = 1.0.sp
+    )
+
+    /** Tiempos del reproductor: 19 sp. */
     val playerTime = TextStyle(
         fontFamily = FontFamily.SansSerif,
         fontWeight = FontWeight.Medium,
         fontSize = 19.sp
     )
 
-    /** Marca «Omni TV» de la barra: 26 sp (antes 22). */
+    /** Marca «Omni TV» de la barra: 26 sp. */
     val brand = TextStyle(
         fontFamily = FontFamily.SansSerif,
         fontWeight = FontWeight.ExtraBold,
@@ -116,11 +135,19 @@ object AppType {
         letterSpacing = (-0.3).sp
     )
 
-    /** Antetítulo en versalitas espaciadas: 15 sp (antes 11). */
+    /** Antetítulo en versalitas espaciadas: 15 sp. */
     val brandMark = TextStyle(
         fontFamily = FontFamily.SansSerif,
         fontWeight = FontWeight.Bold,
         fontSize = 15.sp,
         letterSpacing = 3.sp
+    )
+
+    /** Código de emparejamiento / valores monospace: 22 sp. */
+    val monospaceCode = TextStyle(
+        fontFamily = FontFamily.Monospace,
+        fontWeight = FontWeight.Bold,
+        fontSize = 22.sp,
+        letterSpacing = 1.5.sp
     )
 }

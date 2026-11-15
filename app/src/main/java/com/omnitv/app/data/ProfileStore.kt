@@ -50,12 +50,13 @@ object ProfileStore {
         prefs?.edit()?.putString(KEY_CURRENT, id)?.apply()
     }
 
-    fun add(name: String, avatarIndex: Int, isKids: Boolean) {
+    fun add(name: String, avatarIndex: Int, isKids: Boolean, autoPlayNext: Boolean = true) {
         profiles = profiles + Profile(
             id = UUID.randomUUID().toString(),
             name = name.ifBlank { "Perfil" },
             avatarIndex = avatarIndex,
-            isKids = isKids
+            isKids = isKids,
+            autoPlayNext = autoPlayNext
         )
         persist()
     }
@@ -89,12 +90,24 @@ object ProfileStore {
         update(current.copy(progress = progress))
     }
 
+    /** Borra todo el progreso de reproducción ("Continuar viendo") de un perfil. */
+    fun clearProgress(profileId: String) {
+        val target = profiles.firstOrNull { it.id == profileId } ?: return
+        update(target.copy(progress = emptyMap()))
+    }
+
     /** Añade o quita un título de "Mi lista" del perfil actual. */
     fun toggleMyList(videoId: String) {
         val current = currentProfile ?: return
         val list = current.myList.toMutableSet()
         if (!list.add(videoId)) list.remove(videoId)
         update(current.copy(myList = list))
+    }
+
+    /** Vacía completamente "Mi lista" de un perfil. */
+    fun clearMyList(profileId: String) {
+        val target = profiles.firstOrNull { it.id == profileId } ?: return
+        update(target.copy(myList = emptySet()))
     }
 
     /* ------------------------------------------------------------------ */
@@ -120,6 +133,7 @@ object ProfileStore {
                     .put("name", profile.name)
                     .put("avatarIndex", profile.avatarIndex)
                     .put("isKids", profile.isKids)
+                    .put("autoPlayNext", profile.autoPlayNext)
                     .put("progress", progress)
                     .put("myList", JSONArray(profile.myList.toList()))
             )
@@ -147,6 +161,7 @@ object ProfileStore {
                         name = obj.getString("name"),
                         avatarIndex = obj.optInt("avatarIndex", 0),
                         isKids = obj.optBoolean("isKids", false),
+                        autoPlayNext = obj.optBoolean("autoPlayNext", true),
                         progress = progress,
                         myList = myList
                     )

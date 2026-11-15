@@ -1,17 +1,14 @@
 package com.omnitv.app.ui.theme
 
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Shapes
+import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 
 /**
- * Tema de Omni TV: modo oscuro con el acento azul de Apple.
- *
- * Usa el `MaterialTheme` de Compose Material 3 (versión del BOM): la app no
- * usa ningún componente con foco de TV Material, así que no hace falta
- * `androidx.tv:tv-material` (Material 2), que además no expone `Text` ni
- * `MaterialTheme` en la versión del catálogo.
+ * Tema de Omni TV: modo oscuro inspirado en tvOS y diseñado para Android TV (10 pies).
  */
 @Composable
 fun OmniTvTheme(content: @Composable () -> Unit) {
@@ -22,7 +19,28 @@ fun OmniTvTheme(content: @Composable () -> Unit) {
             background = Background,
             onBackground = TextPrimary,
             surface = Surface,
-            onSurface = TextPrimary
+            onSurface = TextPrimary,
+            surfaceVariant = SurfaceElevated,
+            onSurfaceVariant = TextSecondary
+        ),
+        typography = Typography(
+            displayLarge = AppType.hero,
+            headlineLarge = AppType.screenTitle,
+            headlineMedium = AppType.sectionTitle,
+            titleLarge = AppType.cardHeading,
+            titleMedium = AppType.cardTitle,
+            bodyLarge = AppType.body,
+            bodyMedium = AppType.metadata,
+            labelLarge = AppType.button,
+            labelMedium = AppType.chip,
+            labelSmall = AppType.chip
+        ),
+        shapes = Shapes(
+            extraSmall = AppRadius.xs,
+            small = AppRadius.sm,
+            medium = AppRadius.md,
+            large = AppRadius.lg,
+            extraLarge = AppRadius.pill
         ),
         content = content
     )

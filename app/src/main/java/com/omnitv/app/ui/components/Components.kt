@@ -3,13 +3,15 @@
 package com.omnitv.app.ui.components
 
 import androidx.compose.animation.core.LinearEasing
-import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -32,6 +34,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -44,30 +47,32 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.focus.focusRestorer
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.Canvas
-import androidx.compose.material.Text
 import coil.compose.AsyncImage
 import com.omnitv.app.R
 import com.omnitv.app.data.MediaRow
 import com.omnitv.app.data.Video
+import com.omnitv.app.ui.theme.Accent
 import com.omnitv.app.ui.theme.AppRadius
 import com.omnitv.app.ui.theme.AppSpacing
+import com.omnitv.app.ui.theme.AppStroke
 import com.omnitv.app.ui.theme.AppType
 import com.omnitv.app.ui.theme.Background
+import com.omnitv.app.ui.theme.Danger
 import com.omnitv.app.ui.theme.GlassFill
 import com.omnitv.app.ui.theme.GlassFillStrong
 import com.omnitv.app.ui.theme.OnLight
@@ -77,8 +82,6 @@ import com.omnitv.app.ui.theme.SurfaceElevated
 import com.omnitv.app.ui.theme.TextPrimary
 import com.omnitv.app.ui.theme.TextSecondary
 import com.omnitv.app.ui.theme.TextTertiary
-import com.omnitv.app.ui.theme.Accent
-import com.omnitv.app.ui.theme.Danger
 import java.util.Locale
 
 /* -------------------------------------------------------------------------- */
@@ -116,19 +119,16 @@ fun TopTabBar(
     modifier: Modifier = Modifier,
     trailing: @Composable () -> Unit = {}
 ) {
-    // Con seis pestañas, seis etiquetas de 20 sp no caben sin recortar la
-    // barra: las no seleccionadas se compactan a icono y solo la pestaña
-    // activa/enfocada despliega su nombre. El icono conserva contentDescription.
     val compact = tabs.size > 5
     Column(modifier.fillMaxWidth()) {
         Row(
             Modifier
                 .fillMaxWidth()
-                .padding(start = 48.dp, end = 48.dp, top = 22.dp, bottom = 14.dp),
+                .padding(start = AppSpacing.screenMargin, end = AppSpacing.screenMargin, top = 32.dp, bottom = 14.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(if (compact) 6.dp else 10.dp)
         ) {
-            // Marca de la app (como el logo de Netflix en su barra superior)
+            // Marca de la app
             Text("Omni", style = AppType.brand, color = TextPrimary)
             Text("TV", style = AppType.brand, color = Accent)
             Spacer(Modifier.width(if (compact) 12.dp else 22.dp))
@@ -148,7 +148,7 @@ fun TopTabBar(
             Modifier
                 .fillMaxWidth()
                 .height(2.dp)
-                .background(Color.White.copy(alpha = 0.10f))
+                .background(Color.White.copy(alpha = 0.08f))
         )
     }
 }
@@ -172,9 +172,10 @@ private fun TabPill(tab: TabItem, selected: Boolean, compact: Boolean, onClick: 
             .graphicsLayer { scaleX = scale; scaleY = scale }
             .clip(AppRadius.lg)
             .background(background)
-            // La pestaña enfocada se pinta de blanco: el anillo tiene que ser
-            // oscuro o se funde con el relleno.
-            .then(if (focused) Modifier.border(3.dp, Background.copy(alpha = 0.85f), AppRadius.lg) else Modifier)
+            .then(
+                if (focused) Modifier.border(AppStroke.focus, Background.copy(alpha = 0.85f), AppRadius.lg)
+                else Modifier
+            )
             .clickable(onClick = onClick)
             .onFocusChanged { focused = it.isFocused }
             .padding(horizontal = if (compact) 14.dp else 22.dp, vertical = 12.dp),
@@ -184,7 +185,7 @@ private fun TabPill(tab: TabItem, selected: Boolean, compact: Boolean, onClick: 
             painter = painterResource(tab.iconRes),
             contentDescription = if (showLabel) null else tab.label,
             modifier = Modifier.size(if (compact) 20.dp else 22.dp),
-            colorFilter = androidx.compose.ui.graphics.ColorFilter.tint(content)
+            colorFilter = ColorFilter.tint(content)
         )
         if (showLabel) {
             Spacer(Modifier.width(if (compact) 8.dp else 10.dp))
@@ -246,9 +247,6 @@ fun PillButton(
         primary -> OnLight
         else -> TextPrimary
     }
-    // Solo el primario tiene relleno claro (blanco, o blanco puro al enfocar):
-    // ahí un anillo blanco no se vería y va oscuro. El resto son rellenos
-    // oscuros (vidrio o rojo), donde el anillo blanco es el que contrasta.
     val ringColor = if (primary) Background.copy(alpha = 0.85f) else Color.White
 
     Row(
@@ -258,7 +256,7 @@ fun PillButton(
             .clip(AppRadius.pill)
             .background(background)
             .then(
-                if (focused) Modifier.border(3.dp, ringColor, AppRadius.pill) else Modifier
+                if (focused) Modifier.border(AppStroke.focus, ringColor, AppRadius.pill) else Modifier
             )
             .clickable(onClick = onClick)
             .onFocusChanged { focused = it.isFocused }
@@ -269,8 +267,8 @@ fun PillButton(
             Image(
                 painter = painterResource(iconRes),
                 contentDescription = null,
-                modifier = Modifier.size(19.dp),
-                colorFilter = androidx.compose.ui.graphics.ColorFilter.tint(contentColor)
+                modifier = Modifier.size(20.dp),
+                colorFilter = ColorFilter.tint(contentColor)
             )
             Spacer(Modifier.width(10.dp))
         }
@@ -293,7 +291,7 @@ fun CircleIconButton(
     modifier: Modifier = Modifier
 ) {
     var focused by remember { mutableStateOf(false) }
-    val scale by animateFloatAsState(if (focused) 1.1f else 1f, tween(150), label = "circleScale")
+    val scale by animateFloatAsState(if (focused) 1.10f else 1f, tween(150), label = "circleScale")
 
     Box(
         modifier = modifier
@@ -301,10 +299,8 @@ fun CircleIconButton(
             .graphicsLayer { scaleX = scale; scaleY = scale }
             .clip(CircleShape)
             .background(if (focused) Color.White else background)
-            // El botón enfocado es blanco, así que un anillo blanco sería
-            // invisible: el foco se marca con un halo **oscuro** por fuera.
             .then(
-                if (focused) Modifier.border(3.dp, Background.copy(alpha = 0.85f), CircleShape)
+                if (focused) Modifier.border(AppStroke.focus, Background.copy(alpha = 0.85f), CircleShape)
                 else Modifier
             )
             .clickable(onClick = onClick)
@@ -315,7 +311,7 @@ fun CircleIconButton(
             painter = painterResource(iconRes),
             contentDescription = contentDescription,
             modifier = Modifier.size(size * 0.42f),
-            colorFilter = androidx.compose.ui.graphics.ColorFilter.tint(if (focused) Background else iconTint)
+            colorFilter = ColorFilter.tint(if (focused) Background else iconTint)
         )
     }
 }
@@ -329,7 +325,6 @@ fun Badge(text: String, modifier: Modifier = Modifier) {
     Box(
         modifier = modifier
             .clip(AppRadius.xs)
-            // Relleno vertical 6 dp: con 4 la versalita de 15 sp toca los bordes
             .background(Accent)
             .padding(horizontal = 10.dp, vertical = 6.dp)
     ) {
@@ -340,8 +335,6 @@ fun Badge(text: String, modifier: Modifier = Modifier) {
 @Composable
 fun MetaLine(video: Video, modifier: Modifier = Modifier) {
     Row(modifier, verticalAlignment = Alignment.CenterVertically) {
-        // Solo datos que existen: un título remoto puede llegar sin año,
-        // duración, valoración o clasificación, y no se rellenan con ceros
         val parts = listOfNotNull(
             video.year.takeIf { it > 0 }?.toString(),
             video.durationLabel.takeIf { video.durationMinutes > 0 },
@@ -365,7 +358,7 @@ fun MetaLine(video: Video, modifier: Modifier = Modifier) {
 }
 
 /* -------------------------------------------------------------------------- */
-/*  Tarjeta de póster (con foco: escala 1.08 como en tvOS)                    */
+/*  Tarjeta de póster (con foco: escala 1.08 + sombra como en tvOS)           */
 /* -------------------------------------------------------------------------- */
 
 @Composable
@@ -374,14 +367,10 @@ fun PosterCard(
     onClick: () -> Unit,
     modifier: Modifier = Modifier.size(260.dp, 150.dp)
 ) {
-    // Tarjeta con foco propio: escala 1.08, borde blanco y **sombra** (como
-    // tvOS). La sombra es lo que separa la tarjeta enfocada del fondo oscuro:
-    // solo con borde, en un televisor con poco contraste se pierde el relieve.
-    // (tv-material es Material 2 y su Card no existe en esta versión; así no
-    // dependemos de la API experimental Card de Material 3 para TV.)
     var focused by remember { mutableStateOf(false) }
     val scale by animateFloatAsState(if (focused) 1.08f else 1f, label = "cardScale")
     val elevation by animateDpAsState(if (focused) 18.dp else 0.dp, label = "cardElevation")
+
     Box(
         modifier
             .graphicsLayer {
@@ -392,7 +381,7 @@ fun PosterCard(
             .clip(AppRadius.md)
             .background(Surface)
             .border(
-                width = if (focused) 3.dp else 1.dp,
+                width = if (focused) AppStroke.focus else 1.dp,
                 color = if (focused) Color.White else Color.White.copy(alpha = 0.08f),
                 shape = AppRadius.md
             )
@@ -416,7 +405,7 @@ fun PosterCard(
                 .background(
                     Brush.verticalGradient(
                         0.5f to Color.Transparent,
-                        1f to Color.Black.copy(alpha = 0.72f)
+                        1f to Color.Black.copy(alpha = 0.75f)
                     )
                 )
         )
@@ -482,9 +471,6 @@ fun SectionRow(row: MediaRow, onOpenDetail: (Video) -> Unit, modifier: Modifier 
             horizontalArrangement = Arrangement.spacedBy(20.dp),
             modifier = Modifier
                 .fillMaxWidth()
-                // `focusRestorer` devuelve el foco a la última tarjeta visitada
-                // al volver a la fila; el desplazamiento al elemento enfocado
-                // ya lo hace LazyRow por su cuenta.
                 .focusRestorer()
         ) {
             items(row.items, key = { it.id }) { video ->
@@ -506,8 +492,6 @@ fun HeroBanner(
     modifier: Modifier = Modifier,
     playFocusRequester: FocusRequester? = null
 ) {
-    // Alto proporcional (60 % de la pantalla, hasta 470 dp): en un lienzo de
-    // 960×540 dp, 470 dp fijos se comen casi todo el primer pantallazo.
     val heroHeight = (LocalConfiguration.current.screenHeightDp * 0.60f).dp.coerceAtMost(470.dp)
     Box(modifier.fillMaxWidth().height(heroHeight)) {
         AsyncImage(
@@ -516,7 +500,7 @@ fun HeroBanner(
             contentScale = ContentScale.Crop,
             modifier = Modifier.fillMaxSize()
         )
-        // Velo superior: funde la imagen con la barra de pestañas
+        // Velo superior
         Box(
             Modifier
                 .fillMaxSize()
@@ -527,7 +511,7 @@ fun HeroBanner(
                     )
                 )
         )
-        // Velo vertical: la imagen se funde con el fondo hacia abajo
+        // Velo vertical
         Box(
             Modifier
                 .fillMaxSize()
@@ -539,7 +523,7 @@ fun HeroBanner(
                     )
                 )
         )
-        // Velo horizontal: legibilidad del texto a la izquierda
+        // Velo horizontal
         Box(
             Modifier
                 .fillMaxSize()
@@ -554,7 +538,7 @@ fun HeroBanner(
         Column(
             Modifier
                 .align(Alignment.BottomStart)
-                .padding(start = 48.dp, bottom = 44.dp)
+                .padding(start = AppSpacing.screenMargin, bottom = 44.dp)
                 .widthIn(max = 640.dp)
         ) {
             video.badge?.let { Badge(it) }
@@ -609,11 +593,9 @@ fun TvToggle(checked: Boolean, onCheckedChange: (Boolean) -> Unit, modifier: Mod
             .width(72.dp)
             .height(40.dp)
             .clip(AppRadius.lg)
-            // Apagado no es «invisible»: el usuario tiene que ver que existe un
-            // interruptor aunque esté en off.
             .background(if (checked) Accent else Color.White.copy(alpha = 0.22f))
             .then(
-                if (focused) Modifier.border(3.dp, Color.White, AppRadius.lg)
+                if (focused) Modifier.border(AppStroke.focus, Color.White, AppRadius.lg)
                 else Modifier
             )
             .clickable { onCheckedChange(!checked) }
@@ -639,14 +621,10 @@ fun SeekBar(positionMs: Long, durationMs: Long, bufferedMs: Long, modifier: Modi
     val fraction = if (durationMs > 0) (positionMs.toFloat() / durationMs).coerceIn(0f, 1f) else 0f
     val bufferedFraction = if (durationMs > 0) (bufferedMs.toFloat() / durationMs).coerceIn(0f, 1f) else 0f
 
-    // Cápsula (no `xs`): con 8 dp de alto, un radio de 4 dp se ve como un
-    // rectángulo. El tirador marca el punto exacto de reproducción; sin él,
-    // a 3 m la barra solo indica «por aquí vas» de forma aproximada.
     BoxWithConstraints(
         modifier.height(34.dp),
         contentAlignment = Alignment.CenterStart
     ) {
-        // Se mide una sola vez y sirve para las tres capas y el tirador.
         val trackWidth = maxWidth
 
         Box(
@@ -670,7 +648,6 @@ fun SeekBar(positionMs: Long, durationMs: Long, bufferedMs: Long, modifier: Modi
                 .clip(AppRadius.pill)
                 .background(Color.White)
         )
-        // Tirador: círculo de 20 dp centrado en el extremo de lo reproducido.
         Box(
             Modifier
                 .offset(x = ((trackWidth - 20.dp) * fraction).coerceAtLeast(0.dp))
@@ -681,6 +658,7 @@ fun SeekBar(positionMs: Long, durationMs: Long, bufferedMs: Long, modifier: Modi
     }
 }
 
+/* -------------------------------------------------------------------------- */
 /*  Spinner de carga                                                          */
 /* -------------------------------------------------------------------------- */
 
@@ -716,15 +694,13 @@ fun SettingRow(
     modifier: Modifier = Modifier,
     onClick: (() -> Unit)? = null
 ) {
-    // `hasFocus` (no `isFocused`): la fila se ilumina también cuando el foco
-    // está en el interruptor de dentro, que es lo habitual en un televisor.
     var highlighted by remember { mutableStateOf(false) }
     Row(
         modifier = modifier
             .fillMaxWidth()
             .clip(AppRadius.md)
             .background(if (highlighted) SurfaceElevated else Color.Transparent)
-            .then(if (highlighted) Modifier.border(3.dp, Color.White.copy(alpha = 0.35f), AppRadius.md) else Modifier)
+            .then(if (highlighted) Modifier.border(AppStroke.focus, Color.White.copy(alpha = 0.35f), AppRadius.md) else Modifier)
             .onFocusChanged { highlighted = it.hasFocus }
             .then(
                 if (onClick != null) {
@@ -734,9 +710,6 @@ fun SettingRow(
                         onClick = onClick
                     )
                 } else {
-                    // Sin acción propia: la fila NO es un foco más. Si lo fuera,
-                    // el usuario caería en ella, pulsaría OK y no pasaría nada;
-                    // el foco útil es el interruptor de `trailing`.
                     Modifier
                 }
             )
@@ -756,41 +729,35 @@ fun SettingRow(
 }
 
 /* -------------------------------------------------------------------------- */
-/*  Chip de filtro (uno solo para toda la app)                                */
+/*  Chip de filtro / selección                                                */
 /* -------------------------------------------------------------------------- */
 
-/**
- * Chip de selección/atajo: sugerencias de búsqueda, filtros de plataforma,
- * filtros de estudio y temporadas.
- *
- * Estaba duplicado en cuatro pantallas con tres combinaciones de relleno
- * (18/9, 22/12, 16/9) y dos de color, así que el mismo tipo de control se veía
- * distinto según dónde apareciera. Aquí hay uno solo: 22/12 dp de relleno,
- * cápsula exacta, anillo de foco de 3 dp y tres estados (reposo, seleccionado,
- * enfocado).
- */
 @Composable
 fun TvChip(
     text: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     selected: Boolean = false,
-    style: androidx.compose.ui.text.TextStyle = AppType.body
+    style: TextStyle = AppType.body
 ) {
     var focused by remember { mutableStateOf(false) }
     val background = when {
-        focused -> Accent
+        focused -> Color.White
         selected -> GlassFillStrong
         else -> GlassFill
     }
-    // Sobre el azul del foco el anillo oscuro contrasta más que el blanco.
+    val contentColor = when {
+        focused -> Background
+        selected -> TextPrimary
+        else -> TextSecondary
+    }
     val ring = if (focused) Background.copy(alpha = 0.85f) else Color.Transparent
 
     Box(
         modifier = modifier
             .clip(AppRadius.pill)
             .background(background)
-            .then(if (focused) Modifier.border(3.dp, ring, AppRadius.pill) else Modifier)
+            .then(if (focused) Modifier.border(AppStroke.focus, ring, AppRadius.pill) else Modifier)
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
@@ -802,7 +769,7 @@ fun TvChip(
         Text(
             text,
             style = style,
-            color = if (focused || selected) TextPrimary else TextSecondary
+            color = contentColor
         )
     }
 }

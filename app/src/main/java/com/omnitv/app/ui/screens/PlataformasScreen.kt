@@ -150,7 +150,7 @@ private fun ProviderTile(provider: StreamingProvider, onClick: () -> Unit) {
             .clip(AppRadius.md)
             .background(if (focused) GlassFill.copy(alpha = 0.9f) else GlassFill)
             .then(
-                if (focused) Modifier.border(3.dp, Accent, AppRadius.md)
+                if (focused) Modifier.border(AppStroke.focus, androidx.compose.ui.graphics.Color.White, AppRadius.md)
                 else Modifier.border(1.dp, androidx.compose.ui.graphics.Color.White.copy(alpha = 0.08f), AppRadius.md)
             )
             .clickable(
@@ -289,7 +289,7 @@ fun PlatformCatalogScreen(
                     columns = GridCells.Fixed(5),
                     contentPadding = PaddingValues(bottom = 56.dp),
                     horizontalArrangement = Arrangement.spacedBy(20.dp),
-                    verticalArrangement = Arrangement.spacedBy(24.dp)
+                    verticalArrangement = Arrangement.spacedBy(32.dp)
                 ) {
                     items(filtered, key = { it.id }) { video ->
                         PosterCard(

@@ -35,6 +35,7 @@ import com.omnitv.app.R
 import com.omnitv.app.data.AVATAR_COUNT
 import com.omnitv.app.data.ProfileStore
 import com.omnitv.app.data.TvKeypad
+import com.omnitv.app.data.avatarLabel
 import com.omnitv.app.data.avatarRes
 import com.omnitv.app.ui.components.AvatarOption
 import com.omnitv.app.ui.components.AvatarView
@@ -42,6 +43,7 @@ import com.omnitv.app.ui.components.KidsChip
 import com.omnitv.app.ui.components.PillButton
 import com.omnitv.app.ui.components.RequestTvFocus
 import com.omnitv.app.ui.components.SettingRow
+import com.omnitv.app.ui.components.TvConfirmDialog
 import com.omnitv.app.ui.components.TvKeyboard
 import com.omnitv.app.ui.components.TvTextField
 import com.omnitv.app.ui.components.TvToggle
@@ -50,7 +52,7 @@ import com.omnitv.app.ui.theme.Background
 import com.omnitv.app.ui.theme.TextPrimary
 import com.omnitv.app.ui.theme.TextSecondary
 
-/** Editor de perfiles operable íntegramente con el D-pad, sin IME del sistema. */
+/** Editor de perfiles optimizado para Android TV y D-pad. */
 @Composable
 fun EditProfileScreen(
     profileId: String,
@@ -62,7 +64,12 @@ fun EditProfileScreen(
     var name by rememberSaveable { mutableStateOf(existing?.name ?: "") }
     var avatarIndex by rememberSaveable { mutableStateOf(existing?.avatarIndex ?: 0) }
     var isKids by rememberSaveable { mutableStateOf(existing?.isKids ?: false) }
+    var autoPlayNext by rememberSaveable { mutableStateOf(existing?.autoPlayNext ?: true) }
     val canDelete = !isNew && existing != null && ProfileStore.profiles.size > 1
+
+    var confirmDeleteOpen by remember { mutableStateOf(false) }
+    var confirmClearHistoryOpen by remember { mutableStateOf(false) }
+    var confirmClearMyListOpen by remember { mutableStateOf(false) }
 
     val nameFocus = remember { FocusRequester() }
     val firstKeyFocus = remember { FocusRequester() }
@@ -83,36 +90,46 @@ fun EditProfileScreen(
     }
     BackHandler(enabled = keyboardOpen) { closeKeyboard() }
 
-    // El teclado ocupa su propia columna. El formulario se desplaza con el
-    // foco y nunca queda debajo de las teclas (también en el editor de perfil).
     val keyboardWidth = 496.dp
     Box(Modifier.fillMaxSize().background(Background)) {
         Column(
             Modifier
                 .fillMaxHeight()
-                .width(if (keyboardOpen) 368.dp else 688.dp)
+                .width(if (keyboardOpen) 400.dp else 740.dp)
                 .align(Alignment.TopStart)
                 .padding(start = 48.dp)
                 .verticalScroll(rememberScrollState())
                 .padding(vertical = 32.dp)
         ) {
+            // Cabecera con avatar grande y estado
             Row(verticalAlignment = Alignment.CenterVertically) {
-                AvatarView(avatarIndex = avatarIndex, size = 72.dp)
-                Spacer(Modifier.width(18.dp))
+                AvatarView(avatarIndex = avatarIndex, size = 80.dp)
+                Spacer(Modifier.width(20.dp))
                 Column {
-                    Text(if (isNew) "Perfil nuevo" else "Editar perfil", style = AppType.sectionTitle, color = TextPrimary)
-                    if (isKids) {
-                        Spacer(Modifier.height(6.dp))
-                        KidsChip()
+                    Text(
+                        if (isNew) "Crear perfil" else "Editar perfil",
+                        style = AppType.hero,
+                        color = TextPrimary
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(avatarLabel(avatarIndex), style = AppType.metadata, color = TextSecondary)
+                        if (isKids) KidsChip()
                     }
                 }
             }
-            Spacer(Modifier.height(24.dp))
-            Text("NOMBRE", style = AppType.chip, color = TextSecondary)
+
+            Spacer(Modifier.height(28.dp))
+
+            // Nombre del perfil
+            Text("NOMBRE DEL PERFIL", style = AppType.chip, color = TextSecondary)
             Spacer(Modifier.height(10.dp))
             TvTextField(
                 value = name,
-                onValueChange = { name = it.take(64) },
+                onValueChange = { name = it.take(32) },
                 placeholder = "Nombre del perfil",
                 focusRequester = nameFocus,
                 imeOnCenter = false,
@@ -123,11 +140,14 @@ fun EditProfileScreen(
                 },
                 modifier = Modifier.fillMaxWidth()
             )
-            Spacer(Modifier.height(24.dp))
-            Text("AVATAR · desliza con las flechas", style = AppType.chip, color = TextSecondary)
+
+            Spacer(Modifier.height(28.dp))
+
+            // Selector de avatar
+            Text("AVATAR · Navega con las flechas", style = AppType.chip, color = TextSecondary)
             Spacer(Modifier.height(12.dp))
             LazyRow(
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                horizontalArrangement = Arrangement.spacedBy(14.dp),
                 contentPadding = PaddingValues(horizontal = 4.dp, vertical = 6.dp),
                 modifier = Modifier.fillMaxWidth()
             ) {
@@ -135,59 +155,166 @@ fun EditProfileScreen(
                     AvatarOption(
                         resId = avatarRes(index),
                         selected = index == avatarIndex,
+                        label = avatarLabel(index),
                         onClick = { avatarIndex = index }
                     )
                 }
             }
-            Spacer(Modifier.height(20.dp))
+
+            Spacer(Modifier.height(28.dp))
+
+            // Ajustes del perfil
+            Text("PREFERENCIAS DEL PERFIL", style = AppType.chip, color = TextSecondary)
+            Spacer(Modifier.height(12.dp))
+
             SettingRow(
                 title = "Perfil infantil",
-                subtitle = "Catálogo local TP/7+ · sin PIN",
+                subtitle = "Filtra el catálogo a contenido para toda la familia",
                 trailing = { TvToggle(isKids, onCheckedChange = { isKids = it }) },
                 modifier = Modifier.fillMaxWidth()
             )
-            Spacer(Modifier.height(24.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+
+            SettingRow(
+                title = "Reproducción automática",
+                subtitle = "Inicia el siguiente episodio al terminar el actual",
+                trailing = { TvToggle(autoPlayNext, onCheckedChange = { autoPlayNext = it }) },
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            if (!isNew && existing != null) {
+                if (existing.progress.isNotEmpty()) {
+                    SettingRow(
+                        title = "Continuar viendo (${existing.progress.size} títulos)",
+                        subtitle = "Borra el progreso guardado de reproducción",
+                        trailing = {
+                            PillButton(
+                                text = "Limpiar",
+                                primary = false,
+                                onClick = { confirmClearHistoryOpen = true }
+                            )
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+
+                if (existing.myList.isNotEmpty()) {
+                    SettingRow(
+                        title = "Mi lista (${existing.myList.size} títulos)",
+                        subtitle = "Vacía todos los títulos guardados como favoritos",
+                        trailing = {
+                            PillButton(
+                                text = "Vaciar",
+                                primary = false,
+                                onClick = { confirmClearMyListOpen = true }
+                            )
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(32.dp))
+
+            // Botones de acción
+            Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
                 PillButton(
-                    text = "Guardar",
+                    text = "Guardar perfil",
                     iconRes = R.drawable.ic_check,
+                    primary = true,
                     onClick = {
-                        if (isNew) ProfileStore.add(name, avatarIndex, isKids)
-                        else if (existing != null) {
-                            ProfileStore.update(existing.copy(
-                                name = name.ifBlank { existing.name },
-                                avatarIndex = avatarIndex,
-                                isKids = isKids
-                            ))
+                        val finalName = name.ifBlank { if (isNew) "Perfil ${ProfileStore.profiles.size + 1}" else existing?.name ?: "Perfil" }
+                        if (isNew) {
+                            ProfileStore.add(finalName, avatarIndex, isKids, autoPlayNext)
+                        } else if (existing != null) {
+                            ProfileStore.update(
+                                existing.copy(
+                                    name = finalName,
+                                    avatarIndex = avatarIndex,
+                                    isKids = isKids,
+                                    autoPlayNext = autoPlayNext
+                                )
+                            )
                         }
                         onSaved()
                     }
                 )
-                val deletable = existing?.takeIf { canDelete }
-                if (deletable != null) {
+
+                if (canDelete && existing != null) {
                     PillButton(
                         text = "Eliminar",
+                        iconRes = R.drawable.ic_delete,
                         primary = false,
                         danger = true,
-                        onClick = {
-                            ProfileStore.delete(deletable.id)
-                            onDeleted()
-                        }
+                        onClick = { confirmDeleteOpen = true }
                     )
                 }
             }
+
+            Spacer(Modifier.height(48.dp))
         }
+
+        // Teclado lateral para D-pad
         if (keyboardOpen) {
             Box(
-                Modifier.width(keyboardWidth).align(Alignment.CenterEnd).padding(end = 48.dp)
+                Modifier
+                    .width(keyboardWidth)
+                    .align(Alignment.CenterEnd)
+                    .padding(end = 48.dp)
             ) {
                 TvKeyboard(
                     compact = true,
-                    onKey = { key -> name = TvKeypad.apply(name, key) },
+                    onKey = { key -> name = TvKeypad.apply(name, key).take(32) },
                     onDone = { closeKeyboard() },
                     firstKeyFocus = firstKeyFocus
                 )
             }
+        }
+
+        // Diálogos de confirmación
+        if (confirmDeleteOpen && existing != null) {
+            TvConfirmDialog(
+                title = "¿Eliminar perfil?",
+                message = "Se borrará permanentemente el perfil \"${existing.name}\", su lista personal y su progreso de reproducción.",
+                confirmText = "Eliminar",
+                cancelText = "Cancelar",
+                isDanger = true,
+                onConfirm = {
+                    confirmDeleteOpen = false
+                    ProfileStore.delete(existing.id)
+                    onDeleted()
+                },
+                onDismiss = { confirmDeleteOpen = false }
+            )
+        }
+
+        if (confirmClearHistoryOpen && existing != null) {
+            TvConfirmDialog(
+                title = "¿Limpiar 'Continuar viendo'?",
+                message = "Se restablecerá el progreso de reproducción de todos los títulos para \"${existing.name}\".",
+                confirmText = "Limpiar",
+                cancelText = "Cancelar",
+                isDanger = false,
+                onConfirm = {
+                    confirmClearHistoryOpen = false
+                    ProfileStore.clearProgress(existing.id)
+                },
+                onDismiss = { confirmClearHistoryOpen = false }
+            )
+        }
+
+        if (confirmClearMyListOpen && existing != null) {
+            TvConfirmDialog(
+                title = "¿Vaciar 'Mi lista'?",
+                message = "Se eliminarán todos los títulos guardados en la lista de \"${existing.name}\".",
+                confirmText = "Vaciar",
+                cancelText = "Cancelar",
+                isDanger = false,
+                onConfirm = {
+                    confirmClearMyListOpen = false
+                    ProfileStore.clearMyList(existing.id)
+                },
+                onDismiss = { confirmClearMyListOpen = false }
+            )
         }
     }
 }
