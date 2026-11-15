@@ -80,17 +80,22 @@ jobs:
           path: build-release.log
           if-no-files-found: ignore
 
-      - name: Renombrar APK
+      - name: Renombrar APK (nombre fijo + copia versionada)
         run: |
           APK=$(ls app/build/outputs/apk/release/*.apk | head -n1)
           VERSION=$(grep 'versionName' app/build.gradle.kts | sed -E 's/.*"([^"]+)".*/\1/')
           TAG="${{ github.ref_name }}"
           if [ -z "$TAG" ] || [ "$TAG" = "" ]; then TAG="v${VERSION}"; fi
           if [ -n "${{ inputs.tag }}" ]; then TAG="${{ inputs.tag }}"; fi
-          OUT="OmniTV-${TAG}.apk"
+          # Nombre fijo: permite el enlace permanente
+          # /releases/latest/download/OmniTV.apk (descarga directa, sin ZIP).
+          OUT="OmniTV.apk"
+          ARCHIVED="OmniTV-${TAG}.apk"
           cp "$APK" "$OUT"
-          ls -lh "$OUT" "$APK"
+          cp "$APK" "$ARCHIVED"
+          ls -lh "$OUT" "$ARCHIVED" "$APK"
           echo "APK_OUT=$OUT" >> $GITHUB_ENV
+          echo "APK_ARCHIVED=$ARCHIVED" >> $GITHUB_ENV
           echo "APK_TAG=$TAG" >> $GITHUB_ENV
 
       - name: Crear Release en GitHub
@@ -99,13 +104,24 @@ jobs:
           tag_name: ${{ env.APK_TAG }}
           name: OmniTV ${{ env.APK_TAG }}
           generate_release_notes: true
-          files: ${{ env.APK_OUT }}
+          files: |
+            ${{ env.APK_OUT }}
+            ${{ env.APK_ARCHIVED }}
+          make_latest: true
           body: |
             ### OmniTV ${{ env.APK_TAG }} — Android TV
 
+            ## ⬇️ Descarga directa (sin ZIP)
+
+            **[OmniTV.apk](https://github.com/${{ github.repository }}/releases/latest/download/OmniTV.apk)**
+
+            Enlace permanente al último APK; se descarga con el nombre `OmniTV.apk`
+            ya listo para instalar. Copia archivable de esta versión:
+            [`OmniTV-${{ env.APK_TAG }}.apk`](https://github.com/${{ github.repository }}/releases/download/${{ env.APK_TAG }}/OmniTV-${{ env.APK_TAG }}.apk).
+
             **Instalación (sideload):**
-            1. Descarga `OmniTV-${{ env.APK_TAG }}.apk`
-            2. Envía a la TV con `adb install` o gestor de archivos (X-plore, Send Files to TV)
+            1. Descarga `OmniTV.apk`
+            2. Envía a la TV con `adb install -r OmniTV.apk` o gestor de archivos (X-plore, Send Files to TV)
             3. En la TV: Ajustes → Seguridad → permitir orígenes desconocidos
 
             **Novedades:**
