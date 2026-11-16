@@ -421,22 +421,38 @@ object SettingsStore {
         return if (id.isNotEmpty() && secret.isNotEmpty()) id to secret else null
     }
 
-    /** Guarda los tokens tras el flujo de dispositivo (cifrados si es posible). */
-    fun saveTraktTokens(accessToken: String, refreshToken: String, expiresAtMs: Long) {
+    /**
+     * Persiste tokens solo si Android Keystore pudo cifrarlos.
+     * Nunca se escribe un access/refresh token en texto plano.
+     *
+     * @return true si el blob cifrado quedó preparado; false si el dispositivo
+     *         no admite el cifrado o el Keystore falló.
+     */
+    fun saveTraktTokens(accessToken: String, refreshToken: String, expiresAtMs: Long): Boolean {
+        if (accessToken.isBlank() || refreshToken.isBlank() || expiresAtMs <= 0L) {
+            clearTraktTokens()
+            return false
+        }
         val json = org.json.JSONObject()
             .put("access_token", accessToken)
             .put("refresh_token", refreshToken)
             .put("expires_at", expiresAtMs)
             .toString()
         val sealed = SecretBox.encrypt(json)
+        if (sealed.isNullOrBlank()) {
+            clearTraktTokens()
+            return false
+        }
         update {
-            if (sealed != null) putString(KEY_TRAKT_SEALED, sealed) else putString(KEY_TRAKT_SEALED + "_plain", json)
+            putString(KEY_TRAKT_SEALED, sealed)
+            remove(KEY_TRAKT_SEALED + "_plain")
         }
         traktAccessToken = accessToken
         traktRefreshToken = refreshToken
         traktExpiresAtMs = expiresAtMs
         traktLinked = true
         revision++
+        return true
     }
 
     /** Borra los tokens; conserva las credenciales de la app. */
@@ -452,22 +468,54 @@ object SettingsStore {
         revision++
     }
 
-    /** Carga los tokens sellados al arrancar; sin blob válido, «sin vincular». */
+    /**
+     * Carga tokens cifrados. El formato plaintext de builds anteriores se
+     * elimina: solo se migra si puede cifrarse inmediatamente con Keystore.
+     * Si el blob no se puede abrir (clave perdida/restauración), se revoca
+     * localmente y el usuario deberá volver a vincular Trakt.
+     */
     private fun loadTraktTokens(p: SharedPreferences) {
         val sealed = p.getString(KEY_TRAKT_SEALED, null)
-        val plain = p.getString(KEY_TRAKT_SEALED + "_plain", null)
-        val json = when {
-            sealed != null -> SecretBox.decrypt(sealed)
-            else -> plain
-        }?.let { runCatching { org.json.JSONObject(it) }.getOrNull() }
+        val legacyPlain = p.getString(KEY_TRAKT_SEALED + "_plain", null)
+        var plaintext: String? = when {
+            !sealed.isNullOrBlank() -> SecretBox.decrypt(sealed)
+            !legacyPlain.isNullOrBlank() && SecretBox.available -> legacyPlain
+            else -> null
+        }
+
+        // Migración segura de tokens legacy: nunca mantener el valor plano.
+        if (sealed.isNullOrBlank() && plaintext != null) {
+            val migrated = SecretBox.encrypt(plaintext!!)
+            if (!migrated.isNullOrBlank()) {
+                update {
+                    putString(KEY_TRAKT_SEALED, migrated)
+                    remove(KEY_TRAKT_SEALED + "_plain")
+                }
+            } else {
+                plaintext = null
+            }
+        }
+
+        val json = plaintext?.let { runCatching { org.json.JSONObject(it) }.getOrNull() }
         val access = json?.optString("access_token")?.takeIf { it.isNotBlank() }
         val refresh = json?.optString("refresh_token")?.takeIf { it.isNotBlank() }
-        if (access != null && refresh != null) {
+        val expiresAt = json?.optLong("expires_at", 0L) ?: 0L
+        if (access != null && refresh != null && expiresAt > 0L) {
             traktAccessToken = access
             traktRefreshToken = refresh
-            traktExpiresAtMs = json.optLong("expires_at", 0L)
+            traktExpiresAtMs = expiresAt
             traktLinked = true
+            // Si coexistía una copia legacy, eliminarla incluso si el blob
+            // cifrado ya era válido.
+            if (legacyPlain != null) update { remove(KEY_TRAKT_SEALED + "_plain") }
         } else {
+            update {
+                remove(KEY_TRAKT_SEALED)
+                remove(KEY_TRAKT_SEALED + "_plain")
+            }
+            traktAccessToken = null
+            traktRefreshToken = null
+            traktExpiresAtMs = 0L
             traktLinked = false
         }
     }
