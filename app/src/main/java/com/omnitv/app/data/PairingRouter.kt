@@ -285,7 +285,13 @@ internal class PairingRouter(
      */
     private fun isCrossOrigin(request: PanelRequest): Boolean {
         val site = header(request, "sec-fetch-site")?.trim()?.lowercase()
-        if (site != null && site != "same-origin" && site != "none") return true
+        // Chromium puede clasificar una petición desde una IP local como
+        // same-site aunque el panel esté en otro puerto/origen. No se debe
+        // bloquear por esa etiqueta: en ese caso exigimos Origin y lo
+        // comparamos exactamente con Host más abajo.
+        if (site == "cross-site") return true
+        if (site == "same-site" && header(request, "origin").isNullOrBlank()) return true
+        if (site != null && site !in setOf("same-origin", "same-site", "none")) return true
         val origin = header(request, "origin")?.trim().orEmpty()
         if (origin.isEmpty()) return false
         if (origin.equals("null", true)) return true
