@@ -86,18 +86,31 @@ jobs:
           if [ -z "$VARIANT" ]; then VARIANT="release"; fi
           echo "VARIANT=$VARIANT" >> "$GITHUB_ENV"
 
-          # Dos releases distintas:
-          #  - PUBLISH:      release versionada (v1.3.0…), al marcar «publicar».
-          #  - PUBLISH_DEV:  release rodante con etiqueta fija «latest», en cada
-          #                  push a main. Da el enlace permanente
-          #                  /releases/download/latest/OmniTV.apk
           PUBLISH="false"
           PUBLISH_DEV="false"
-          if [ "${{ github.event.inputs.publicar }}" = "true" ]; then PUBLISH="true"; fi
-          if [ "${GITHUB_REF_TYPE:-}" = "branch" ]; then PUBLISH_DEV="true"; fi
+          # Una release versionada solo puede publicarse manualmente desde main,
+          # con variante release y usando la versión declarada en el proyecto.
+          if [ "${GITHUB_EVENT_NAME:-}" = "workflow_dispatch" ] && [ "${{ github.event.inputs.publicar }}" = "true" ]; then
+            if [ "$VARIANT" != "release" ]; then
+              echo "::error::No se puede publicar una variante debug. Selecciona release."
+              exit 1
+            fi
+            if [ "$GITHUB_REF" != "refs/heads/main" ]; then
+              echo "::error::Las releases versionadas solo se pueden publicar desde main."
+              exit 1
+            fi
+            if [ -n "${{ github.event.inputs.version }}" ]; then
+              echo "::error::No sobrescribas versionName al publicar. Actualiza versionName y versionCode en app/build.gradle.kts."
+              exit 1
+            fi
+            PUBLISH="true"
+          fi
+          # La release rodante se actualiza exclusivamente tras un push real a main.
+          if [ "${GITHUB_EVENT_NAME:-}" = "push" ] && [ "$GITHUB_REF" = "refs/heads/main" ] && [ "$VARIANT" = "release" ]; then
+            PUBLISH_DEV="true"
+          fi
           echo "PUBLISH=$PUBLISH" >> "$GITHUB_ENV"
           echo "PUBLISH_DEV=$PUBLISH_DEV" >> "$GITHUB_ENV"
-
       - name: Preparar firma (si hay secretos)
         env:
           OMNITV_KEYSTORE_BASE64: ${{ secrets.OMNITV_KEYSTORE_BASE64 }}
