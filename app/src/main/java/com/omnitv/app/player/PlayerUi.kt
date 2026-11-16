@@ -50,9 +50,7 @@ import com.omnitv.app.data.ConfirmKeyUpGuard
 import com.omnitv.app.ui.components.RequestTvFocus
 import com.omnitv.app.ui.components.consumeStrayConfirmKeyUp
 import com.omnitv.app.ui.theme.FocusScale
-import com.omnitv.app.ui.theme.GlassDark
 import com.omnitv.app.ui.theme.GlassBorder
-import com.omnitv.app.ui.theme.Accent
 import com.omnitv.app.ui.theme.AppRadius
 import com.omnitv.app.ui.theme.AppStroke
 import com.omnitv.app.ui.theme.AppType
@@ -77,7 +75,7 @@ fun GlassPanel(
     Box(
         modifier = modifier
             .clip(RoundedCornerShape(cornerRadius))
-            .background(GlassDark)
+            .background(Color(0xF01C1C1E))
             .border(1.dp, GlassBorder, RoundedCornerShape(cornerRadius))
     ) {
         content()
@@ -103,8 +101,8 @@ fun ControlPill(
 
     val background = when {
         focused -> ControlWhite
-        active -> Accent.copy(alpha = 0.35f)
-        else -> Color.White.copy(alpha = 0.12f)
+        active -> Color.White.copy(alpha = 0.24f)
+        else -> Color.White.copy(alpha = 0.10f)
     }
     val contentColor = if (focused) OnLight else ControlWhite
 
@@ -117,7 +115,7 @@ fun ControlPill(
             .clip(AppRadius.pill)
             .background(background)
             .then(
-                if (active && !focused) Modifier.border(2.dp, Accent.copy(alpha = 0.8f), AppRadius.pill)
+                if (active && !focused) Modifier.border(1.dp, Color.White.copy(alpha = 0.45f), AppRadius.pill)
                 else if (focused) Modifier.border(AppStroke.focus, Color.White, AppRadius.pill)
                 else Modifier
             )
@@ -256,7 +254,7 @@ private fun OptionRow(option: PlayerOption, modifier: Modifier = Modifier) {
             .fillMaxWidth()
             .padding(horizontal = 10.dp, vertical = 2.dp)
             .clip(AppRadius.sm)
-            .background(if (focused) Color.White.copy(alpha = 0.18f) else Color.Transparent)
+            .background(if (focused) Color.White else Color.Transparent)
             .then(if (focused) Modifier.border(AppStroke.focus, Color.White, AppRadius.sm) else Modifier)
             .onFocusChanged { focused = it.isFocused }
             .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = option.onSelect)
@@ -267,9 +265,9 @@ private fun OptionRow(option: PlayerOption, modifier: Modifier = Modifier) {
             Modifier
                 .size(10.dp)
                 .clip(CircleShape)
-                .background(if (option.selected) Accent else Color.Transparent)
+                .background(if (option.selected) (if (focused) OnLight else Color.White) else Color.Transparent)
                 .then(
-                    if (!option.selected) Modifier.border(2.dp, Color.White.copy(alpha = 0.35f), CircleShape)
+                    if (!option.selected) Modifier.border(2.dp, (if (focused) OnLight else Color.White).copy(alpha = 0.35f), CircleShape)
                     else Modifier
                 )
         )
@@ -277,7 +275,9 @@ private fun OptionRow(option: PlayerOption, modifier: Modifier = Modifier) {
         Text(
             option.label,
             style = AppType.controlLabel,
-            color = if (focused) Color.White else ControlWhite.copy(alpha = if (option.selected) 1f else 0.8f)
+            color = if (focused) OnLight else ControlWhite.copy(alpha = if (option.selected) 1f else 0.8f),
+            maxLines = 2,
+            overflow = TextOverflow.Ellipsis
         )
     }
 }
@@ -314,11 +314,11 @@ fun CenterPlayButton(iconRes: Int, onClick: () -> Unit, modifier: Modifier = Mod
     Box(
         modifier = modifier
             .zIndex(if (focused) 1f else 0f)
-            .size(110.dp)
+            .size(88.dp)
             .graphicsLayer { scaleX = scale; scaleY = scale }
             .clip(CircleShape)
-            .background(Color.White.copy(alpha = 0.92f))
-            .border(AppStroke.focus, Color.White, CircleShape)
+            .background(Color.Black.copy(alpha = 0.48f))
+            .border(1.dp, Color.White.copy(alpha = 0.25f), CircleShape)
             .focusProperties { canFocus = false }
             .onFocusChanged { focused = it.isFocused }
             .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onClick),
@@ -327,8 +327,8 @@ fun CenterPlayButton(iconRes: Int, onClick: () -> Unit, modifier: Modifier = Mod
         Image(
             painter = painterResource(iconRes),
             contentDescription = "Reproducir",
-            modifier = Modifier.size(44.dp),
-            colorFilter = ColorFilter.tint(OnLight)
+            modifier = Modifier.size(36.dp),
+            colorFilter = ColorFilter.tint(Color.White)
         )
     }
 }

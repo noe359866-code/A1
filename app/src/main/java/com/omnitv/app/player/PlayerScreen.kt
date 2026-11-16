@@ -30,6 +30,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -99,8 +100,6 @@ import com.omnitv.app.ui.theme.AppSpacing
 import com.omnitv.app.ui.theme.AppType
 import com.omnitv.app.ui.theme.LiveAccent
 import com.omnitv.app.ui.theme.LiveAccentText
-import com.omnitv.app.ui.theme.TextMuted
-import com.omnitv.app.ui.theme.TextPrimary
 import com.omnitv.app.ui.theme.TextSecondary
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -154,7 +153,7 @@ private fun nowClock(): String =
     SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date())
 
 /**
- * Reproductor estilo Xuper TV sobre Media3 ExoPlayer.
+ * Reproductor para TV inspirado en tvOS sobre Media3 ExoPlayer.
  *
  * - **Autoplay**: los vídeos empiezan solos (ajustable en Ajustes).
  * - **Auto-next**: al terminar aparece «A continuación» con cuenta atrás
@@ -171,6 +170,13 @@ fun PlayerScreen(
     onBack: () -> Unit,
     onPlayNext: (Video) -> Unit = {}
 ) {
+    // Cada título tiene su propio reproductor, trabajos asíncronos y estado de UI.
+    key(video.id) { PlayerScreenContent(video, onBack, onPlayNext) }
+}
+
+@OptIn(UnstableApi::class)
+@Composable
+private fun PlayerScreenContent(video: Video, onBack: () -> Unit, onPlayNext: (Video) -> Unit) {
     val context = LocalContext.current
     var sources by remember(video.id) { mutableStateOf(video.playbackSources) }
     val nextVideo = remember(video.id) { CatalogRepository.nextEpisode(video.id) }
@@ -188,7 +194,11 @@ fun PlayerScreen(
         return
     }
 
-    val trackSelector = remember(video.id) { DefaultTrackSelector(context) }
+    val trackSelector = remember(video.id) {
+        DefaultTrackSelector(context).apply {
+            setParameters(buildUponParameters().setTrackTypeDisabled(C.TRACK_TYPE_TEXT, !SettingsStore.subtitlesDefault).build())
+        }
+    }
     val player = remember(video.id) {
         ExoPlayer.Builder(context)
             .setTrackSelector(trackSelector)
@@ -342,15 +352,35 @@ fun PlayerScreen(
     val switchServer: (Int) -> Unit = { index ->
         if (index in sources.indices) {
             val position = player.currentPosition.coerceAtLeast(0)
+            val shouldPlay = player.playWhenReady
             serverIndex = index
-            preferenceApplied = false
             videoChoice = null; audioChoice = null; textChoice = null; subtitlesOn = false
+            trackSelector.setParameters(
+                trackSelector.buildUponParameters()
+                    .clearOverridesOfType(C.TRACK_TYPE_VIDEO)
+                    .clearOverridesOfType(C.TRACK_TYPE_AUDIO)
+                    .clearOverridesOfType(C.TRACK_TYPE_TEXT)
+                    .setTrackTypeDisabled(C.TRACK_TYPE_TEXT, !SettingsStore.subtitlesDefault)
+                    .build()
+            )
             player.setMediaSource(streamMediaSource(context, sources[index]), position)
+            preferenceApplied = false
             player.prepare()
-            player.playWhenReady = true
+            player.playWhenReady = shouldPlay
             hasError = null
             bridgeMessage = null
             toast = "Reproduciendo desde ${sources[index].label}"
+        }
+    }
+
+    // Algunas fuentes publican la duración después de STATE_READY.
+    fun applyResumeIfReady() {
+        val duration = player.duration
+        if (resumeApplied || player.playbackState != Player.STATE_READY || duration <= 0) return
+        resumeApplied = true
+        val fraction = ProfileStore.currentProfile?.progress?.get(video.id)
+        if (fraction != null && fraction > 0.02f && fraction < 0.94f) {
+            player.seekTo((duration * fraction).toLong())
         }
     }
 
@@ -366,13 +396,7 @@ fun PlayerScreen(
                 isBuffering = playbackState == Player.STATE_BUFFERING
                 if (playbackState == Player.STATE_READY && player.duration > 0) {
                     durationMs = player.duration
-                    if (!resumeApplied) {
-                        resumeApplied = true
-                        val fraction = ProfileStore.currentProfile?.progress?.get(video.id)
-                        if (fraction != null && fraction > 0.02f && fraction < 0.94f) {
-                            player.seekTo((player.duration * fraction).toLong())
-                        }
-                    }
+                    applyResumeIfReady()
                 }
                 if (playbackState == Player.STATE_ENDED && traktScrobbleStarted) {
                     traktScrobbleStarted = false
@@ -548,6 +572,7 @@ fun PlayerScreen(
     LaunchedEffect(player, video.id) {
         var ticks = 0
         while (true) {
+            applyResumeIfReady()
             positionMs = player.currentPosition.coerceAtLeast(0)
             bufferedMs = player.bufferedPosition.coerceAtLeast(0)
             if (player.duration > 0) durationMs = player.duration
@@ -615,9 +640,13 @@ fun PlayerScreen(
             waited += 1_000
         }
         val knownMs = if (durationSeconds > 0) durationSeconds * 1000L else player.duration.coerceAtLeast(0)
-        skipTimeline = runCatching {
+        skipTimeline = try {
             SkipSegmentService.fetch(video, knownMs)
-        }.getOrDefault(SkipTimeline.EMPTY)
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            SkipTimeline.EMPTY
+        }
     }
 
     LaunchedEffect(activeSkip) {
@@ -642,8 +671,8 @@ fun PlayerScreen(
             sleepLabel = "Temporizador"
             return@LaunchedEffect
         }
-        while (System.currentTimeMillis() < deadline) {
-            val remaining = (deadline - System.currentTimeMillis()).coerceAtLeast(0) / 1000
+        while (android.os.SystemClock.elapsedRealtime() < deadline) {
+            val remaining = (deadline - android.os.SystemClock.elapsedRealtime()).coerceAtLeast(0) / 1000
             sleepLabel = String.format(Locale.US, "⏱ %d:%02d", remaining / 60, remaining % 60)
             delay(1000)
         }
@@ -820,7 +849,7 @@ fun PlayerScreen(
             selected = sleepMinutes == minutes
         ) {
             sleepMinutes = minutes
-            sleepDeadline = if (minutes == 0) null else System.currentTimeMillis() + minutes * 60_000L
+            sleepDeadline = if (minutes == 0) null else android.os.SystemClock.elapsedRealtime() + minutes * 60_000L
             menu = MenuKind.NONE
             toast = if (minutes == 0) "Temporizador desactivado" else "Temporizador: $minutes min"
         }
@@ -841,7 +870,6 @@ fun PlayerScreen(
             .focusProperties {
                 canFocus = !controlsVisible && hasError == null && showNextPanel == null
             }
-            .focusable()
             .consumeStrayConfirmKeyUp(rootConfirmGuard)
             .onPreviewKeyEvent { event ->
                 if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
@@ -859,7 +887,7 @@ fun PlayerScreen(
                 }
                 when {
                     code == TvKeyCodes.KEYCODE_MEDIA_PLAY_PAUSE -> {
-                        if (player.isPlaying) player.pause() else player.play()
+                        if (player.playWhenReady) player.pause() else player.play()
                         true
                     }
                     code == TvKeyCodes.KEYCODE_MEDIA_PLAY -> {
@@ -909,7 +937,7 @@ fun PlayerScreen(
                         true
                     }
                     code == TvKeyCodes.KEYCODE_SPACE -> {
-                        if (player.isPlaying) player.pause() else player.play()
+                        if (player.playWhenReady) player.pause() else player.play()
                         true
                     }
                     code == TvKeyCodes.KEYCODE_ESCAPE -> {
@@ -956,6 +984,7 @@ fun PlayerScreen(
                     else -> false
                 }
             }
+            .focusable()
     ) {
         val containerRatio = if (maxHeight > 0.dp) maxWidth.value / maxHeight.value else (16f / 9f)
         val videoModifier = when {
@@ -986,7 +1015,7 @@ fun PlayerScreen(
             modifier = videoModifier
         )
 
-        // Botón central grande al pausar (como Xuper TV)
+        // Indicador central al pausar
         AnimatedVisibility(
             visible = !isPlaying && !isBuffering && hasError == null && controlsVisible && showNextPanel == null,
             enter = fadeIn(),
@@ -1161,42 +1190,21 @@ fun PlayerScreen(
                     )
                     Spacer(Modifier.width(18.dp))
                     Column(Modifier.weight(1f)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(
-                                video.title,
-                                style = AppType.sectionTitle,
-                                color = Color.White,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.weight(1f)
-                            )
-                            Spacer(Modifier.width(12.dp))
-                            InfoChip(video.quality)
-                            Spacer(Modifier.width(8.dp))
-                            InfoChip(when (sources.getOrNull(serverIndex)?.format ?: video.streamFormat) {
-                                StreamFormat.HLS -> "HLS"
-                                StreamFormat.DASH -> "DASH"
-                                StreamFormat.MP4 -> "MP4"
-                            })
-                            if (speed != 1f) {
-                                Spacer(Modifier.width(8.dp))
-                                InfoChip(SettingsStore.speedLabel(speed))
-                            }
-                        }
-                        Spacer(Modifier.height(8.dp))
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            EpgChip("REPRODUCIENDO", LiveAccent)
-                            Spacer(Modifier.width(8.dp))
-                            Text(video.title, style = AppType.metadata, color = TextPrimary)
-                            nextVideo?.let {
-                                Spacer(Modifier.width(16.dp))
-                                EpgChip(if ('~' in video.id) "SIGUIENTE" else "RELACIONADO", TextMuted)
-                                Spacer(Modifier.width(8.dp))
-                                Text(it.title, style = AppType.metadata, color = TextSecondary)
-                            }
-                        }
+                        Text(
+                            video.title,
+                            style = AppType.sectionTitle,
+                            color = Color.White,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            if (isPlaying) "Reproduciendo" else if (isBuffering) "Cargando…" else "En pausa",
+                            style = AppType.metadata,
+                            color = Color.White.copy(alpha = 0.68f)
+                        )
                     }
-                    Spacer(Modifier.weight(1f))
+                    Spacer(Modifier.width(24.dp))
                     Text(clock, style = AppType.body, color = Color.White)
                 }
 
@@ -1236,6 +1244,12 @@ fun PlayerScreen(
                                 Spacer(Modifier.height(8.dp))
                                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                     InfoChip(sources[serverIndex].label)
+                                    InfoChip(video.quality)
+                                    InfoChip(when (sources[serverIndex].format) {
+                                        StreamFormat.HLS -> "HLS"
+                                        StreamFormat.DASH -> "DASH"
+                                        StreamFormat.MP4 -> "MP4"
+                                    })
                                     InfoChip(video.language)
                                     InfoChip(video.certification)
                                 }
@@ -1342,7 +1356,7 @@ fun PlayerScreen(
                                 1f to Color.Black.copy(alpha = 0.88f)
                             )
                         )
-                        .padding(horizontal = AppSpacing.screenMargin, vertical = 24.dp)
+                        .padding(start = AppSpacing.screenMargin, end = AppSpacing.screenMargin, top = 30.dp, bottom = 20.dp)
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(formatTime(positionMs), style = AppType.playerTime, color = TextSecondary)
@@ -1364,17 +1378,17 @@ fun PlayerScreen(
                                 interactionTick++
                             },
                             onConfirm = {
-                                if (player.isPlaying) player.pause() else player.play()
+                                if (player.playWhenReady) player.pause() else player.play()
                             }
                         )
                         Spacer(Modifier.width(16.dp))
                         Text(
-                            if (durationMs > 0) "-${formatTime(durationMs - positionMs)}" else "--:--",
+                            if (durationMs > 0) "-${formatTime((durationMs - positionMs).coerceAtLeast(0L))}" else "--:--",
                             style = AppType.playerTime,
                             color = TextSecondary
                         )
                     }
-                    Spacer(Modifier.height(12.dp))
+                    Spacer(Modifier.height(8.dp))
                     Row(
                         Modifier.fillMaxWidth().focusGroup(),
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -1390,7 +1404,7 @@ fun PlayerScreen(
                             contentDescription = if (isPlaying) "Pausar" else "Reproducir",
                             size = 64.dp,
                             primary = true,
-                            onClick = { if (isPlaying) player.pause() else player.play() },
+                            onClick = { if (player.playWhenReady) player.pause() else player.play() },
                             modifier = Modifier.focusRequester(playFocus)
                         )
                         TransportButton(
@@ -1406,7 +1420,7 @@ fun PlayerScreen(
                             )
                         }
                     }
-                    Spacer(Modifier.height(12.dp))
+                    Spacer(Modifier.height(8.dp))
                     LazyRow(
                         modifier = Modifier
                             .fillMaxWidth()
