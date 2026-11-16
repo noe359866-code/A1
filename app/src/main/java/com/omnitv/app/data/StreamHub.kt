@@ -1,6 +1,7 @@
 package com.omnitv.app.data
 
 import androidx.compose.runtime.mutableStateOf
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -180,7 +181,15 @@ object StreamHub {
                     async {
                         val timeoutMs = if (addon.id == "cloudstream-bridge" || addon.id == "nuvio-plugins") 25_000L else 12_000L
                         withTimeoutOrNull(timeoutMs) {
-                            runCatching { addon.resolve(video) }.getOrDefault(emptyList())
+                            try {
+                                addon.resolve(video)
+                            } catch (cancelled: CancellationException) {
+                                // La navegación o el cierre del reproductor debe
+                                // cancelar también el trabajo de red del addon.
+                                throw cancelled
+                            } catch (_: Exception) {
+                                emptyList()
+                            }
                         }.orEmpty()
                     }
                 }.awaitAll()
