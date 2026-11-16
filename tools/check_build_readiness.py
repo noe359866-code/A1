@@ -262,7 +262,7 @@ if release_workflow.exists():
         errors.append("release.yml: falta la protección de rama main para publicaciones manuales")
     if "keytool -list" not in text:
         errors.append("release.yml: no valida keystore y alias antes de compilar")
-    if "GITHUB_REF_TYPE:-}" = "tag"' not in text:
+    if 'GITHUB_REF_TYPE:-}" = "tag"' not in text:
         errors.append("release.yml: debe distinguir un push de etiqueta de una ejecución manual")
     else:
         ok.append("release.yml: exige keystore de producción y etiqueta versionada")
