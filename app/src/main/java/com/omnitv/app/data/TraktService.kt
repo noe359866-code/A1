@@ -20,7 +20,7 @@ import org.json.JSONObject
  */
 object TraktService {
 
-    enum class PollResult { Linked, Pending, Expired, Denied, Failed }
+    enum class PollResult { Linked, Pending, Expired, Denied, SecureStorageUnavailable, Failed }
 
     /** ¿Hay credenciales de la app Trakt del usuario en el panel? */
     fun isConfigured(): Boolean = SettingsStore.traktCredentials() != null
@@ -68,7 +68,7 @@ object TraktService {
                 val tokens = TraktProtocol.parseToken(json, System.currentTimeMillis())
                     ?: return PollResult.Failed
                 if (!SettingsStore.saveTraktTokens(tokens.accessToken, tokens.refreshToken, tokens.expiresAtMs)) {
-                    return PollResult.Failed
+                    return PollResult.SecureStorageUnavailable
                 }
                 PollResult.Linked
             }
