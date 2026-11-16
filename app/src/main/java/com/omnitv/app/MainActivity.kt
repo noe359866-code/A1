@@ -3,6 +3,9 @@ package com.omnitv.app
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
 import coil.Coil
 import coil.ImageLoader
 import com.omnitv.app.data.PairingServer
@@ -14,6 +17,8 @@ import com.omnitv.app.network.cronetSupport
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+        hideSystemBars()
         ProfileStore.init(this)
         SettingsStore.init(this)
         runCatching { com.omnitv.app.network.CronetClient.init(this) }
@@ -30,6 +35,11 @@ class MainActivity : ComponentActivity() {
         setContent { OmniTvApp() }
     }
 
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus) hideSystemBars()
+    }
+
     override fun onStart() {
         super.onStart()
         PairingServer.start()
@@ -39,5 +49,12 @@ class MainActivity : ComponentActivity() {
         // El puerto de configuración no permanece abierto al volver al launcher.
         PairingServer.stop()
         super.onStop()
+    }
+
+    private fun hideSystemBars() {
+        val controller = WindowCompat.getInsetsController(window, window.decorView)
+        controller.systemBarsBehavior =
+            WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        controller.hide(WindowInsetsCompat.Type.systemBars())
     }
 }

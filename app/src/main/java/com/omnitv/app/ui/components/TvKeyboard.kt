@@ -1,9 +1,12 @@
 package com.omnitv.app.ui.components
 
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -28,32 +31,39 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.key.KeyEventType
-import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
 import com.omnitv.app.R
+import com.omnitv.app.data.ConfirmKeyUpGuard
+import com.omnitv.app.data.TvKeyCodes
 import com.omnitv.app.data.TvKeypad
 import com.omnitv.app.ui.theme.Accent
 import com.omnitv.app.ui.theme.AppRadius
+import com.omnitv.app.ui.theme.AppStroke
 import com.omnitv.app.ui.theme.AppType
 import com.omnitv.app.ui.theme.Background
+import com.omnitv.app.ui.theme.GlassFill
 import com.omnitv.app.ui.theme.GlassFillStrong
 import com.omnitv.app.ui.theme.OnLight
+import com.omnitv.app.ui.theme.SurfaceCard
 import com.omnitv.app.ui.theme.SurfaceElevated
 import com.omnitv.app.ui.theme.TextPrimary
 
 /**
  * Teclado propio para Android TV. No depende del IME del receptor.
  *
- * [compact] se usa en un panel lateral: el campo y los resultados siguen
- * visibles a su izquierda. Una pulsación de flecha mueve UNA tecla y nunca
- * abandona el panel; OK activa la tecla enfocada y Atrás lo cierra la pantalla.
- * Los objetivos de 42 dp son para mando, no para una pantalla táctil.
+ * - Modo panel lateral (`embedded = false`, usado en edición de perfiles): mantiene
+ *   el foco encerrado en los cuatro bordes hasta pulsar «LISTO» o Atrás.
+ * - Modo buscador fijo a la izquierda (`embedded = true`): estética de rejilla
+ *   compacta y oscura con borde blanco al enfocar; permite salir hacia arriba,
+ *   abajo (sugerencias) o derecha (rejilla de resultados) mediante los callbacks
+ *   de borde, y sustituye «LISTO» por «LIMPIAR».
  */
 @Composable
 fun TvKeyboard(
@@ -61,39 +71,101 @@ fun TvKeyboard(
     onDone: () -> Unit,
     modifier: Modifier = Modifier,
     firstKeyFocus: FocusRequester = remember { FocusRequester() },
-    compact: Boolean = false
+    bottomFocusRequester: FocusRequester? = null,
+    compact: Boolean = false,
+    embedded: Boolean = false,
+    onClear: (() -> Unit)? = null,
+    onExitUp: (() -> Boolean)? = null,
+    onExitRight: (() -> Boolean)? = null,
+    onExitDown: (() -> Boolean)? = null
 ) {
-    val keySize = if (compact) 42.dp else 54.dp
-    val gap = if (compact) 4.dp else 8.dp
-    val padding = if (compact) 12.dp else 18.dp
+    val keyWidth = when {
+        embedded -> 31.dp
+        compact -> 42.dp
+        else -> 54.dp
+    }
+    val keyHeight = when {
+        embedded -> 34.dp
+        compact -> 42.dp
+        else -> 54.dp
+    }
+    val gap = when {
+        embedded -> 3.dp
+        compact -> 4.dp
+        else -> 8.dp
+    }
+    val padding = when {
+        embedded -> 10.dp
+        compact -> 12.dp
+        else -> 18.dp
+    }
+
+    val initialRow = if (embedded) 1 else 0
+    val initialCol = 0
+
     val labels = TvKeypad.rows.map { row -> row.map { it.toString() } } +
         listOf(TvKeypad.actions)
-    val focusTargets = remember(firstKeyFocus) {
+    val focusTargets = remember(firstKeyFocus, bottomFocusRequester, embedded) {
         labels.mapIndexed { rowIndex, row ->
             row.mapIndexed { colIndex, _ ->
-                if (rowIndex == 0 && colIndex == 0) firstKeyFocus else FocusRequester()
+                when {
+                    rowIndex == initialRow && colIndex == initialCol -> firstKeyFocus
+                    bottomFocusRequester != null && rowIndex == TvKeypad.rows.size && colIndex == 0 -> bottomFocusRequester
+                    else -> FocusRequester()
+                }
             }
         }
     }
-    var current by remember { mutableStateOf(TvKeypad.Position(0, 0)) }
+    var current by remember(embedded) { mutableStateOf(TvKeypad.Position(initialRow, initialCol)) }
+    val keyUpGuard = remember { ConfirmKeyUpGuard(initialSuppressUntilDown = true) }
 
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .clip(AppRadius.lg)
-            .background(SurfaceElevated)
-            .border(2.dp, Color.White.copy(alpha = 0.12f), AppRadius.lg)
+            .focusGroup()
+            .clip(if (embedded) AppRadius.md else AppRadius.lg)
+            .background(if (embedded) SurfaceCard else SurfaceElevated)
+            .border(
+                width = if (embedded) 1.dp else 2.dp,
+                color = Color.White.copy(alpha = if (embedded) 0.10f else 0.12f),
+                shape = if (embedded) AppRadius.md else AppRadius.lg
+            )
+            .consumeStrayConfirmKeyUp(keyUpGuard)
             .onPreviewKeyEvent { event ->
                 if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
-                val direction = when (event.key) {
-                    Key.DirectionUp -> TvKeypad.Direction.UP
-                    Key.DirectionDown -> TvKeypad.Direction.DOWN
-                    Key.DirectionLeft -> TvKeypad.Direction.LEFT
-                    Key.DirectionRight -> TvKeypad.Direction.RIGHT
+                val code = event.nativeKeyEvent.keyCode
+                if (TvKeyCodes.isBackspace(code)) {
+                    onKey(TvKeypad.BACKSPACE)
+                    return@onPreviewKeyEvent true
+                }
+                val direction = when {
+                    TvKeyCodes.isUp(code) -> TvKeypad.Direction.UP
+                    TvKeyCodes.isDown(code) -> TvKeypad.Direction.DOWN
+                    TvKeyCodes.isLeft(code) -> TvKeypad.Direction.LEFT
+                    TvKeyCodes.isRight(code) -> TvKeypad.Direction.RIGHT
                     else -> return@onPreviewKeyEvent false
                 }
+                val lastRow = TvKeypad.rows.size
+                val rowLength = if (current.row < TvKeypad.rows.size) {
+                    TvKeypad.rows[current.row].length
+                } else {
+                    TvKeypad.actions.size
+                }
+                if (embedded) {
+                    when {
+                        direction == TvKeypad.Direction.UP && current.row == 0 -> {
+                            if (onExitUp?.invoke() == true) return@onPreviewKeyEvent true
+                        }
+                        direction == TvKeypad.Direction.DOWN && current.row == lastRow -> {
+                            if (onExitDown?.invoke() == true) return@onPreviewKeyEvent true
+                        }
+                        direction == TvKeypad.Direction.RIGHT && current.column >= rowLength - 1 -> {
+                            if (onExitRight?.invoke() == true) return@onPreviewKeyEvent true
+                        }
+                    }
+                }
                 current = TvKeypad.move(current, direction)
-                focusTargets[current.row][current.column].requestFocus()
+                runCatching { focusTargets[current.row][current.column].requestFocus() }
                 true
             }
             .padding(padding),
@@ -108,7 +180,10 @@ fun TvKeyboard(
                 letters.forEachIndexed { colIndex, char ->
                     KeyButton(
                         label = char.toString(),
-                        size = keySize,
+                        width = keyWidth,
+                        height = keyHeight,
+                        embedded = embedded,
+                        onFocus = { current = TvKeypad.Position(rowIndex, colIndex) },
                         onClick = {
                             current = TvKeypad.Position(rowIndex, colIndex)
                             onKey(char.toString())
@@ -124,18 +199,37 @@ fun TvKeyboard(
         ) {
             TvKeypad.actions.forEachIndexed { colIndex, action ->
                 val rowIndex = TvKeypad.rows.size
+                val isClearAction = action == TvKeypad.DONE && onClear != null
+                val label = when {
+                    action == TvKeypad.BACKSPACE -> if (embedded) "" else "BORRAR"
+                    isClearAction -> "LIMPIAR"
+                    else -> action
+                }
                 ActionKey(
-                    label = if (action == TvKeypad.BACKSPACE) "BORRAR" else action,
+                    label = label,
                     iconRes = if (action == TvKeypad.BACKSPACE) R.drawable.ic_backspace else null,
-                    primary = action == TvKeypad.DONE,
-                    height = keySize,
-                    compact = compact,
+                    primary = action == TvKeypad.DONE && !embedded,
+                    height = keyHeight,
+                    compact = compact || embedded,
+                    embedded = embedded,
+                    onFocus = { current = TvKeypad.Position(rowIndex, colIndex) },
                     onClick = {
                         current = TvKeypad.Position(rowIndex, colIndex)
-                        if (action == TvKeypad.DONE) onDone() else onKey(action)
+                        when {
+                            isClearAction -> onClear?.invoke()
+                            action == TvKeypad.DONE -> onDone()
+                            else -> onKey(action)
+                        }
                     },
                     modifier = Modifier
-                        .then(if (action == TvKeypad.SPACE) Modifier.weight(1f) else Modifier)
+                        .then(
+                            when {
+                                embedded && action == TvKeypad.SPACE -> Modifier.weight(1.5f)
+                                embedded -> Modifier.weight(1f)
+                                action == TvKeypad.SPACE -> Modifier.weight(1f)
+                                else -> Modifier
+                            }
+                        )
                         .focusRequester(focusTargets[rowIndex][colIndex])
                 )
             }
@@ -144,60 +238,124 @@ fun TvKeyboard(
 }
 
 @Composable
-private fun KeyButton(label: String, size: Dp, onClick: () -> Unit, modifier: Modifier = Modifier) {
+private fun KeyButton(
+    label: String,
+    width: Dp,
+    height: Dp,
+    embedded: Boolean,
+    onFocus: () -> Unit,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
     var focused by remember { mutableStateOf(false) }
+    val scale by animateFloatAsState(if (focused) 1.08f else 1f, tween(110), label = "keyScale")
+    val radius = if (embedded) AppRadius.xs else AppRadius.sm
+    val bg = when {
+        focused && embedded -> SurfaceElevated
+        focused -> Color.White
+        embedded -> GlassFill
+        else -> GlassFillStrong
+    }
+    val border = when {
+        focused && embedded -> Modifier.border(2.dp, Color.White, radius)
+        focused -> Modifier.border(AppStroke.focus, Background, radius)
+        embedded -> Modifier.border(1.dp, Color.White.copy(alpha = 0.08f), radius)
+        else -> Modifier
+    }
+    val textColor = when {
+        focused && !embedded -> OnLight
+        else -> TextPrimary
+    }
+
     Box(
         modifier = modifier
-            .size(size)
-            .clip(AppRadius.sm)
-            .background(if (focused) Color.White else GlassFillStrong)
-            .then(if (focused) Modifier.border(3.dp, Background, AppRadius.sm) else Modifier)
-            .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onClick)
-            .onFocusChanged { focused = it.isFocused },
+            .zIndex(if (focused) 1f else 0f)
+            .width(width)
+            .height(height)
+            .graphicsLayer { scaleX = scale; scaleY = scale }
+            .clip(radius)
+            .background(bg)
+            .then(border)
+            .onFocusChanged {
+                focused = it.isFocused
+                if (it.isFocused) onFocus()
+            }
+            .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onClick),
         contentAlignment = Alignment.Center
     ) {
-        Text(label, style = AppType.body, color = if (focused) OnLight else TextPrimary)
+        Text(
+            label,
+            style = if (embedded) AppType.cardTitle else AppType.body,
+            color = textColor
+        )
     }
 }
 
 @Composable
 private fun ActionKey(
     label: String,
+    onFocus: () -> Unit,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     iconRes: Int? = null,
     primary: Boolean = false,
     height: Dp = 54.dp,
-    compact: Boolean = false
+    compact: Boolean = false,
+    embedded: Boolean = false
 ) {
     var focused by remember { mutableStateOf(false) }
+    val scale by animateFloatAsState(if (focused) 1.05f else 1f, tween(110), label = "actionKeyScale")
+    val radius = if (embedded) AppRadius.xs else AppRadius.sm
     val background = when {
+        focused && embedded -> SurfaceElevated
         focused -> Color.White
         primary -> Accent
+        embedded -> GlassFill
         else -> GlassFillStrong
     }
-    val content = if (focused) OnLight else Color.White
+    val border = when {
+        focused && embedded -> Modifier.border(2.dp, Color.White, radius)
+        focused -> Modifier.border(AppStroke.focus, Background, radius)
+        embedded -> Modifier.border(1.dp, Color.White.copy(alpha = 0.08f), radius)
+        else -> Modifier
+    }
+    val content = if (focused && !embedded) OnLight else Color.White
+
     Row(
         modifier = modifier
+            .zIndex(if (focused) 1f else 0f)
             .height(height)
-            .clip(AppRadius.sm)
+            .graphicsLayer { scaleX = scale; scaleY = scale }
+            .clip(radius)
             .background(background)
-            .then(if (focused) Modifier.border(3.dp, Background, AppRadius.sm) else Modifier)
+            .then(border)
+            .onFocusChanged {
+                focused = it.isFocused
+                if (it.isFocused) onFocus()
+            }
             .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onClick)
-            .onFocusChanged { focused = it.isFocused }
-            .padding(horizontal = if (compact) 10.dp else 20.dp),
+            .padding(horizontal = if (embedded) 6.dp else if (compact) 10.dp else 20.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.Center
     ) {
         if (iconRes != null) {
             Image(
                 painter = painterResource(iconRes),
-                contentDescription = null,
-                modifier = Modifier.size(20.dp),
+                contentDescription = if (label.isEmpty()) "Borrar" else null,
+                modifier = Modifier.size(if (embedded) 18.dp else 20.dp),
                 colorFilter = androidx.compose.ui.graphics.ColorFilter.tint(content)
             )
-            Spacer(Modifier.width(6.dp))
+            if (label.isNotEmpty()) {
+                Spacer(Modifier.width(6.dp))
+            }
         }
-        Text(label, style = if (compact) AppType.metadata else AppType.button, color = content, maxLines = 1)
+        if (label.isNotEmpty()) {
+            Text(
+                label,
+                style = if (embedded) AppType.chip else if (compact) AppType.metadata else AppType.button,
+                color = content,
+                maxLines = 1
+            )
+        }
     }
 }

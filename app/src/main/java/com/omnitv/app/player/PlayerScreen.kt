@@ -1,25 +1,31 @@
+@file:OptIn(ExperimentalComposeUiApi::class)
+
 package com.omnitv.app.player
 
-import androidx.annotation.OptIn
-import androidx.media3.common.util.UnstableApi
 import androidx.activity.compose.BackHandler
+import androidx.annotation.OptIn
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
+import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.focusable
-import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -30,25 +36,26 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
-import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.lifecycle.compose.LocalLifecycleOwner
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleEventObserver
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.Format
@@ -57,16 +64,18 @@ import androidx.media3.common.Player
 import androidx.media3.common.TrackGroup
 import androidx.media3.common.TrackSelectionOverride
 import androidx.media3.common.Tracks
+import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.trackselection.DefaultTrackSelector
 import androidx.media3.ui.AspectRatioFrameLayout
 import androidx.media3.ui.PlayerView
-import androidx.compose.material.Text
 import coil.compose.AsyncImage
 import com.omnitv.app.R
 import com.omnitv.app.data.CatalogRepository
+import com.omnitv.app.data.ConfirmKeyUpGuard
 import com.omnitv.app.data.MediaBridge
 import com.omnitv.app.data.PlaybackDiagnostics
+import com.omnitv.app.data.PlayerScrubRates
 import com.omnitv.app.data.ProfileStore
 import com.omnitv.app.data.SettingsStore
 import com.omnitv.app.data.SkipKind
@@ -75,13 +84,17 @@ import com.omnitv.app.data.SkipSegmentService
 import com.omnitv.app.data.SkipTimeline
 import com.omnitv.app.data.StreamFormat
 import com.omnitv.app.data.TrackFacts
+import com.omnitv.app.data.TvKeyCodes
 import com.omnitv.app.data.Video
 import com.omnitv.app.ui.components.LoadingSpinner
 import com.omnitv.app.ui.components.MetaLine
 import com.omnitv.app.ui.components.PillButton
+import com.omnitv.app.ui.components.RequestTvFocus
 import com.omnitv.app.ui.components.SeekBar
+import com.omnitv.app.ui.components.consumeStrayConfirmKeyUp
 import com.omnitv.app.ui.components.formatTime
 import com.omnitv.app.ui.theme.AppRadius
+import com.omnitv.app.ui.theme.AppSpacing
 import com.omnitv.app.ui.theme.AppType
 import com.omnitv.app.ui.theme.LiveAccent
 import com.omnitv.app.ui.theme.TextMuted
@@ -140,7 +153,8 @@ private fun nowClock(): String =
  *   de 10 s y botones *Reproducir ahora* / *Cancelar*.
  * - Franja EPG «AHORA / A CONTINUACIÓN», multi-servidor con conmutación
  *   automática, calidad/audio/subtítulos/velocidad, zoom y temporizador.
- * - Controles de vidrio para mando de TV y atajos ◀▶ (±10 s).
+ * - Controles de vidrio para mando de TV, barra de progreso enfocable y
+ *   avance/retroceso acelerado al mantener ◀ / ▶ (±10s → ±20s → ±30s → ±60s).
  */
 @OptIn(UnstableApi::class)
 @Composable
@@ -153,12 +167,14 @@ fun PlayerScreen(
     var sources by remember(video.id) { mutableStateOf(video.playbackSources) }
     val nextVideo = remember(video.id) { CatalogRepository.nextEpisode(video.id) }
     if (sources.isEmpty()) {
+        val emptyBackFocus = remember { FocusRequester() }
+        RequestTvFocus(emptyBackFocus, key = video.id)
         BackHandler(onBack = onBack)
         Box(Modifier.fillMaxSize().background(Color.Black), contentAlignment = Alignment.Center) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text("Este título no tiene una fuente reproducible", style = AppType.body, color = Color.White)
                 Spacer(Modifier.height(18.dp))
-                PillButton("Volver", primary = false, onClick = onBack)
+                PillButton("Volver", primary = false, onClick = onBack, modifier = Modifier.focusRequester(emptyBackFocus))
             }
         }
         return
@@ -168,6 +184,7 @@ fun PlayerScreen(
     val player = remember(video.id) {
         ExoPlayer.Builder(context)
             .setTrackSelector(trackSelector)
+            .setHandleAudioBecomingNoisy(true)
             .build()
             .apply {
                 setAudioAttributes(
@@ -190,6 +207,8 @@ fun PlayerScreen(
     var isBuffering by remember { mutableStateOf(true) }
     var hasError by remember { mutableStateOf<String?>(null) }
     var controlsVisible by remember { mutableStateOf(true) }
+    var previousControlsVisible by remember { mutableStateOf(false) }
+    var interactionTick by remember { mutableStateOf(0) }
     var positionMs by remember { mutableStateOf(0L) }
     var durationMs by remember { mutableStateOf(0L) }
     var bufferedMs by remember { mutableStateOf(0L) }
@@ -201,8 +220,14 @@ fun PlayerScreen(
     val bridgeAttempted = remember(video.id) { mutableSetOf<String>() }
     val scope = rememberCoroutineScope()
     var menu by remember { mutableStateOf(MenuKind.NONE) }
+    var lastOpenedMenu by remember { mutableStateOf(MenuKind.NONE) }
+    var previousMenu by remember { mutableStateOf(MenuKind.NONE) }
+    var previousHasError by remember { mutableStateOf<String?>(null) }
+    var previousShowNext by remember { mutableStateOf<Video?>(null) }
+    var previousShowSkip by remember { mutableStateOf(false) }
     var showInfo by remember { mutableStateOf(false) }
     var toast by remember { mutableStateOf<String?>(null) }
+    var seekPreview by remember { mutableStateOf<String?>(null) }
 
     var tracks by remember { mutableStateOf(player.currentTracks) }
     var videoChoice by remember { mutableStateOf<TrackChoice?>(null) }
@@ -228,20 +253,64 @@ fun PlayerScreen(
     val retryFocus = remember { FocusRequester() }
     val cancelNextFocus = remember { FocusRequester() }
     val skipFocus = remember { FocusRequester() }
+    val seekBarFocus = remember { FocusRequester() }
+
+    val serverPillFocus = remember { FocusRequester() }
+    val qualityPillFocus = remember { FocusRequester() }
+    val audioPillFocus = remember { FocusRequester() }
+    val subtitlesPillFocus = remember { FocusRequester() }
+    val aspectPillFocus = remember { FocusRequester() }
+    val speedPillFocus = remember { FocusRequester() }
+    val sleepPillFocus = remember { FocusRequester() }
+
+    val rootConfirmGuard = remember { ConfirmKeyUpGuard(initialSuppressUntilDown = false) }
 
     // ---------------- Saltar intro / resumen / créditos ----------------
-    // Datos comunitarios (SkipDB · TheIntroDB · IntroDB). Lectura anónima:
-    // funciona para cualquier usuario sin configurar claves.
     var skipTimeline by remember(video.id) { mutableStateOf(SkipTimeline.EMPTY) }
     val autoSkipped = remember(video.id) { mutableSetOf<String>() }
     val durationSeconds = (durationMs / 1000L).toInt()
     val activeSkip: SkipSegment? = remember(skipTimeline, positionMs) { skipTimeline.activeAt(positionMs) }
+    var dismissedSkipKey by remember(video.id) { mutableStateOf<String?>(null) }
+    var skipButtonFocused by remember { mutableStateOf(false) }
+    val visibleSkip = activeSkip?.takeIf { "${it.kind}:${it.startMs}" != dismissedSkipKey }
+    val showSkipOverlay = visibleSkip != null && hasError == null && showNextPanel == null && menu == MenuKind.NONE && !showInfo
 
-    fun skipSegment(segment: SkipSegment) {
-        val target = segment.targetMs(player.duration.takeIf { it > 0 } ?: durationMs)
+    fun skipSegment(segment: SkipSegment, fromAuto: Boolean = false) {
+        val total = player.duration.takeIf { it > 0 } ?: durationMs
+        val isTailCredits = segment.kind == SkipKind.CREDITS &&
+            skipTimeline.isTailSegment(segment, total) &&
+            nextVideo != null
+        if (isTailCredits) {
+            val next = nextVideo!!
+            if (!fromAuto && '~' in video.id) {
+                showNextPanel = null
+                onPlayNext(next)
+            } else {
+                showNextPanel = next
+                menu = MenuKind.NONE
+                showInfo = false
+                controlsVisible = true
+                toast = "Saltado: ${segment.kind.label}"
+            }
+            return
+        }
+        val target = segment.targetMs(total)
         if (target > player.currentPosition) {
             player.seekTo(target)
+            positionMs = target
             toast = "Saltado: ${segment.kind.label}"
+        }
+    }
+
+    fun seekBy(deltaMs: Long, showPreview: Boolean) {
+        val total = player.duration.takeIf { it > 0 } ?: durationMs
+        val target = PlayerScrubRates.computeSeekTarget(player.currentPosition, total, deltaMs)
+        player.seekTo(target)
+        positionMs = target
+        if (showPreview) {
+            val sec = kotlin.math.abs(deltaMs / 1000L)
+            val arrow = if (deltaMs < 0) "⏪ -$sec s" else "⏩ +$sec s"
+            seekPreview = if (total > 0) "$arrow · ${formatTime(target)} / ${formatTime(total)}" else arrow
         }
     }
 
@@ -290,14 +359,13 @@ fun PlayerScreen(
                     if (!resumeApplied) {
                         resumeApplied = true
                         val fraction = ProfileStore.currentProfile?.progress?.get(video.id)
-                        if (fraction != null && fraction > 0f && fraction < 1f) {
+                        if (fraction != null && fraction > 0.02f && fraction < 0.94f) {
                             player.seekTo((player.duration * fraction).toLong())
                         }
                     }
                 }
                 if (playbackState == Player.STATE_ENDED) {
                     if (nextVideo != null && showNextPanel == null && hasError == null) {
-                        // Auto-next: muestra el panel «A continuación»
                         showNextPanel = nextVideo
                         menu = MenuKind.NONE
                         showInfo = false
@@ -310,7 +378,6 @@ fun PlayerScreen(
 
             override fun onTracksChanged(currentTracks: Tracks) {
                 tracks = currentTracks
-                // Aplica la calidad preferida y los subtítulos por defecto
                 if (!preferenceApplied && currentTracks.groups.isNotEmpty()) {
                     preferenceApplied = true
                     val target = when (SettingsStore.preferredQuality) {
@@ -375,8 +442,6 @@ fun PlayerScreen(
                 } else {
                     hasError = error.errorCodeName
                     controlsVisible = true
-                    // Solo se pide conversión si Media3 apunta a códec/contenedor,
-                    // hay puente configurado y esta fuente no se intentó ya.
                     if (report.bridgeRecommended && SettingsStore.ffmpegBridge.isNotBlank() &&
                         !source.label.endsWith(" · puente") && bridgeAttempted.add(source.url)
                     ) {
@@ -404,37 +469,46 @@ fun PlayerScreen(
                 }
             }
         }
+        var playerReleased = false
+        fun saveProgressSafe() {
+            if (playerReleased) return
+            val dur = player.duration
+            if (dur > 0) {
+                ProfileStore.setProgress(video.id, player.currentPosition.toFloat() / dur)
+            }
+        }
         player.addListener(listener)
         onDispose {
+            saveProgressSafe()
+            playerReleased = true
             player.removeListener(listener)
-            // Guarda el progreso en el perfil actual (para "Continuar viendo")
-            val watched = if (player.duration > 0) {
-                player.currentPosition.toFloat() / player.duration
-            } else {
-                0f
-            }
-            if (watched > 0f) ProfileStore.setProgress(video.id, watched)
+            player.playWhenReady = false
+            player.stop()
+            player.clearVideoSurface()
             player.release()
         }
     }
 
+    var disposedLifecycle by remember(player) { mutableStateOf(false) }
     fun saveProgress() {
-        if (player.duration > 0) {
-            ProfileStore.setProgress(video.id, player.currentPosition.toFloat() / player.duration)
+        if (disposedLifecycle) return
+        val dur = player.duration
+        if (dur > 0) {
+            ProfileStore.setProgress(video.id, player.currentPosition.toFloat() / dur)
         }
     }
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner, player) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_PAUSE) {
-                player.pause()
                 saveProgress()
+                player.pause()
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose {
+            disposedLifecycle = true
             lifecycleOwner.lifecycle.removeObserver(observer)
-            saveProgress()
         }
     }
 
@@ -451,8 +525,8 @@ fun PlayerScreen(
         }
     }
 
-    // Ocultar controles a los 7 s reproduciendo (sin menús ni panel siguiente)
-    LaunchedEffect(controlsVisible, isPlaying, menu, showNextPanel, showInfo) {
+    // Ocultar controles a los 7 s de inactividad mientras reproduce
+    LaunchedEffect(controlsVisible, isPlaying, menu, showNextPanel, showInfo, interactionTick) {
         if (controlsVisible && isPlaying && menu == MenuKind.NONE && showNextPanel == null && !showInfo) {
             delay(7000)
             controlsVisible = false
@@ -468,10 +542,18 @@ fun PlayerScreen(
         }
     }
 
+    LaunchedEffect(seekPreview) {
+        if (seekPreview != null) {
+            delay(1600)
+            seekPreview = null
+        }
+    }
+
     // Cuenta atrás del auto-next (10 s)
-    LaunchedEffect(showNextPanel, SettingsStore.autoNext) {
+    val autoNextEnabled = SettingsStore.autoNext && (ProfileStore.currentProfile?.autoPlayNext != false)
+    LaunchedEffect(showNextPanel, autoNextEnabled) {
         val next = showNextPanel
-        if (next != null && SettingsStore.autoNext) {
+        if (next != null && autoNextEnabled) {
             nextCountdown = 10
             while (nextCountdown > 0) {
                 delay(1000)
@@ -483,16 +565,11 @@ fun PlayerScreen(
         }
     }
 
-    // Consulta los tramos cuando se conoce la duración real: SkipDB/TheIntroDB
-    // la usan para elegir la versión del stream (logo extra, distinto corte…).
     LaunchedEffect(video.id, durationSeconds, SettingsStore.revision) {
         if (!SettingsStore.skipSegmentsEnabled) {
             skipTimeline = SkipTimeline.EMPTY
             return@LaunchedEffect
         }
-        // Una sola consulta por episodio: se espera a conocer la duración
-        // (mejora el ajuste por versión) y solo se consulta sin ella si el
-        // stream no la declara pasado un margen.
         var waited = 0
         while (durationSeconds == 0 && player.duration <= 0 && waited < 12_000) {
             delay(1_000)
@@ -504,16 +581,22 @@ fun PlayerScreen(
         }.getOrDefault(SkipTimeline.EMPTY)
     }
 
-    // Salto automático solo para los tipos que el usuario activó en Ajustes.
-    LaunchedEffect(activeSkip, SettingsStore.autoSkipKinds) {
-        val segment = activeSkip ?: return@LaunchedEffect
-        if (segment.kind.name !in SettingsStore.autoSkipKinds) return@LaunchedEffect
-        if (segment.uncertain) return@LaunchedEffect // dato dudoso: mejor botón
-        val key = "${segment.kind}:${segment.startMs}"
-        if (autoSkipped.add(key)) skipSegment(segment)
+    LaunchedEffect(activeSkip) {
+        if (activeSkip == null) dismissedSkipKey = null
     }
 
-    // Temporizador de apagado
+    LaunchedEffect(visibleSkip) {
+        if (visibleSkip == null) skipButtonFocused = false
+    }
+
+    LaunchedEffect(activeSkip, SettingsStore.autoSkipKinds, durationMs) {
+        val segment = activeSkip ?: return@LaunchedEffect
+        if (segment.kind.name !in SettingsStore.autoSkipKinds) return@LaunchedEffect
+        if (segment.uncertain) return@LaunchedEffect
+        val key = "${segment.kind}:${segment.startMs}"
+        if (autoSkipped.add(key)) skipSegment(segment, fromAuto = true)
+    }
+
     LaunchedEffect(sleepDeadline) {
         val deadline = sleepDeadline
         if (deadline == null) {
@@ -531,31 +614,63 @@ fun PlayerScreen(
         sleepDeadline = null
     }
 
-    // Gestión de foco: al mostrar controles → botón de play; al ocultar → raíz
-    LaunchedEffect(controlsVisible, menu, hasError, showNextPanel, activeSkip) {
-        withFrameNanos { }
-        runCatching {
-            when {
-                hasError != null -> retryFocus.requestFocus()
-                showNextPanel != null -> cancelNextFocus.requestFocus()
-                activeSkip != null -> skipFocus.requestFocus()
-                !controlsVisible -> rootFocus.requestFocus()
-                menu == MenuKind.NONE -> playFocus.requestFocus()
+    if (menu != MenuKind.NONE) {
+        lastOpenedMenu = menu
+    }
+
+    fun pillRequesterFor(kind: MenuKind): FocusRequester? = when (kind) {
+        MenuKind.SERVER -> serverPillFocus
+        MenuKind.QUALITY -> qualityPillFocus
+        MenuKind.AUDIO -> audioPillFocus
+        MenuKind.SUBTITLES -> subtitlesPillFocus
+        MenuKind.ASPECT -> aspectPillFocus
+        MenuKind.SPEED -> speedPillFocus
+        MenuKind.SLEEP -> sleepPillFocus
+        MenuKind.NONE -> null
+    }
+
+    // Gestión de foco: respeta menús abiertos y restaura el foco a la píldora que abrió el menú
+    LaunchedEffect(controlsVisible, menu, hasError, showNextPanel, showSkipOverlay) {
+        val closedMenu = previousMenu != MenuKind.NONE && menu == MenuKind.NONE
+        val controlsJustShown = !previousControlsVisible && controlsVisible
+        val clearedOverlay =
+            (previousHasError != null && hasError == null) ||
+                (previousShowNext != null && showNextPanel == null)
+        val skipDisappeared = previousShowSkip && !showSkipOverlay && skipButtonFocused
+        previousMenu = menu
+        previousControlsVisible = controlsVisible
+        previousHasError = hasError
+        previousShowNext = showNextPanel
+        previousShowSkip = showSkipOverlay
+        for (attempt in 0 until 5) {
+            withFrameNanos { }
+            val target = when {
+                hasError != null -> retryFocus
+                showNextPanel != null -> cancelNextFocus
+                !controlsVisible && showSkipOverlay -> skipFocus
+                !controlsVisible -> rootFocus
+                menu != MenuKind.NONE -> null
+                closedMenu -> pillRequesterFor(lastOpenedMenu) ?: playFocus
+                controlsJustShown || clearedOverlay || skipDisappeared -> playFocus
+                else -> null
             }
+            if (target == null) return@LaunchedEffect
+            if (runCatching { target.requestFocus() }.isSuccess) return@LaunchedEffect
         }
     }
 
-    BackHandler {
+    fun handleBackAction() {
         when {
             showNextPanel != null -> showNextPanel = null
             menu != MenuKind.NONE -> menu = MenuKind.NONE
-            controlsVisible -> {
-                controlsVisible = false
-                showInfo = false
-            }
+            showInfo -> showInfo = false
+            controlsVisible -> controlsVisible = false
+            visibleSkip != null -> dismissedSkipKey = "${visibleSkip.kind}:${visibleSkip.startMs}"
             else -> onBack()
         }
     }
+
+    BackHandler { handleBackAction() }
 
     // ---------------- Opciones de pistas y ajustes ----------------
 
@@ -679,54 +794,119 @@ fun PlayerScreen(
 
     // ---------------- Interfaz ----------------
 
-    Box(
+    BoxWithConstraints(
         Modifier
             .fillMaxSize()
             .background(Color.Black)
             .focusRequester(rootFocus)
+            .focusProperties {
+                canFocus = !controlsVisible && hasError == null && showNextPanel == null
+            }
             .focusable()
+            .consumeStrayConfirmKeyUp(rootConfirmGuard)
             .onPreviewKeyEvent { event ->
                 if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
-                fun seekBy(delta: Long) {
-                    if (player.duration > 0) {
-                        player.seekTo((player.currentPosition + delta).coerceIn(0, player.duration))
-                        controlsVisible = true
+                if (controlsVisible) interactionTick++
+
+                val native = event.nativeKeyEvent
+                val code = native.keyCode
+                if (hasError != null) {
+                    return@onPreviewKeyEvent if (code == TvKeyCodes.KEYCODE_ESCAPE) {
+                        handleBackAction()
+                        true
+                    } else {
+                        false
                     }
                 }
-                when (event.key) {
-                    Key.MediaPlayPause -> {
+                when {
+                    code == TvKeyCodes.KEYCODE_MEDIA_PLAY_PAUSE -> {
                         if (player.isPlaying) player.pause() else player.play()
                         true
                     }
-                    Key.MediaPlay -> { player.play(); true }
-                    Key.MediaPause, Key.MediaStop -> { player.pause(); true }
-                    Key.MediaRewind -> { seekBy(-10_000); true }
-                    Key.MediaFastForward -> { seekBy(10_000); true }
-                    Key.DirectionCenter, Key.Enter, Key.NumPadEnter, Key.Spacebar -> {
+                    code == TvKeyCodes.KEYCODE_MEDIA_PLAY -> {
+                        player.play()
+                        true
+                    }
+                    code == TvKeyCodes.KEYCODE_MEDIA_PAUSE || code == TvKeyCodes.KEYCODE_MEDIA_STOP -> {
+                        player.pause()
+                        true
+                    }
+                    TvKeyCodes.isRewindKey(code) -> {
+                        seekBy(-PlayerScrubRates.seekStepMs(native.repeatCount), showPreview = !controlsVisible)
+                        true
+                    }
+                    TvKeyCodes.isFastForwardKey(code) -> {
+                        seekBy(PlayerScrubRates.seekStepMs(native.repeatCount), showPreview = !controlsVisible)
+                        true
+                    }
+                    code == TvKeyCodes.KEYCODE_MEDIA_NEXT -> {
+                        when {
+                            nextVideo != null -> onPlayNext(nextVideo)
+                            visibleSkip != null -> skipSegment(visibleSkip)
+                        }
+                        true
+                    }
+                    code == TvKeyCodes.KEYCODE_MEDIA_PREVIOUS -> {
+                        player.seekTo(0)
+                        positionMs = 0L
+                        true
+                    }
+                    code == TvKeyCodes.KEYCODE_CAPTIONS -> {
+                        controlsVisible = true
+                        showInfo = false
+                        menu = if (menu == MenuKind.SUBTITLES) MenuKind.NONE else MenuKind.SUBTITLES
+                        true
+                    }
+                    code == TvKeyCodes.KEYCODE_MEDIA_AUDIO_TRACK -> {
+                        controlsVisible = true
+                        showInfo = false
+                        menu = if (menu == MenuKind.AUDIO) MenuKind.NONE else MenuKind.AUDIO
+                        true
+                    }
+                    code == TvKeyCodes.KEYCODE_INFO -> {
+                        controlsVisible = true
+                        menu = MenuKind.NONE
+                        showInfo = !showInfo
+                        true
+                    }
+                    code == TvKeyCodes.KEYCODE_SPACE -> {
+                        if (player.isPlaying) player.pause() else player.play()
+                        true
+                    }
+                    code == TvKeyCodes.KEYCODE_ESCAPE -> {
+                        handleBackAction()
+                        true
+                    }
+                    TvKeyCodes.isConfirm(code) -> {
                         if (!controlsVisible) {
-                            controlsVisible = true
+                            if (skipButtonFocused && visibleSkip != null) {
+                                false // deja que OK pulse el botón «Saltar»
+                            } else {
+                                rootConfirmGuard.armSuppressNextKeyUp()
+                                controlsVisible = true
+                                true
+                            }
+                        } else {
+                            false
+                        }
+                    }
+                    TvKeyCodes.isLeft(code) -> {
+                        if (!controlsVisible) {
+                            seekBy(-PlayerScrubRates.seekStepMs(native.repeatCount), showPreview = true)
                             true
                         } else {
                             false
                         }
                     }
-                    Key.DirectionLeft -> {
+                    TvKeyCodes.isRight(code) -> {
                         if (!controlsVisible) {
-                            seekBy(-10_000)
+                            seekBy(PlayerScrubRates.seekStepMs(native.repeatCount), showPreview = true)
                             true
                         } else {
                             false
                         }
                     }
-                    Key.DirectionRight -> {
-                        if (!controlsVisible) {
-                            seekBy(10_000)
-                            true
-                        } else {
-                            false
-                        }
-                    }
-                    Key.DirectionUp, Key.DirectionDown -> {
+                    TvKeyCodes.isUp(code) || TvKeyCodes.isDown(code) -> {
                         if (!controlsVisible) {
                             controlsVisible = true
                             true
@@ -738,6 +918,14 @@ fun PlayerScreen(
                 }
             }
     ) {
+        val containerRatio = if (maxHeight > 0.dp) maxWidth.value / maxHeight.value else (16f / 9f)
+        val videoModifier = when {
+            aspectMode.ratio <= 0f -> Modifier.fillMaxSize()
+            aspectMode.ratio < containerRatio ->
+                Modifier.align(Alignment.Center).fillMaxHeight().aspectRatio(aspectMode.ratio)
+            else ->
+                Modifier.align(Alignment.Center).fillMaxWidth().aspectRatio(aspectMode.ratio)
+        }
         AndroidView(
             factory = { ctx ->
                 PlayerView(ctx).apply {
@@ -745,27 +933,18 @@ fun PlayerScreen(
                     useController = false
                     setKeepContentOnPlayerReset(true)
                     descendantFocusability = android.view.ViewGroup.FOCUS_BLOCK_DESCENDANTS
-                    // La vista de vídeo no debe quedarse el foco del D-pad: los
-                    // controles (y el Box raíz) son quienes lo manejan.
                     isFocusable = false
                     isFocusableInTouchMode = false
+                    isClickable = false
+                    isLongClickable = false
                 }
             },
             update = { view ->
                 view.player = player
                 view.resizeMode = aspectMode.resizeMode
-                // Only active video keeps the TV awake, not browsing or a paused player.
-                view.keepScreenOn = isPlaying
+                view.keepScreenOn = (isPlaying || isBuffering) && hasError == null
             },
-            // Las relaciones fijas (16:9, 4:3, 21:9) recortan con aspectRatio;
-            // los modos Ajustar/Llenar/Zoom dejan la relación natural del vídeo.
-            modifier = if (aspectMode.ratio > 0f) {
-                Modifier
-                    .fillMaxWidth()
-                    .aspectRatio(aspectMode.ratio)
-            } else {
-                Modifier.fillMaxSize()
-            }
+            modifier = videoModifier
         )
 
         // Botón central grande al pausar (como Xuper TV)
@@ -789,7 +968,26 @@ fun PlayerScreen(
             ) {
                 LoadingSpinner()
                 Spacer(Modifier.height(14.dp))
-                Text("Cargando…", style = fontSize15(), color = TextSecondary)
+                Text("Cargando…", style = AppType.metadata, color = TextSecondary)
+            }
+        }
+
+        // Indicador compacto de salto rápido (con controles ocultos)
+        AnimatedVisibility(
+            visible = seekPreview != null && !controlsVisible && hasError == null,
+            enter = fadeIn(),
+            exit = fadeOut(),
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = 48.dp)
+        ) {
+            GlassPanel(cornerRadius = 999.dp) {
+                Text(
+                    text = seekPreview.orEmpty(),
+                    style = AppType.controlLabel,
+                    color = Color.White,
+                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 12.dp)
+                )
             }
         }
 
@@ -816,23 +1014,26 @@ fun PlayerScreen(
                     Modifier.padding(28.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Text("No se pudo reproducir el vídeo", style = fontSize20(), color = Color.White)
+                    Text("No se pudo reproducir el vídeo", style = AppType.body, color = Color.White)
                     Spacer(Modifier.height(8.dp))
-                    Text(hasError ?: "", style = fontSize13(), color = TextSecondary)
+                    Text(hasError ?: "", style = AppType.metadata, color = TextSecondary)
                     Spacer(Modifier.height(8.dp))
                     Text(
                         PlaybackDiagnostics.current()?.advice ?: "Revisa el diagnóstico en Ajustes",
-                        style = fontSize13(), color = TextSecondary
+                        style = AppType.metadata, color = TextSecondary
                     )
                     if (bridgeBusy || bridgeMessage != null) {
                         Spacer(Modifier.height(8.dp))
                         Text(
                             if (bridgeBusy) "Convirtiendo en el puente externo…" else bridgeMessage.orEmpty(),
-                            style = fontSize13(), color = LiveAccent
+                            style = AppType.metadata, color = LiveAccent
                         )
                     }
                     Spacer(Modifier.height(22.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                    Row(
+                        Modifier.focusGroup(),
+                        horizontalArrangement = Arrangement.spacedBy(14.dp)
+                    ) {
                         PillButton(
                             text = if (bridgeBusy) "Convirtiendo…" else "Reintentar",
                             iconRes = R.drawable.ic_server,
@@ -856,20 +1057,37 @@ fun PlayerScreen(
             }
         }
 
-        // Botón de salto: visible aunque los controles estén ocultos, como en
-        // cualquier reproductor de TV. Recibe el foco para que OK del mando salte.
+        // Botón de salto: esquina inferior derecha con controles ocultos, o sobre la barra cuando están abiertos
         AnimatedVisibility(
-            visible = activeSkip != null && hasError == null && showNextPanel == null,
+            visible = showSkipOverlay,
             enter = fadeIn(),
             exit = fadeOut(),
-            modifier = Modifier.align(Alignment.BottomEnd).padding(end = 48.dp, bottom = 150.dp)
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(end = AppSpacing.screenMargin, bottom = if (controlsVisible) 248.dp else 52.dp)
         ) {
-            activeSkip?.let { segment ->
+            visibleSkip?.let { segment ->
+                val isTailNext = segment.kind == SkipKind.CREDITS &&
+                    skipTimeline.isTailSegment(segment, durationMs) &&
+                    nextVideo != null &&
+                    '~' in video.id
+                val skipLabel = when {
+                    isTailNext -> "Siguiente episodio"
+                    segment.uncertain -> "Saltar ${segment.kind.label} (?)"
+                    else -> "Saltar ${segment.kind.label}"
+                }
                 ControlPill(
                     iconRes = R.drawable.ic_skip_next,
-                    label = if (segment.uncertain) "Saltar ${segment.kind.label} (?)" else "Saltar ${segment.kind.label}",
+                    label = skipLabel,
                     onClick = { skipSegment(segment) },
-                    modifier = Modifier.focusRequester(skipFocus),
+                    onFocusChanged = { skipButtonFocused = it },
+                    maxWidth = 260.dp,
+                    modifier = Modifier
+                        .focusRequester(skipFocus)
+                        .then(
+                            if (controlsVisible) Modifier.focusProperties { down = seekBarFocus }
+                            else Modifier
+                        ),
                     active = true
                 )
             }
@@ -883,7 +1101,7 @@ fun PlayerScreen(
             modifier = Modifier.fillMaxSize()
         ) {
             Column(Modifier.fillMaxSize()) {
-                // Cabecera: volver, título, franja EPG y reloj
+                // Cabecera: volver, título, franja informativa y reloj
                 Row(
                     Modifier
                         .fillMaxWidth()
@@ -893,7 +1111,7 @@ fun PlayerScreen(
                                 1f to Color.Transparent
                             )
                         )
-                        .padding(horizontal = 48.dp, vertical = 24.dp),
+                        .padding(horizontal = AppSpacing.screenMargin, vertical = 24.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     TransportButton(
@@ -907,7 +1125,7 @@ fun PlayerScreen(
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(
                                 video.title,
-                                style = fontSize22(),
+                                style = AppType.sectionTitle,
                                 color = Color.White,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
@@ -917,32 +1135,30 @@ fun PlayerScreen(
                             InfoChip(video.quality)
                             Spacer(Modifier.width(8.dp))
                             InfoChip(when (sources.getOrNull(serverIndex)?.format ?: video.streamFormat) {
-                                    StreamFormat.HLS -> "HLS"
-                                    StreamFormat.DASH -> "DASH"
-                                    StreamFormat.MP4 -> "MP4"
-                                })
+                                StreamFormat.HLS -> "HLS"
+                                StreamFormat.DASH -> "DASH"
+                                StreamFormat.MP4 -> "MP4"
+                            })
                             if (speed != 1f) {
                                 Spacer(Modifier.width(8.dp))
                                 InfoChip(SettingsStore.speedLabel(speed))
                             }
                         }
                         Spacer(Modifier.height(8.dp))
-                        // Franja informativa del vídeo y del siguiente título/episodio.
-                        // No es una guía EPG: no hay datos XMLTV ni horarios de emisión.
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             EpgChip("REPRODUCIENDO", LiveAccent)
                             Spacer(Modifier.width(8.dp))
-                            Text(video.title, style = fontSize13(), color = TextPrimary)
+                            Text(video.title, style = AppType.metadata, color = TextPrimary)
                             nextVideo?.let {
                                 Spacer(Modifier.width(16.dp))
                                 EpgChip(if ('~' in video.id) "SIGUIENTE" else "RELACIONADO", TextMuted)
                                 Spacer(Modifier.width(8.dp))
-                                Text(it.title, style = fontSize13(), color = TextSecondary)
+                                Text(it.title, style = AppType.metadata, color = TextSecondary)
                             }
                         }
                     }
                     Spacer(Modifier.weight(1f))
-                    Text(clock, style = fontSize20(), color = Color.White)
+                    Text(clock, style = AppType.body, color = Color.White)
                 }
 
                 Spacer(Modifier.weight(1f))
@@ -952,11 +1168,11 @@ fun PlayerScreen(
                     GlassPanel(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 48.dp, vertical = 8.dp)
+                            .padding(horizontal = AppSpacing.screenMargin, vertical = 8.dp)
                     ) {
                         Row(Modifier.padding(20.dp)) {
                             AsyncImage(
-                                model = video.cardUrl,
+                                model = video.backdropUrl.ifBlank { video.cardUrl },
                                 contentDescription = null,
                                 contentScale = ContentScale.Crop,
                                 modifier = Modifier
@@ -966,13 +1182,13 @@ fun PlayerScreen(
                             )
                             Spacer(Modifier.width(20.dp))
                             Column {
-                                Text(video.title, style = fontSize20(), color = Color.White)
+                                Text(video.title, style = AppType.body, color = Color.White)
                                 Spacer(Modifier.height(6.dp))
                                 MetaLine(video)
                                 Spacer(Modifier.height(8.dp))
                                 Text(
                                     video.description,
-                                    style = fontSize13(),
+                                    style = AppType.metadata,
                                     color = TextSecondary,
                                     maxLines = 2,
                                     overflow = TextOverflow.Ellipsis,
@@ -994,14 +1210,14 @@ fun PlayerScreen(
                     Row(
                         Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 48.dp, vertical = 8.dp),
+                            .padding(horizontal = AppSpacing.screenMargin, vertical = 8.dp),
                         horizontalArrangement = Arrangement.End
                     ) {
                         GlassPanel(Modifier.width(540.dp)) {
                             Column(Modifier.padding(20.dp)) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     AsyncImage(
-                                        model = next.cardUrl,
+                                        model = next.backdropUrl.ifBlank { next.cardUrl },
                                         contentDescription = null,
                                         contentScale = ContentScale.Crop,
                                         modifier = Modifier
@@ -1015,22 +1231,25 @@ fun PlayerScreen(
                                         Spacer(Modifier.height(6.dp))
                                         Text(
                                             next.title,
-                                            style = fontSize17(),
+                                            style = AppType.body,
                                             color = Color.White,
                                             maxLines = 1,
                                             overflow = TextOverflow.Ellipsis
                                         )
                                         Spacer(Modifier.height(4.dp))
                                         Text(
-                                            if (SettingsStore.autoNext) "Empieza en $nextCountdown s"
+                                            if (autoNextEnabled) "Empieza en $nextCountdown s"
                                             else "Listo para reproducir",
-                                            style = fontSize13(),
+                                            style = AppType.metadata,
                                             color = TextSecondary
                                         )
                                     }
                                 }
                                 Spacer(Modifier.height(16.dp))
-                                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                Row(
+                                    Modifier.focusGroup(),
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                ) {
                                     PillButton(
                                         text = "Reproducir ahora",
                                         iconRes = R.drawable.ic_play,
@@ -1058,7 +1277,7 @@ fun PlayerScreen(
                     Row(
                         Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 48.dp, vertical = 8.dp),
+                            .padding(horizontal = AppSpacing.screenMargin, vertical = 8.dp),
                         horizontalArrangement = Arrangement.End
                     ) {
                         when (menu) {
@@ -1074,8 +1293,7 @@ fun PlayerScreen(
                     }
                 }
 
-                // El panel siguiente sustituye al transporte: no apilamos
-                // dos interfaces foco-solicitantes en un lienzo de 540 dp.
+                // Controles inferiores (barra de progreso enfocable + transporte + ajustes)
                 if (showNextPanel == null) Column(
                     Modifier
                         .fillMaxWidth()
@@ -1085,12 +1303,31 @@ fun PlayerScreen(
                                 1f to Color.Black.copy(alpha = 0.88f)
                             )
                         )
-                        .padding(horizontal = 48.dp, vertical = 24.dp)
+                        .padding(horizontal = AppSpacing.screenMargin, vertical = 24.dp)
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(formatTime(positionMs), style = AppType.playerTime, color = TextSecondary)
                         Spacer(Modifier.width(16.dp))
-                        SeekBar(positionMs, durationMs, bufferedMs, Modifier.weight(1f))
+                        SeekBar(
+                            positionMs = positionMs,
+                            durationMs = durationMs,
+                            bufferedMs = bufferedMs,
+                            skipSegments = skipTimeline.segments,
+                            modifier = Modifier
+                                .weight(1f)
+                                .focusRequester(seekBarFocus)
+                                .then(
+                                    if (showSkipOverlay) Modifier.focusProperties { up = skipFocus }
+                                    else Modifier
+                                ),
+                            onSeekBy = { delta, _ ->
+                                seekBy(delta, showPreview = false)
+                                interactionTick++
+                            },
+                            onConfirm = {
+                                if (player.isPlaying) player.pause() else player.play()
+                            }
+                        )
                         Spacer(Modifier.width(16.dp))
                         Text(
                             if (durationMs > 0) "-${formatTime(durationMs - positionMs)}" else "--:--",
@@ -1100,14 +1337,14 @@ fun PlayerScreen(
                     }
                     Spacer(Modifier.height(12.dp))
                     Row(
-                        Modifier.fillMaxWidth(),
+                        Modifier.fillMaxWidth().focusGroup(),
                         horizontalArrangement = Arrangement.spacedBy(12.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         TransportButton(
                             iconRes = R.drawable.ic_rewind,
                             contentDescription = "Retroceder 10 segundos",
-                            onClick = { player.seekTo((player.currentPosition - 10_000).coerceAtLeast(0)) }
+                            onClick = { seekBy(-10_000L, showPreview = false) }
                         )
                         TransportButton(
                             iconRes = if (isPlaying) R.drawable.ic_pause else R.drawable.ic_play,
@@ -1120,7 +1357,7 @@ fun PlayerScreen(
                         TransportButton(
                             iconRes = R.drawable.ic_forward,
                             contentDescription = "Avanzar 10 segundos",
-                            onClick = { player.seekTo(player.currentPosition + 10_000) }
+                            onClick = { seekBy(10_000L, showPreview = false) }
                         )
                         if (nextVideo != null) {
                             TransportButton(
@@ -1131,53 +1368,108 @@ fun PlayerScreen(
                         }
                     }
                     Spacer(Modifier.height(12.dp))
-                    // En 960 dp no caben ocho píldoras más el transporte.
-                    // La fila desplazable mantiene todos los ajustes alcanzables.
                     LazyRow(
-                        modifier = Modifier.fillMaxWidth().height(64.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(64.dp)
+                            .focusGroup()
+                            .focusRestorer(),
+                        contentPadding = PaddingValues(horizontal = 8.dp),
                         horizontalArrangement = Arrangement.spacedBy(10.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        item { ControlPill(R.drawable.ic_server, sources[serverIndex].label,
-                            active = menu == MenuKind.SERVER,
-                            onClick = { showInfo = false; menu = if (menu == MenuKind.SERVER) MenuKind.NONE else MenuKind.SERVER }) }
-                        item { ControlPill(R.drawable.ic_quality, qualityLabel,
-                            active = menu == MenuKind.QUALITY,
-                            onClick = { showInfo = false; menu = if (menu == MenuKind.QUALITY) MenuKind.NONE else MenuKind.QUALITY }) }
-                        item { ControlPill(R.drawable.ic_audio, "Audio",
-                            active = menu == MenuKind.AUDIO,
-                            onClick = { showInfo = false; menu = if (menu == MenuKind.AUDIO) MenuKind.NONE else MenuKind.AUDIO }) }
-                        item { ControlPill(R.drawable.ic_subtitles, "Subtítulos",
-                            active = subtitlesOn || menu == MenuKind.SUBTITLES,
-                            onClick = { showInfo = false; menu = if (menu == MenuKind.SUBTITLES) MenuKind.NONE else MenuKind.SUBTITLES }) }
-                        item { ControlPill(R.drawable.ic_aspect, aspectMode.label,
-                            active = menu == MenuKind.ASPECT,
-                            onClick = { showInfo = false; menu = if (menu == MenuKind.ASPECT) MenuKind.NONE else MenuKind.ASPECT }) }
-                        item { ControlPill(R.drawable.ic_quality, SettingsStore.speedLabel(speed),
-                            active = menu == MenuKind.SPEED,
-                            onClick = { showInfo = false; menu = if (menu == MenuKind.SPEED) MenuKind.NONE else MenuKind.SPEED }) }
-                        item { ControlPill(R.drawable.ic_server, sleepLabel,
-                            active = sleepDeadline != null || menu == MenuKind.SLEEP,
-                            onClick = { showInfo = false; menu = if (menu == MenuKind.SLEEP) MenuKind.NONE else MenuKind.SLEEP }) }
-                        item { ControlPill(R.drawable.ic_info, "Info",
-                            active = showInfo,
-                            onClick = { menu = MenuKind.NONE; showInfo = !showInfo }) }
+                        item {
+                            ControlPill(
+                                iconRes = R.drawable.ic_server,
+                                label = sources[serverIndex].label,
+                                active = menu == MenuKind.SERVER,
+                                modifier = Modifier.focusRequester(serverPillFocus),
+                                onClick = { showInfo = false; menu = if (menu == MenuKind.SERVER) MenuKind.NONE else MenuKind.SERVER }
+                            )
+                        }
+                        item {
+                            ControlPill(
+                                iconRes = R.drawable.ic_quality,
+                                label = qualityLabel,
+                                active = menu == MenuKind.QUALITY,
+                                modifier = Modifier.focusRequester(qualityPillFocus),
+                                onClick = { showInfo = false; menu = if (menu == MenuKind.QUALITY) MenuKind.NONE else MenuKind.QUALITY }
+                            )
+                        }
+                        item {
+                            ControlPill(
+                                iconRes = R.drawable.ic_audio,
+                                label = "Audio",
+                                active = menu == MenuKind.AUDIO,
+                                modifier = Modifier.focusRequester(audioPillFocus),
+                                onClick = { showInfo = false; menu = if (menu == MenuKind.AUDIO) MenuKind.NONE else MenuKind.AUDIO }
+                            )
+                        }
+                        item {
+                            ControlPill(
+                                iconRes = R.drawable.ic_subtitles,
+                                label = "Subtítulos",
+                                active = subtitlesOn || menu == MenuKind.SUBTITLES,
+                                modifier = Modifier.focusRequester(subtitlesPillFocus),
+                                onClick = { showInfo = false; menu = if (menu == MenuKind.SUBTITLES) MenuKind.NONE else MenuKind.SUBTITLES }
+                            )
+                        }
+                        item {
+                            ControlPill(
+                                iconRes = R.drawable.ic_aspect,
+                                label = aspectMode.label,
+                                active = menu == MenuKind.ASPECT,
+                                modifier = Modifier.focusRequester(aspectPillFocus),
+                                onClick = { showInfo = false; menu = if (menu == MenuKind.ASPECT) MenuKind.NONE else MenuKind.ASPECT }
+                            )
+                        }
+                        item {
+                            ControlPill(
+                                iconRes = R.drawable.ic_quality,
+                                label = SettingsStore.speedLabel(speed),
+                                active = menu == MenuKind.SPEED,
+                                modifier = Modifier.focusRequester(speedPillFocus),
+                                onClick = { showInfo = false; menu = if (menu == MenuKind.SPEED) MenuKind.NONE else MenuKind.SPEED }
+                            )
+                        }
+                        item {
+                            ControlPill(
+                                iconRes = R.drawable.ic_server,
+                                label = sleepLabel,
+                                active = sleepDeadline != null || menu == MenuKind.SLEEP,
+                                modifier = Modifier.focusRequester(sleepPillFocus),
+                                onClick = { showInfo = false; menu = if (menu == MenuKind.SLEEP) MenuKind.NONE else MenuKind.SLEEP }
+                            )
+                        }
+                        item {
+                            ControlPill(
+                                iconRes = R.drawable.ic_info,
+                                label = "Info",
+                                active = showInfo,
+                                onClick = { menu = MenuKind.NONE; showInfo = !showInfo }
+                            )
+                        }
+                        val introEstimateMs = skipTimeline.introEstimateMs
+                        if (visibleSkip == null && introEstimateMs != null && positionMs < 360_000L) {
+                            item {
+                                val estSec = (introEstimateMs / 1000L).coerceAtLeast(5L)
+                                ControlPill(
+                                    iconRes = R.drawable.ic_skip_next,
+                                    label = "Intro ~$estSec s",
+                                    onClick = {
+                                        val total = player.duration.takeIf { it > 0 } ?: durationMs
+                                        val target = (player.currentPosition + introEstimateMs)
+                                            .let { if (total > 0) minOf(it, total) else it }
+                                        player.seekTo(target)
+                                        positionMs = target
+                                        toast = "Avance de intro estimado (+$estSec s)"
+                                    }
+                                )
+                            }
+                        }
                     }
                 }
             }
         }
     }
 }
-
-/* -------------------------------------------------------------------------- */
-/*  Estilos tipográficos                                                        */
-/* -------------------------------------------------------------------------- */
-
-// El reproductor tenía sus propios tamaños (26/24/21/19/18 sp) al margen del
-// tema, así que cualquier ajuste de la escala se olvidaba de esta pantalla.
-// Ahora usa `AppType`, igual que el resto de la app.
-private fun fontSize22() = AppType.sectionTitle   // títulos destacados
-private fun fontSize20() = AppType.body           // texto principal
-private fun fontSize17() = AppType.body           // títulos de las fichas
-private fun fontSize15() = AppType.metadata       // avisos y estados
-private fun fontSize13() = AppType.metadata       // pies y segundas líneas

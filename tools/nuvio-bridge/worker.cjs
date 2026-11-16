@@ -27,8 +27,19 @@ const path = require('node:path');
   if (!tmdbId) throw new Error('Falta tmdbId o imdbId');
   const streams = await getStreams(tmdbId, workerData.type, e.season ?? null, e.episode ?? null);
   const result = (Array.isArray(streams) ? streams : [])
-    .filter(s => s && typeof s.url === 'string' && /^https?:\/\//.test(s.url))
-    .map(s => ({ name: s.name || s.provider || 'Nuvio', title: s.title || '', url: s.url,
-      quality: s.quality || '', headers: s.headers || {}, subtitles: s.subtitles || [] }));
+    .map(s => {
+      if (!s || typeof s !== 'object') return null;
+      const url = typeof s.url === 'string' ? s.url : (typeof s.file === 'string' ? s.file : (typeof s.link === 'string' ? s.link : ''));
+      if (!/^https?:\/\//.test(url)) return null;
+      return {
+        name: s.name || s.provider || 'Nuvio',
+        title: s.title || '',
+        url,
+        quality: s.quality || '',
+        headers: s.headers || {},
+        subtitles: Array.isArray(s.subtitles) ? s.subtitles : []
+      };
+    })
+    .filter(Boolean);
   parentPort.postMessage({ streams: result });
 })().catch(e => parentPort.postMessage({ error: String(e.message || e).slice(0, 300), streams: [] }));

@@ -48,19 +48,32 @@ export function parseInfo(output) {
 }
 export function parseLinks(output) {
   const streams = []; let current = null;
+  const subs = [];
   for (const line of output.split(/\r?\n/)) {
     const head = line.match(/^\s*\d+\.\s+\[([^\]]*)\]\s+(.*?)\s+\(([^)]*)\)\s*$/);
     if (head) { current = { quality: head[1] === '?' ? '' : head[1], name: head[2], kind: head[3] }; continue; }
+    const subMatch = line.match(/^\s*sub:\s*[^\t]*\t(https?:\/\/\S+)\s*$/i);
+    if (subMatch) { subs.push(subMatch[1].trim()); continue; }
     const url = line.trim();
     if (current && /^https?:\/\//.test(url)) { streams.push({ ...current, url }); current = null; }
+  }
+  if (subs.length && streams.length) {
+    streams[0].subtitles = [...new Set(subs)];
   }
   return streams;
 }
 export function chooseResult(results, body) {
-  const wanted = norm(body.title);
+  const cleanTitle = s => norm(String(s || '').replace(/\s*\((?:19|20)\d{2}\)\s*$/, ''));
+  const wanted = cleanTitle(body.title);
   const kind = body.type === 'series' ? /tv|series|show|anime/i : /movie|film/i;
-  return results.filter(r => norm(r.title) === wanted && (!r.kind || r.kind === '?' || kind.test(r.kind)))
-    [0] || null;
+  const matching = results.filter(r => cleanTitle(r.title) === wanted && (!r.kind || r.kind === '?' || kind.test(r.kind)));
+  if (!matching.length) return null;
+  if (body.year) {
+    const y = String(body.year);
+    const byYear = matching.find(r => String(r.title).includes(y));
+    if (byYear) return byYear;
+  }
+  return matching[0];
 }
 export function choosePlayable(items, body) {
   if (body.type !== 'series' || body.season == null || body.episode == null) return items[0] || null;

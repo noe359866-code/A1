@@ -183,4 +183,73 @@ class SkipSegmentsTest {
         assertEquals(SkipKind.CREDITS, timeline.activeAt(1_750_000)!!.kind)
         assertEquals(1_800_000L, timeline.activeAt(1_750_000)!!.targetMs(1_800_000))
     }
+
+    @Test
+    fun `SkipTarget conserva ids combinados tmdb mas imdb y mal para anime`() {
+        val fromPlatform = Video(
+            id = "tmdb:940721", title = "Peli", description = "", backdropUrl = "", cardUrl = "",
+            year = 2023, durationMinutes = 120, rating = 0.0, certification = "", quality = "",
+            genres = emptyList(), videoUrl = "", type = VideoType.MOVIE, remoteType = "movie",
+            streamId = "tt23289160"
+        )
+        val combined = SkipTarget.from(fromPlatform)!!
+        assertEquals("tt23289160", combined.imdbId)
+        assertEquals("940721", combined.tmdbId)
+        assertFalse(combined.isEpisode)
+
+        val animeEpisode = episode("tt0409591:1:12").copy(id = "mal:20~s1e12", type = VideoType.ANIME)
+        val animeTarget = SkipTarget.from(animeEpisode)!!
+        assertEquals("tt0409591", animeTarget.imdbId)
+        assertEquals("20", animeTarget.malId)
+        assertEquals(1, animeTarget.season)
+        assertEquals(12, animeTarget.episode)
+
+        val malOnly = episode("mal:5114:1:3").copy(id = "mal:5114~s1e3", type = VideoType.ANIME)
+        val malTarget = SkipTarget.from(malOnly)!!
+        assertNull(malTarget.imdbId)
+        assertEquals("5114", malTarget.malId)
+        assertEquals(1, malTarget.season)
+        assertEquals(3, malTarget.episode)
+    }
+
+    @Test
+    fun `AniSkip lee op, ed y recap y construye su peticion con malId`() {
+        val target = SkipTarget(null, null, 1, 5, malId = "5114")
+        val (url, headers) = SkipSegmentService.buildRequest(SkipSegmentParser.SOURCE_ANISKIP, target, true, 1440)!!
+        assertTrue(url.startsWith("https://api.aniskip.com/v2/skip-times/5114/5?"))
+        assertTrue(url.contains("episodeLength=1440"))
+        assertTrue(headers.isEmpty())
+
+        assertNull(SkipSegmentService.buildRequest(SkipSegmentParser.SOURCE_ANISKIP, SkipTarget("tt0903747", null, 1, 1), true, 0))
+
+        val json = JSONObject("""{
+            "found": true,
+            "results": [
+                {"skipType": "op", "interval": {"startTime": 89.5, "endTime": 179.5}},
+                {"skipType": "recap", "interval": {"startTime": 12.0, "endTime": 42.0}},
+                {"skipType": "ed", "interval": {"startTime": 1320.0, "endTime": 1445.0}}
+            ]
+        }""")
+        val segments = SkipSegmentParser.aniSkip(json, 1_440_000)
+        assertEquals(3, segments.size)
+        assertEquals(89_500L, segments.first { it.kind == SkipKind.INTRO }.startMs)
+        assertEquals(42_000L, segments.first { it.kind == SkipKind.RECAP }.endMs)
+        assertEquals(1_440_000L, segments.first { it.kind == SkipKind.CREDITS }.endMs)
+
+        val emptyJson = JSONObject("""{"found": false, "results": []}""")
+        assertTrue(SkipSegmentParser.aniSkip(emptyJson, 1_440_000).isEmpty())
+    }
+
+    @Test
+    fun `isTailSegment distingue creditos finales de creditos previos a escena final`() {
+        val creditsTail = SkipSegment(SkipKind.CREDITS, 1_320_000, 1_438_000, "SkipDB")
+        val tailTimeline = SkipSegmentParser.merge(listOf(listOf(creditsTail)))
+        assertTrue(tailTimeline.isTailSegment(creditsTail, 1_440_000))
+
+        val creditsBeforePost = SkipSegment(SkipKind.CREDITS, 1_320_000, 1_390_000, "IntroDB")
+        val postCredits = SkipSegment(SkipKind.POST_CREDITS, 1_390_000, 1_438_000, "IntroDB")
+        val postTimeline = SkipSegmentParser.merge(listOf(listOf(creditsBeforePost, postCredits)))
+        assertFalse(postTimeline.isTailSegment(creditsBeforePost, 1_440_000))
+        assertTrue(postTimeline.hasSegmentAfter(1_390_000))
+    }
 }

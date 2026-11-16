@@ -4,6 +4,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 
 /**
  * Cliente de sweetfox.app — catálogo real por estudio («Browse by studio»).
@@ -20,10 +21,16 @@ object SweetFoxClient {
 
     private const val BASE = "https://sweetfox.app"
 
+    private val BROWSER_HEADERS = mapOf(
+        "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+        "Accept" to "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language" to "es-ES,es;q=0.9,en;q=0.8"
+    )
+
     /** Catálogo de un estudio (películas + series), sin duplicados. */
     suspend fun fetchStudio(studioId: Int): List<Video> = coroutineScope {
-        val films = async { fetchPage("$BASE/company/$studioId") }
-        val series = async { fetchPage("$BASE/company/$studioId?type=tv") }
+        val films = async { withTimeoutOrNull(10_000L) { fetchPage("$BASE/company/$studioId") }.orEmpty() }
+        val series = async { withTimeoutOrNull(10_000L) { fetchPage("$BASE/company/$studioId?type=tv") }.orEmpty() }
         (films.await() + series.await()).distinctBy { it.id }
     }
 
@@ -35,16 +42,18 @@ object SweetFoxClient {
     /* ------------------------------ HTTP -------------------------------- */
 
     /** Cliente común: mismos límites y política de red que los addons. */
-    private fun httpText(url: String): String? = AddonHttp.getText(url)
+    private fun httpText(url: String): String? = runCatching {
+        AddonHttp.getText(url, BROWSER_HEADERS)
+    }.getOrNull()
 
     /* ------------------------------ Parser ------------------------------ */
 
     // href="…#title/movie/1465063" o href="/tv/84773"
     private val linkRegex =
-        """href="[^"]*?(?:#title/)?(movie|tv|anime)/(\d+)""".toRegex()
+        """href=['"][^'"]*?(?:#/?title/|#/?)?(movie|tv|anime)/(\d+)""".toRegex()
     private val posterRegex =
-        """image\.tmdb\.org/t/p/(?:w\d{3}|original)/([\w.\-]+\.jpg)""".toRegex()
-    private val altRegex = """alt="([^"]{2,120})"""".toRegex()
+        """image\.tmdb\.org/t/p/(?:w\d{2,4}|original)/([\w.\-]+\.(?:jpg|jpeg|png|webp))""".toRegex()
+    private val altRegex = """alt=['"]([^'"]{2,120})['"]""".toRegex()
     private val yearRegex = """\b((19|20)\d{2})\b""".toRegex()
 
     internal fun parseCompanyPage(html: String): List<Video> {

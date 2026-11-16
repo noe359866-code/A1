@@ -94,7 +94,8 @@ object CatalogRepository {
             sources = sources,
             badge = null, progress = 0f, episodes = emptyList(),
             remoteType = "series",
-            streamId = episode.streamId?.takeIf { it.isNotBlank() } ?: "${parent.id}:${episode.season}:${episode.number}"
+            streamId = episode.streamId?.takeIf { it.isNotBlank() }
+                ?: "${parent.streamId?.takeIf { it.startsWith("tt") } ?: parent.id}:${episode.season}:${episode.number}"
         )
     }
 

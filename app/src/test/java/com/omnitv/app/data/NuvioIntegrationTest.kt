@@ -44,6 +44,12 @@ class NuvioIntegrationTest {
         val imdb = JSONObject(NuvioBridgeRequest.body(repo, repo.scrapers.first(), "movie", "tt123")).getJSONObject("extra")
         assertEquals("tt123", imdb.getString("imdbId"))
         assertTrue(imdb.isNull("tmdbId"))
+        val tmdbSubtyped = JSONObject(
+            NuvioBridgeRequest.body(repo, repo.scrapers.first(), "series", "tmdb:tv:456:1:4")
+        ).getJSONObject("extra")
+        assertEquals("456", tmdbSubtyped.getString("tmdbId"))
+        assertEquals(1, tmdbSubtyped.getInt("season"))
+        assertEquals(4, tmdbSubtyped.getInt("episode"))
     }
 
     @Test

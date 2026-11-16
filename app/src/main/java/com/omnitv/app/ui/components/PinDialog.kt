@@ -1,8 +1,11 @@
+@file:OptIn(ExperimentalComposeUiApi::class)
+
 package com.omnitv.app.ui.components
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -21,12 +24,19 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.unit.dp
+import com.omnitv.app.data.ConfirmKeyUpGuard
 import com.omnitv.app.data.ParentalPin
+import com.omnitv.app.data.TvKeyCodes
 import com.omnitv.app.ui.theme.Accent
 import com.omnitv.app.ui.theme.AppRadius
 import com.omnitv.app.ui.theme.AppType
@@ -41,11 +51,8 @@ import com.omnitv.app.ui.theme.TextSecondary
  * Se dibuja como una capa encima de la pantalla (no como `Dialog` de ventana
  * nueva): en Android TV el foco D-pad se comporta mejor dentro del mismo
  * árbol de composición. Con 4 cifras se valida automáticamente, sin tener
- * que buscar un botón «Aceptar».
- *
- * @param confirmEntry pedir el PIN dos veces (al crearlo).
- * @param onSubmit devuelve `true` si el PIN es aceptado; entonces la pantalla
- *   que llama cierra la capa. `false` cuenta como intento fallido.
+ * que buscar un botón «Aceptar». Además encierra el foco dentro del teclado
+ * 4×3 para que el D-pad nunca escape a elementos detrás de la capa.
  */
 @Composable
 fun PinDialog(
@@ -62,8 +69,9 @@ fun PinDialog(
     var error by remember { mutableStateOf("") }
     var failures by rememberSaveable { mutableStateOf(0) }
     var lockedUntil by rememberSaveable { mutableStateOf(0L) }
-    val firstKey = remember { FocusRequester() }
-    RequestTvFocus(firstKey)
+    val keyGrid = remember { List(4) { List(3) { FocusRequester() } } }
+    val keyUpGuard = remember { ConfirmKeyUpGuard(initialSuppressUntilDown = true) }
+    RequestTvFocus(keyGrid[0][0])
 
     BackHandler(onBack = onDismiss)
 
@@ -72,7 +80,6 @@ fun PinDialog(
     fun submit(pin: String) {
         val now = System.currentTimeMillis()
         if (lockedUntil > 0L && now >= lockedUntil) {
-            // El bloqueo ya cumplió su tiempo: se vuelve a permitir probar.
             lockedUntil = 0L
             failures = 0
             error = ""
@@ -96,7 +103,7 @@ fun PinDialog(
             error = "Los dos PIN no coinciden. Vuelve a empezar."
             return
         }
-        if (onSubmit(pin)) return // la pantalla cierra la capa
+        if (onSubmit(pin)) return
         failures++
         if (failures >= 5) lockedUntil = now + 30_000L
         entry = ""
@@ -113,11 +120,33 @@ fun PinDialog(
     Box(
         modifier
             .fillMaxSize()
-            .background(Background.copy(alpha = 0.97f)),
+            .background(Background.copy(alpha = 0.97f))
+            .consumeStrayConfirmKeyUp(keyUpGuard)
+            .onPreviewKeyEvent { event ->
+                if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                val code = event.nativeKeyEvent.keyCode
+                val digit = TvKeyCodes.digitOrNull(code)
+                when {
+                    digit != null -> {
+                        pressDigit(digit)
+                        true
+                    }
+                    TvKeyCodes.isBackspace(code) -> {
+                        if (entry.isNotEmpty()) entry = entry.dropLast(1)
+                        true
+                    }
+                    TvKeyCodes.isBack(code) -> {
+                        onDismiss()
+                        true
+                    }
+                    else -> false
+                }
+            },
         contentAlignment = Alignment.Center
     ) {
         Column(
             Modifier
+                .focusGroup()
                 .clip(AppRadius.lg)
                 .background(SurfaceCard)
                 .padding(horizontal = 48.dp, vertical = 32.dp),
@@ -161,13 +190,19 @@ fun PinDialog(
             )
             keys.forEachIndexed { rowIndex, row ->
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    row.forEachIndexed { index, key ->
+                    row.forEachIndexed { colIndex, key ->
                         PillButton(
                             text = key,
                             primary = key.length == 1,
                             modifier = Modifier
                                 .width(120.dp)
-                                .then(if (rowIndex == 0 && index == 0) Modifier.focusRequester(firstKey) else Modifier),
+                                .focusRequester(keyGrid[rowIndex][colIndex])
+                                .focusProperties {
+                                    up = if (rowIndex > 0) keyGrid[rowIndex - 1][colIndex] else FocusRequester.Cancel
+                                    down = if (rowIndex < 3) keyGrid[rowIndex + 1][colIndex] else FocusRequester.Cancel
+                                    left = if (colIndex > 0) keyGrid[rowIndex][colIndex - 1] else FocusRequester.Cancel
+                                    right = if (colIndex < 2) keyGrid[rowIndex][colIndex + 1] else FocusRequester.Cancel
+                                },
                             onClick = {
                                 when (key) {
                                     "Borrar" -> if (entry.isNotEmpty()) entry = entry.dropLast(1)

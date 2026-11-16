@@ -71,14 +71,6 @@ object StremioClient {
         query: String
     ): CatalogPage = fetchCatalogPage(base, type, catalogId, mapOf("search" to query))
 
-    /** Búsqueda dentro de un catálogo (`extra: search`). */
-    suspend fun fetchSearch(
-        base: String,
-        type: String,
-        catalogId: String,
-        query: String
-    ): List<JSONObject> = fetchCatalog(base, type, catalogId, mapOf("search" to query))
-
     /** Ficha completa (`meta/{type}/{id}`) con reparto y episodios (`videos`). */
     suspend fun fetchMeta(base: String, type: String, id: String): JSONObject? =
         withContext(Dispatchers.IO) {
@@ -90,11 +82,6 @@ object StremioClient {
         val url = StremioUrl.normalize(urlOrBase) ?: return@withContext null
         httpJson(url)
     }
-
-    suspend fun fetchTypedManifest(urlOrBase: String): StremioManifest? =
-        fetchManifest(urlOrBase)?.let {
-            if (StremioManifestParser.validate(it) == null) StremioManifestParser.parse(it) else null
-        }
 
     /* ------------------------------ Mapeo -------------------------------- */
 

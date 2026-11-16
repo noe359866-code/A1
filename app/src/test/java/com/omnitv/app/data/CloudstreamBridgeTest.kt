@@ -29,6 +29,15 @@ class CloudstreamBridgeTest {
         assertEquals(2, json.getInt("episode"))
     }
 
+    @Test fun `combina imdbId y tmdbId cuando llegan entre id y streamId`() {
+        val combined = video().copy(id = "tmdb:987~s1e2", streamId = "tt999:1:2")
+        val json = JSONObject(CloudstreamBridge.request(combined))
+        assertEquals("tt999", json.getString("imdbId"))
+        assertEquals("987", json.getString("tmdbId"))
+        assertEquals(1, json.getInt("season"))
+        assertEquals(2, json.getInt("episode"))
+    }
+
     @Test fun `sin puente no se inventan fuentes`() = runBlocking {
         assertTrue(CloudstreamBridge.resolve(video()).isEmpty())
     }

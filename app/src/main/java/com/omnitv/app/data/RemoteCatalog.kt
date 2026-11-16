@@ -87,6 +87,8 @@ object RemoteCatalog {
                     async {
                         val metas = runCatching { StremioClient.fetchCatalog(spec.base, spec.type, spec.catalogId) }.getOrDefault(emptyList())
                         val videos = metas.map { StremioClient.parseVideo(it, spec.sourceName) }
+                            .filter { it.id.isNotBlank() }
+                            .distinctBy { it.id }
                         videos.forEach { CatalogRepository.registerRemote(it) }
                         MediaRow(spec.title, videos)
                     }
@@ -282,33 +284,217 @@ object RemoteCatalog {
         }
 
         CatalogRepository.registerRemote(full)
-        val stable = full.copy(id = video.id) // conservar el id con el que se navegó
+        val resolvedImdb = full.id.takeIf { it.startsWith("tt") }
+        val stable = full.copy(
+            id = video.id, // conservar el id con el que se navegó
+            title = full.title.ifBlank { video.title },
+            description = full.description.ifBlank { video.description },
+            backdropUrl = full.backdropUrl.ifBlank { video.backdropUrl },
+            cardUrl = full.cardUrl.ifBlank { video.cardUrl },
+            streamId = full.streamId ?: resolvedImdb?.takeIf { it != video.id } ?: video.streamId
+        )
         CatalogRepository.registerRemote(stable)
         return stable
     }
 
     /**
-     * Catálogo de una plataforma («Plataformas»): títulos reales de
-     * cinejoy.pk + catálogos Nuvio de la plataforma (Netflix, Disney+,
-     * Prime Video) cuando existen.
+     * Catálogo de una plataforma («Plataformas»):
+     * - Cinejoy (`cinejoy.pk/provider/{id}`),
+     * - Nuvio (catálogos explícitos + descubiertos dinámicamente en su manifest),
+     * - addons Stremio instalados cuyos catálogos correspondan a la plataforma,
+     * - Crunchyroll (`id == 283`) respaldado por [AnimeCatalog],
+     * - TMDB `/discover/{movie|tv}?with_watch_providers={id}` si el usuario
+     *   configuró clave TMDB en Ajustes.
+     * Todo se consulta en paralelo con timeouts individuales para evitar bloqueos.
      */
-    suspend fun fetchProvider(provider: StreamingProvider): List<Video> {
-        val scraped = CinejoyClient.fetchProvider(provider.id)
-        val nuvio = coroutineScope {
-            listOfNotNull(provider.nuvioMoviesCatalog, provider.nuvioSeriesCatalog)
-                .map { catalog ->
+    suspend fun fetchProvider(provider: StreamingProvider): List<Video> = coroutineScope {
+        val cinejoyTask = async {
+            withTimeoutOrNull(12_000L) {
+                runCatching { CinejoyClient.fetchProvider(provider.id) }.getOrDefault(emptyList())
+            }.orEmpty()
+        }
+
+        val nuvioSpecs = linkedSetOf<Pair<String, String>>().apply {
+            provider.nuvioMoviesCatalog?.let { add("movie" to it) }
+            provider.nuvioSeriesCatalog?.let { add("series" to it) }
+        }
+
+        val dynamicAddonTask = async {
+            val nuvioManifest = runCatching { getNuvioManifest() }.getOrNull()
+            val fromNuvioManifest = if (nuvioManifest == null) {
+                emptyList()
+            } else {
+                nuvioManifest.catalogs
+                    .filter { catalogMatchesProvider(it, provider) }
+                    .mapNotNull { cat ->
+                        val extras = nuvioManifest.catalogExtras(cat) ?: return@mapNotNull null
+                        CatalogCandidate(StremioClient.NUVIO, StremioClient.NUVIO_NAME, null, nuvioManifest, cat, extras)
+                    }
+            }
+
+            val installed = runCatching { AddonRegistry.refresh() }.getOrDefault(emptyList())
+            val fromInstalled = installed.filter { it.manifest != null }.flatMap { status ->
+                val manifest = status.manifest!!
+                manifest.catalogs
+                    .filter { catalogMatchesProvider(it, provider) && manifest.supports("catalog", it.type, "") }
+                    .mapNotNull { cat ->
+                        val extras = manifest.catalogExtras(cat) ?: return@mapNotNull null
+                        CatalogCandidate(StremioUrl.base(status.url), manifest.name, status.url, manifest, cat, extras)
+                    }
+            }
+
+            (fromNuvioManifest + fromInstalled)
+                .filterNot { it.base == StremioClient.NUVIO && (it.cat.type to it.cat.id) in nuvioSpecs }
+                .distinctBy { "${it.base}|${it.cat.type}|${it.cat.id}" }
+                .take(4)
+                .map { cand ->
                     async {
-                        val type = if ("series" in catalog) "series" else "movie"
-                        StremioClient.fetchCatalog(StremioClient.NUVIO, type, catalog)
-                            .map { StremioClient.parseVideo(it, StremioClient.NUVIO_NAME) }
+                        withTimeoutOrNull(10_000L) {
+                            runCatching {
+                                StremioClient.fetchCatalog(cand.base, cand.cat.type, cand.cat.id, cand.extras)
+                                    .map { meta ->
+                                        val metaUrl = cand.addonUrl?.takeIf {
+                                            cand.manifest?.supports("meta", cand.cat.type, meta.optString("id")) == true
+                                        }
+                                        StremioClient.parseVideo(meta, cand.sourceName, metaUrl, cand.cat.type)
+                                    }
+                            }.getOrDefault(emptyList())
+                        }.orEmpty()
                     }
                 }
                 .awaitAll()
                 .flatten()
         }
-        return (scraped + nuvio)
+
+        val nuvioKnownTask = nuvioSpecs.map { (type, catalogId) ->
+            async {
+                withTimeoutOrNull(10_000L) {
+                    runCatching {
+                        StremioClient.fetchCatalog(StremioClient.NUVIO, type, catalogId)
+                            .map { StremioClient.parseVideo(it, StremioClient.NUVIO_NAME, fallbackType = type) }
+                    }.getOrDefault(emptyList())
+                }.orEmpty()
+            }
+        }
+
+        val animeTask = async {
+            if (provider.id == 283) {
+                withTimeoutOrNull(12_000L) {
+                    runCatching {
+                        if (AnimeCatalog.needsReload()) AnimeCatalog.refresh()
+                        AnimeCatalog.catalogFor(null)
+                    }.getOrDefault(emptyList())
+                }.orEmpty()
+            } else emptyList()
+        }
+
+        val tmdbTask = async {
+            val apiKey = tmdbApiKey() ?: return@async emptyList()
+            withTimeoutOrNull(10_000L) {
+                runCatching { fetchTmdbProviderCatalog(provider.id, apiKey) }.getOrDefault(emptyList())
+            }.orEmpty()
+        }
+
+        val combined = buildList {
+            addAll(cinejoyTask.await())
+            addAll(nuvioKnownTask.awaitAll().flatten())
+            addAll(dynamicAddonTask.await())
+            addAll(animeTask.await())
+            addAll(tmdbTask.await())
+        }
+
+        combined
+            .filter { it.id.isNotBlank() && it.title.isNotBlank() }
             .distinctBy { it.id }
+            .sortedByDescending { if (it.cardUrl.isNotBlank() || it.backdropUrl.isNotBlank()) 1 else 0 }
             .also { list -> list.forEach { CatalogRepository.registerRemote(it) } }
+    }
+
+    private data class CatalogCandidate(
+        val base: String,
+        val sourceName: String,
+        val addonUrl: String?,
+        val manifest: StremioManifest?,
+        val cat: StremioCatalog,
+        val extras: Map<String, String>
+    )
+
+    private val manifestMutex = Mutex()
+    @Volatile
+    private var nuvioManifestCache: StremioManifest? = null
+
+    private suspend fun getNuvioManifest(): StremioManifest? = manifestMutex.withLock {
+        nuvioManifestCache ?: withTimeoutOrNull(8_000L) {
+            runCatching {
+                StremioClient.fetchManifest(StremioClient.NUVIO)?.let { StremioManifest.parse(it) }
+            }.getOrNull()
+        }?.also { nuvioManifestCache = it }
+    }
+
+    private fun catalogMatchesProvider(catalog: StremioCatalog, provider: StreamingProvider): Boolean {
+        val tokens = listOf(catalog.id, catalog.name)
+            .flatMap { it.lowercase().split('-', '_', ' ', '.', '/', '+') }
+            .filter { it.isNotBlank() }
+        val aliasGroups = (provider.aliases + provider.name.lowercase())
+            .map { alias -> alias.lowercase().split('-', '_', ' ', '.', '/', '+').filter { it.isNotBlank() } }
+            .filter { it.isNotEmpty() }
+        return aliasGroups.any { group ->
+            group.size <= tokens.size && (0..(tokens.size - group.size)).any { start ->
+                tokens.subList(start, start + group.size) == group
+            }
+        }
+    }
+
+    private fun tmdbApiKey(): String? = SettingsStore.apiKeys.entries
+        .firstOrNull { (k, v) ->
+            v.isNotBlank() && (k.equals("tmdb", true) || k.equals("tmdb_api_key", true))
+        }?.value?.trim()
+
+    private suspend fun fetchTmdbProviderCatalog(providerId: Int, apiKey: String): List<Video> = coroutineScope {
+        val encodedKey = java.net.URLEncoder.encode(apiKey, "UTF-8")
+        val endpoints = listOf("movie" to VideoType.MOVIE, "tv" to VideoType.SERIES)
+        endpoints.map { (kind, videoType) ->
+            async(kotlinx.coroutines.Dispatchers.IO) {
+                val url = "https://api.themoviedb.org/3/discover/$kind?api_key=$encodedKey" +
+                    "&with_watch_providers=$providerId&watch_region=ES&language=es-ES&sort_by=popularity.desc"
+                val obj = AddonHttp.getJson(url) as? org.json.JSONObject ?: return@async emptyList()
+                val arr = obj.optJSONArray("results") ?: return@async emptyList()
+                buildList {
+                    for (i in 0 until arr.length()) {
+                        val item = arr.optJSONObject(i) ?: continue
+                        val tmdbId = item.optLong("id", 0L)
+                        if (tmdbId <= 0L) continue
+                        val poster = item.optString("poster_path", "").trim()
+                        val backdrop = item.optString("backdrop_path", "").trim().ifBlank { poster }
+                        val title = item.optString("title", "").ifBlank { item.optString("name", "") }
+                        if (title.isBlank()) continue
+                        val date = item.optString("release_date", "").ifBlank { item.optString("first_air_date", "") }
+                        val year = date.take(4).toIntOrNull() ?: 0
+                        val rating = item.optDouble("vote_average", 0.0).let { if (it.isNaN()) 0.0 else it }
+                        add(
+                            Video(
+                                id = "tmdb:$tmdbId",
+                                title = title,
+                                description = item.optString("overview", ""),
+                                backdropUrl = if (backdrop.isNotBlank()) "https://image.tmdb.org/t/p/w1280$backdrop" else "",
+                                cardUrl = if (poster.isNotBlank()) "https://image.tmdb.org/t/p/w500$poster" else "",
+                                year = year,
+                                durationMinutes = 0,
+                                rating = rating,
+                                certification = "",
+                                quality = "HD",
+                                genres = emptyList(),
+                                videoUrl = "",
+                                type = if (providerId == 283) VideoType.ANIME else videoType,
+                                isRemote = true,
+                                source = StremioClient.NUVIO_NAME,
+                                remoteType = if (kind == "movie") "movie" else "series"
+                            )
+                        )
+                    }
+                }
+            }
+        }.awaitAll().flatten()
     }
 
     /* ---------------- Caché de plataformas y estudios ------------------ */
@@ -345,24 +531,49 @@ object RemoteCatalog {
     private fun mutexFor(map: java.util.concurrent.ConcurrentHashMap<Int, Mutex>, id: Int): Mutex =
         synchronized(map) { map.getOrPut(id) { Mutex() } }
 
-    /** [fetchProvider] con caché con TTL, un solo fetch por id y sin revisión vieja. */
-    suspend fun fetchProviderCached(provider: StreamingProvider): List<Video> =
+    /** [fetchProvider] con caché con TTL, un solo fetch por id y sin guardar errores vacíos. */
+    suspend fun fetchProviderCached(provider: StreamingProvider, force: Boolean = false): List<Video> =
         mutexFor(providerLocks, provider.id).withLock {
             val revision = SettingsStore.revision
             syncCaches(revision)
-            providerCache.fresh(provider.id) ?: fetchProvider(provider).also { list ->
-                if (cacheRevision == revision) providerCache[provider.id] = CacheEntry(list, System.currentTimeMillis())
+            if (!force) {
+                providerCache.fresh(provider.id)?.let { return@withLock it }
+            } else {
+                providerCache.remove(provider.id)
+            }
+            fetchProvider(provider).also { list ->
+                if (list.isNotEmpty() && cacheRevision == revision) {
+                    providerCache[provider.id] = CacheEntry(list, System.currentTimeMillis())
+                }
             }
         }
 
     /** Catálogo real de un estudio («Por estudio»), con la misma política de caché. */
-    suspend fun fetchStudio(studio: Studio): List<Video> =
+    suspend fun fetchStudio(studio: Studio, force: Boolean = false): List<Video> =
         mutexFor(studioLocks, studio.id).withLock {
             val revision = SettingsStore.revision
             syncCaches(revision)
-            studioCache.fresh(studio.id) ?: SweetFoxClient.fetchStudio(studio.id).also { list ->
+            if (!force) {
+                studioCache.fresh(studio.id)?.let { return@withLock it }
+            } else {
+                studioCache.remove(studio.id)
+            }
+            withTimeoutOrNull(14_000L) {
+                runCatching { SweetFoxClient.fetchStudio(studio.id) }.getOrDefault(emptyList())
+            }.orEmpty().also { list ->
                 list.forEach { CatalogRepository.registerRemote(it) }
-                if (cacheRevision == revision) studioCache[studio.id] = CacheEntry(list, System.currentTimeMillis())
+                if (list.isNotEmpty() && cacheRevision == revision) {
+                    studioCache[studio.id] = CacheEntry(list, System.currentTimeMillis())
+                }
             }
         }
+
+    /** Fuerza la recarga de filas, plataformas y estudios al volver al catálogo. */
+    fun invalidateCache() {
+        providerCache.clear()
+        studioCache.clear()
+        nuvioManifestCache = null
+        loadedRevision = -1
+        loaded.value = false
+    }
 }

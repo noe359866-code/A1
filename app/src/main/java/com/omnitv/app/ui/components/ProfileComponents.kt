@@ -9,14 +9,15 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -34,18 +35,25 @@ import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
 import com.omnitv.app.R
+import com.omnitv.app.data.ConfirmKeyUpGuard
 import com.omnitv.app.data.Profile
+import com.omnitv.app.data.TvKeyCodes
 import com.omnitv.app.data.avatarLabel
 import com.omnitv.app.data.avatarRes
 import com.omnitv.app.ui.theme.Accent
@@ -53,20 +61,18 @@ import com.omnitv.app.ui.theme.AppRadius
 import com.omnitv.app.ui.theme.AppStroke
 import com.omnitv.app.ui.theme.AppType
 import com.omnitv.app.ui.theme.Background
-import com.omnitv.app.ui.theme.Danger
-import com.omnitv.app.ui.theme.GlassFill
 import com.omnitv.app.ui.theme.GlassFillStrong
 import com.omnitv.app.ui.theme.SurfaceCard
-import com.omnitv.app.ui.theme.SurfaceElevated
 import com.omnitv.app.ui.theme.TextPrimary
 import com.omnitv.app.ui.theme.TextSecondary
 
 /* -------------------------------------------------------------------------- */
-/*  Avatar ilustrado estilo Netflix / Android TV (tile cuadrado redondeado)    */
+/*  Avatar ilustrado estilo Netflix (tile cuadrado limpio con marco doble)    */
 /* -------------------------------------------------------------------------- */
 
-/** Radio de esquina proporcional al tamaño, como los tiles de Netflix / Apple TV. */
-fun avatarShape(size: Dp): RoundedCornerShape = RoundedCornerShape(size * 0.22f)
+/** Cuadrado limpio de esquinas moderadas (estilo selector clásico de Netflix). */
+fun avatarShape(size: Dp): RoundedCornerShape =
+    RoundedCornerShape((size * 0.08f).coerceIn(6.dp, 14.dp))
 
 @Composable
 fun AvatarView(
@@ -82,8 +88,8 @@ fun AvatarView(
             .size(size)
             .clip(shape)
             .then(
-                if (ringColor != null) Modifier.border(AppStroke.focus, ringColor, shape)
-                else Modifier.border(1.dp, Color.White.copy(alpha = 0.08f), shape)
+                if (ringColor != null) Modifier.border(2.dp, ringColor, shape)
+                else Modifier.border(1.dp, Color.White.copy(alpha = 0.10f), shape)
             )
     ) {
         Image(
@@ -96,7 +102,7 @@ fun AvatarView(
             Box(
                 Modifier
                     .align(Alignment.BottomEnd)
-                    .padding(4.dp)
+                    .padding(6.dp)
                     .clip(AppRadius.xs)
                     .background(Accent)
                     .padding(horizontal = 6.dp, vertical = 2.dp)
@@ -105,6 +111,31 @@ fun AvatarView(
             }
         }
     }
+}
+
+/** Marco doble blanco estilo Netflix al enfocar un tile cuadrado de perfil. */
+@Composable
+private fun ProfileTileFrame(
+    focused: Boolean,
+    size: Dp,
+    content: @Composable BoxScope.() -> Unit
+) {
+    val outerShape = RoundedCornerShape(14.dp)
+    Box(
+        modifier = Modifier
+            .size(size + 12.dp)
+            .then(
+                if (focused) {
+                    Modifier
+                        .border(AppStroke.focus, Color.White, outerShape)
+                        .padding(6.dp)
+                } else {
+                    Modifier.padding(6.dp)
+                }
+            ),
+        contentAlignment = Alignment.Center,
+        content = content
+    )
 }
 
 @Composable
@@ -119,20 +150,8 @@ fun KidsChip(modifier: Modifier = Modifier) {
     }
 }
 
-@Composable
-fun ActiveProfileChip(modifier: Modifier = Modifier) {
-    Box(
-        modifier
-            .clip(AppRadius.xs)
-            .background(Color.White.copy(alpha = 0.18f))
-            .padding(horizontal = 8.dp, vertical = 2.dp)
-    ) {
-        Text("ACTIVO", style = AppType.chip, color = Color.White)
-    }
-}
-
 /* -------------------------------------------------------------------------- */
-/*  Ficha de perfil (selector «¿Quién está viendo?»)                          */
+/*  Ficha de perfil (selector «¿Quién está viendo?», limpio estilo Netflix)   */
 /* -------------------------------------------------------------------------- */
 
 @Composable
@@ -140,62 +159,50 @@ fun ProfileTile(
     profile: Profile,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
-    isActive: Boolean = false
+    isActive: Boolean = false,
+    onFocus: (() -> Unit)? = null
 ) {
     var focused by remember { mutableStateOf(false) }
-    val scale by animateFloatAsState(if (focused) 1.12f else 1f, tween(160), label = "tileScale")
+    val scale by animateFloatAsState(if (focused) 1.12f else 1f, tween(150), label = "tileScale")
 
     Column(
         modifier = modifier
+            .zIndex(if (focused) 1f else 0f)
             .graphicsLayer { scaleX = scale; scaleY = scale }
-            .clip(AppRadius.lg)
-            .background(if (focused) SurfaceElevated else Color.Transparent)
-            .then(
-                if (focused) Modifier.border(AppStroke.focus, Color.White, AppRadius.lg)
-                else Modifier
-            )
+            .onFocusChanged {
+                focused = it.isFocused
+                if (it.isFocused) onFocus?.invoke()
+            }
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
                 onClick = onClick
-            )
-            .onFocusChanged { focused = it.isFocused }
-            .padding(horizontal = 14.dp, vertical = 12.dp),
+            ),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Box(contentAlignment = Alignment.BottomCenter) {
+        ProfileTileFrame(focused = focused, size = 136.dp) {
             AvatarView(
                 avatarIndex = profile.avatarIndex,
                 size = 136.dp,
-                ringColor = if (focused) Color.White else null
+                ringColor = if (focused) Color.White else null,
+                badgeText = if (profile.isKids) "KIDS" else null
             )
         }
-        Spacer(Modifier.height(14.dp))
+        Spacer(Modifier.height(12.dp))
         Text(
             profile.name,
             style = AppType.profileName,
-            color = if (focused) TextPrimary else TextSecondary,
+            color = if (focused) Color.White else TextSecondary,
             textAlign = TextAlign.Center
         )
-        Spacer(Modifier.height(6.dp))
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            if (profile.isKids) {
-                KidsChip()
-            }
-            if (isActive) {
-                ActiveProfileChip()
-            }
-            if (!profile.isKids && !isActive) {
-                val subtitle = when {
-                    profile.progress.isNotEmpty() -> "${profile.progress.size} en curso"
-                    profile.myList.isNotEmpty() -> "${profile.myList.size} en Mi Lista"
-                    else -> "Estándar"
-                }
-                Text(subtitle, style = AppType.metadata, color = if (focused) TextSecondary else Color.White.copy(alpha = 0.45f))
-            }
+        if (isActive) {
+            Spacer(Modifier.height(6.dp))
+            Box(
+                Modifier
+                    .size(6.dp)
+                    .clip(CircleShape)
+                    .background(if (focused) Color.White else Accent)
+            )
         }
     }
 }
@@ -208,126 +215,129 @@ fun ProfileTile(
 fun ManageProfileTile(
     profile: Profile,
     onEdit: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onFocus: (() -> Unit)? = null
 ) {
     var focused by remember { mutableStateOf(false) }
-    val scale by animateFloatAsState(if (focused) 1.10f else 1f, tween(160), label = "manageScale")
-    val shape = avatarShape(126.dp)
+    val scale by animateFloatAsState(if (focused) 1.10f else 1f, tween(150), label = "manageScale")
+    val shape = avatarShape(128.dp)
 
     Column(
         modifier = modifier
+            .zIndex(if (focused) 1f else 0f)
             .graphicsLayer { scaleX = scale; scaleY = scale }
-            .clip(AppRadius.lg)
-            .background(if (focused) SurfaceElevated else Color.Transparent)
-            .then(if (focused) Modifier.border(AppStroke.focus, Color.White, AppRadius.lg) else Modifier)
+            .onFocusChanged {
+                focused = it.isFocused
+                if (it.isFocused) onFocus?.invoke()
+            }
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
                 onClick = onEdit
-            )
-            .onFocusChanged { focused = it.isFocused }
-            .padding(horizontal = 14.dp, vertical = 12.dp),
+            ),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Box(contentAlignment = Alignment.Center) {
-            AvatarView(
-                avatarIndex = profile.avatarIndex,
-                size = 126.dp,
-                ringColor = if (focused) Color.White else null
-            )
-            Box(
-                Modifier
-                    .size(126.dp)
-                    .clip(shape)
-                    .background(Color.Black.copy(alpha = 0.48f)),
-                contentAlignment = Alignment.Center
-            ) {
+        ProfileTileFrame(focused = focused, size = 128.dp) {
+            Box(contentAlignment = Alignment.Center) {
+                AvatarView(
+                    avatarIndex = profile.avatarIndex,
+                    size = 128.dp,
+                    ringColor = if (focused) Color.White else null,
+                    badgeText = if (profile.isKids) "KIDS" else null
+                )
                 Box(
                     Modifier
-                        .size(46.dp)
-                        .clip(CircleShape)
-                        .background(Color.White.copy(alpha = if (focused) 0.95f else 0.25f)),
+                        .size(128.dp)
+                        .clip(shape)
+                        .background(Color.Black.copy(alpha = 0.50f)),
                     contentAlignment = Alignment.Center
                 ) {
-                    Image(
-                        painter = painterResource(R.drawable.ic_edit),
-                        contentDescription = "Editar ${profile.name}",
-                        modifier = Modifier.size(24.dp),
-                        colorFilter = ColorFilter.tint(if (focused) Background else Color.White)
-                    )
+                    Box(
+                        Modifier
+                            .size(44.dp)
+                            .clip(CircleShape)
+                            .background(Color.White.copy(alpha = if (focused) 0.96f else 0.28f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Image(
+                            painter = painterResource(R.drawable.ic_edit),
+                            contentDescription = "Editar ${profile.name}",
+                            modifier = Modifier.size(22.dp),
+                            colorFilter = ColorFilter.tint(if (focused) Background else Color.White)
+                        )
+                    }
                 }
             }
         }
-        Spacer(Modifier.height(14.dp))
+        Spacer(Modifier.height(12.dp))
         Text(
             profile.name,
             style = AppType.profileName,
-            color = if (focused) TextPrimary else TextSecondary,
+            color = if (focused) Color.White else TextSecondary,
             textAlign = TextAlign.Center
         )
-        Spacer(Modifier.height(6.dp))
-        if (profile.isKids) {
-            KidsChip()
-        } else {
-            Text("Pulsar para editar", style = AppType.metadata, color = if (focused) Accent else TextSecondary)
-        }
     }
 }
 
 /* -------------------------------------------------------------------------- */
-/*  Ficha "Añadir perfil"                                                     */
+/*  Ficha "Añadir perfil" (cuadro limpio con + estilo Netflix)                */
 /* -------------------------------------------------------------------------- */
 
 @Composable
-fun AddProfileTile(onClick: () -> Unit, modifier: Modifier = Modifier) {
+fun AddProfileTile(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    onFocus: (() -> Unit)? = null
+) {
     var focused by remember { mutableStateOf(false) }
-    val scale by animateFloatAsState(if (focused) 1.10f else 1f, tween(160), label = "addScale")
+    val scale by animateFloatAsState(if (focused) 1.12f else 1f, tween(150), label = "addScale")
     val shape = avatarShape(136.dp)
 
     Column(
         modifier = modifier
+            .zIndex(if (focused) 1f else 0f)
             .graphicsLayer { scaleX = scale; scaleY = scale }
-            .clip(AppRadius.lg)
-            .background(if (focused) SurfaceElevated else Color.Transparent)
-            .then(if (focused) Modifier.border(AppStroke.focus, Color.White, AppRadius.lg) else Modifier)
+            .onFocusChanged {
+                focused = it.isFocused
+                if (it.isFocused) onFocus?.invoke()
+            }
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
                 onClick = onClick
-            )
-            .onFocusChanged { focused = it.isFocused }
-            .padding(horizontal = 14.dp, vertical = 12.dp),
+            ),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Box(
-            Modifier
-                .size(136.dp)
-                .clip(shape)
-                .background(if (focused) GlassFillStrong else GlassFill)
-                .then(
-                    if (focused) Modifier.border(AppStroke.focus, Color.White, shape)
-                    else Modifier.border(2.dp, TextSecondary.copy(alpha = 0.35f), shape)
-                ),
-            contentAlignment = Alignment.Center
-        ) {
-            Image(
-                painter = painterResource(R.drawable.ic_add),
-                contentDescription = "Añadir perfil",
-                modifier = Modifier.size(44.dp),
-                colorFilter = ColorFilter.tint(
-                    if (focused) TextPrimary else TextSecondary
+        ProfileTileFrame(focused = focused, size = 136.dp) {
+            Box(
+                Modifier
+                    .size(136.dp)
+                    .clip(shape)
+                    .background(if (focused) Color.White.copy(alpha = 0.08f) else Background)
+                    .border(
+                        width = if (focused) 2.dp else 1.5.dp,
+                        color = if (focused) Color.White else Color.White.copy(alpha = 0.30f),
+                        shape = shape
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                Image(
+                    painter = painterResource(R.drawable.ic_add),
+                    contentDescription = "Añadir perfil",
+                    modifier = Modifier.size(42.dp),
+                    colorFilter = ColorFilter.tint(
+                        if (focused) Color.White else TextSecondary
+                    )
                 )
-            )
+            }
         }
-        Spacer(Modifier.height(14.dp))
+        Spacer(Modifier.height(12.dp))
         Text(
             "Añadir perfil",
             style = AppType.profileName,
-            color = if (focused) TextPrimary else TextSecondary,
+            color = if (focused) Color.White else TextSecondary,
             textAlign = TextAlign.Center
         )
-        Spacer(Modifier.height(6.dp))
-        Text("Nuevo usuario", style = AppType.metadata, color = Color.White.copy(alpha = 0.45f))
     }
 }
 
@@ -343,18 +353,19 @@ fun ProfileBadge(profile: Profile?, onClick: () -> Unit, modifier: Modifier = Mo
 
     Box(
         modifier = modifier
+            .zIndex(if (focused) 1f else 0f)
             .graphicsLayer { scaleX = scale; scaleY = scale }
             .clip(shape)
             .then(
                 if (focused) Modifier.border(AppStroke.focus, Color.White, shape)
                 else Modifier.border(1.dp, Color.White.copy(alpha = 0.15f), shape)
             )
+            .onFocusChanged { focused = it.isFocused }
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
                 onClick = onClick
             )
-            .onFocusChanged { focused = it.isFocused }
     ) {
         if (profile != null) {
             Image(
@@ -378,7 +389,7 @@ fun ProfileBadge(profile: Profile?, onClick: () -> Unit, modifier: Modifier = Mo
 }
 
 /* -------------------------------------------------------------------------- */
-/*  Selector de avatar para el editor de perfiles                              */
+/*  Selector de avatar para el editor de perfiles                             */
 /* -------------------------------------------------------------------------- */
 
 @Composable
@@ -395,14 +406,15 @@ fun AvatarOption(
 
     Column(
         modifier = modifier
+            .zIndex(if (focused) 1f else 0f)
             .graphicsLayer { scaleX = scale; scaleY = scale }
             .clip(AppRadius.md)
+            .onFocusChanged { focused = it.isFocused }
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
                 onClick = onClick
             )
-            .onFocusChanged { focused = it.isFocused }
             .padding(4.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
@@ -470,18 +482,30 @@ fun TvConfirmDialog(
     onDismiss: () -> Unit
 ) {
     val cancelFocus = remember { FocusRequester() }
+    val confirmFocus = remember { FocusRequester() }
+    val keyUpGuard = remember { ConfirmKeyUpGuard(initialSuppressUntilDown = true) }
     RequestTvFocus(cancelFocus)
     BackHandler(onBack = onDismiss)
 
     Box(
         Modifier
             .fillMaxSize()
-            .background(Background.copy(alpha = 0.95f)),
+            .background(Background.copy(alpha = 0.95f))
+            .consumeStrayConfirmKeyUp(keyUpGuard)
+            .onPreviewKeyEvent { event ->
+                if (event.type == KeyEventType.KeyDown && TvKeyCodes.isBack(event.nativeKeyEvent.keyCode)) {
+                    onDismiss()
+                    true
+                } else {
+                    false
+                }
+            },
         contentAlignment = Alignment.Center
     ) {
         Column(
             Modifier
                 .width(540.dp)
+                .focusGroup()
                 .clip(AppRadius.lg)
                 .background(SurfaceCard)
                 .border(1.dp, Color.White.copy(alpha = 0.12f), AppRadius.lg)
@@ -497,13 +521,28 @@ fun TvConfirmDialog(
                     text = cancelText,
                     primary = !isDanger,
                     onClick = onDismiss,
-                    modifier = Modifier.focusRequester(cancelFocus)
+                    modifier = Modifier
+                        .focusRequester(cancelFocus)
+                        .focusProperties {
+                            up = FocusRequester.Cancel
+                            down = FocusRequester.Cancel
+                            left = FocusRequester.Cancel
+                            right = confirmFocus
+                        }
                 )
                 PillButton(
                     text = confirmText,
                     primary = isDanger,
                     danger = isDanger,
-                    onClick = onConfirm
+                    onClick = onConfirm,
+                    modifier = Modifier
+                        .focusRequester(confirmFocus)
+                        .focusProperties {
+                            up = FocusRequester.Cancel
+                            down = FocusRequester.Cancel
+                            left = cancelFocus
+                            right = FocusRequester.Cancel
+                        }
                 )
             }
         }

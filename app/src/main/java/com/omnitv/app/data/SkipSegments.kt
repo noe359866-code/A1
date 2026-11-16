@@ -1,6 +1,5 @@
 package com.omnitv.app.data
 
-import org.json.JSONArray
 import org.json.JSONObject
 
 /** Tipo de tramo saltable. Cada API usa su propio nombre para el mismo concepto. */
@@ -52,6 +51,24 @@ data class SkipTimeline(
 
     fun has(kind: SkipKind): Boolean = segments.any { it.kind == kind }
 
+    fun hasSegmentAfter(positionMs: Long): Boolean =
+        segments.any { it.startMs >= positionMs - 1_000L }
+
+    /**
+     * Verdadero cuando este tramo llega hasta el final del vídeo (sin fin declarado o en
+     * los últimos 4 s) y no hay otro tramo después (p. ej. escena post-créditos).
+     */
+    fun isTailSegment(segment: SkipSegment, durationMs: Long): Boolean {
+        val reachesEnd = when {
+            segment.endMs == null -> true
+            durationMs > 0 -> segment.endMs >= durationMs - 4_000L
+            else -> false
+        }
+        if (!reachesEnd) return false
+        val target = segment.endMs ?: if (durationMs > 0) durationMs else segment.startMs + 1_000L
+        return segments.none { it !== segment && it.startMs >= target - 1_000L && it.startMs > segment.startMs }
+    }
+
     companion object {
         val EMPTY = SkipTimeline()
     }
@@ -62,44 +79,86 @@ data class SkipTarget(
     val imdbId: String?,
     val tmdbId: String?,
     val season: Int?,
-    val episode: Int?
+    val episode: Int?,
+    val malId: String? = null
 ) {
     val isEpisode: Boolean get() = season != null && episode != null
-    val cacheKey: String get() = "${imdbId ?: "tmdb:$tmdbId"}:${season ?: 0}:${episode ?: 0}"
+    val cacheKey: String
+        get() = "${imdbId ?: tmdbId?.let { "tmdb:$it" } ?: "mal:$malId"}:${season ?: 0}:${episode ?: 0}"
 
     companion object {
-        /** Los ids vienen de Cinemeta (`tt…`) o Nuvio (`tmdb:…`), con `:temporada:episodio`. */
+        /**
+         * Combina `streamId` e `id` para no perder identidades al navegar desde
+         * TMDb (`tmdb:…`) o anime (`mal:…`) ya resueltos a IMDb (`tt…`).
+         */
         fun from(video: Video): SkipTarget? {
-            val raw = (video.streamId ?: video.id).takeIf { it.isNotBlank() } ?: return null
-            val parts = raw.split(':')
-            return when {
-                raw.startsWith("tmdb:") -> {
-                    val id = parts.getOrNull(1)?.takeIf { it.isNotBlank() && it.all(Char::isDigit) } ?: return null
-                    SkipTarget(null, id, parts.getOrNull(2)?.toIntOrNull(), parts.getOrNull(3)?.toIntOrNull())
+            val candidates = listOfNotNull(
+                video.streamId?.takeIf { it.isNotBlank() },
+                video.id.takeIf { it.isNotBlank() }
+            )
+            if (candidates.isEmpty()) return null
+
+            var imdbId: String? = null
+            var tmdbId: String? = null
+            var malId: String? = null
+            var season: Int? = null
+            var episode: Int? = null
+
+            for (candidate in candidates) {
+                val clean = candidate.substringBefore('~')
+                val parts = clean.split(':')
+                when {
+                    clean.startsWith("tmdb:") -> {
+                        val id = parts.getOrNull(1)?.takeIf { it.isNotBlank() && it.all(Char::isDigit) }
+                        if (id != null && tmdbId == null) tmdbId = id
+                        if (season == null) season = parts.getOrNull(2)?.toIntOrNull()
+                        if (episode == null) episode = parts.getOrNull(3)?.toIntOrNull()
+                    }
+                    clean.startsWith("mal:") -> {
+                        val id = parts.getOrNull(1)?.takeIf { it.isNotBlank() && it.all(Char::isDigit) }
+                        if (id != null && malId == null) malId = id
+                        if (season == null) season = parts.getOrNull(2)?.toIntOrNull()
+                        if (episode == null) episode = parts.getOrNull(3)?.toIntOrNull()
+                    }
+                    clean.startsWith("tt") -> {
+                        val id = parts[0].takeIf { it.length > 2 && it.drop(2).all(Char::isDigit) }
+                        if (id != null && imdbId == null) imdbId = id
+                        if (season == null) season = parts.getOrNull(1)?.toIntOrNull()
+                        if (episode == null) episode = parts.getOrNull(2)?.toIntOrNull()
+                    }
                 }
-                raw.startsWith("tt") -> SkipTarget(
-                    parts[0], null, parts.getOrNull(1)?.toIntOrNull(), parts.getOrNull(2)?.toIntOrNull()
-                )
-                else -> null
+                if ((season == null || episode == null) && '~' in candidate) {
+                    val epSuffix = candidate.substringAfter('~')
+                    val match = Regex("""^s(\d+)e(\d+)$""", RegexOption.IGNORE_CASE).matchEntire(epSuffix)
+                    if (match != null) {
+                        if (season == null) season = match.groupValues[1].toIntOrNull()
+                        if (episode == null) episode = match.groupValues[2].toIntOrNull()
+                    }
+                }
             }
+
+            if (imdbId == null && tmdbId == null && malId == null) return null
+            return SkipTarget(imdbId, tmdbId, season, episode, malId)
         }
     }
 }
 
 /**
- * Parsers puro JVM de las tres APIs públicas. Ninguna necesita clave para leer:
+ * Parsers puro JVM de las cuatro APIs públicas. Ninguna necesita clave para leer:
  * - TheIntroDB v4: arrays por tipo, `start_ms`/`end_ms`; 0/0 = «no hay tramo».
  * - SkipDB: `segments.{intro,recap,outro,preview}` + `match` y estimación de temporada.
  * - IntroDB: objetos por tipo + banderas `no_intro`/`no_recap`/`no_outro`.
+ * - AniSkip v2: `results[]` con `skipType` (`op`/`ed`/`recap`) e `interval.{startTime,endTime}`.
  */
 object SkipSegmentParser {
 
     const val SOURCE_THEINTRODB = "TheIntroDB"
     const val SOURCE_SKIPDB = "SkipDB"
     const val SOURCE_INTRODB = "IntroDB"
+    const val SOURCE_ANISKIP = "AniSkip"
 
     /** Orden de preferencia por tipo: el que ajusta por duración manda. */
-    private val PRIORITY = listOf(SOURCE_SKIPDB, SOURCE_THEINTRODB, SOURCE_INTRODB)
+    private val PRIORITY = listOf(SOURCE_SKIPDB, SOURCE_THEINTRODB, SOURCE_INTRODB, SOURCE_ANISKIP)
 
     fun theIntroDb(json: JSONObject, durationMs: Long): List<SkipSegment> = buildList {
         mapOf("intro" to SkipKind.INTRO, "recap" to SkipKind.RECAP, "credits" to SkipKind.CREDITS, "preview" to SkipKind.PREVIEW)
@@ -144,6 +203,26 @@ object SkipSegmentParser {
                 val confidence = item.optDouble("confidence", Double.NaN).takeIf { !it.isNaN() }
                 normalized(kind, start, end, SOURCE_INTRODB, confidence, false, durationMs)?.let { add(it) }
             }
+    }
+
+    fun aniSkip(json: JSONObject, durationMs: Long): List<SkipSegment> = buildList {
+        if (!json.optBoolean("found", true)) return@buildList
+        val results = json.optJSONArray("results") ?: return@buildList
+        for (i in 0 until results.length()) {
+            val item = results.optJSONObject(i) ?: continue
+            val kind = when (item.optString("skipType", "").lowercase()) {
+                "op", "mixed-op" -> SkipKind.INTRO
+                "recap" -> SkipKind.RECAP
+                "ed", "mixed-ed" -> SkipKind.CREDITS
+                else -> continue
+            }
+            val interval = item.optJSONObject("interval") ?: continue
+            val startSec = interval.optDouble("startTime", Double.NaN).takeIf { !it.isNaN() } ?: continue
+            val endSec = interval.optDouble("endTime", Double.NaN).takeIf { !it.isNaN() }
+            val startMs = (startSec * 1000.0).toLong()
+            val endMs = endSec?.let { (it * 1000.0).toLong() }
+            normalized(kind, startMs, endMs, SOURCE_ANISKIP, null, false, durationMs)?.let { add(it) }
+        }
     }
 
     /** Valida un tramo y lo recorta a la duración real del stream cuando se conoce. */

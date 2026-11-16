@@ -70,7 +70,10 @@ function send(res, status, obj) { res.writeHead(status, { 'Content-Type': 'appli
 const server = http.createServer(async (req, res) => {
   try {
     const path = new URL(req.url, 'http://localhost').pathname;
-    if (req.method === 'GET' && path === '/health') return send(res, 200, { ok: true, name: 'omni-nuvio-bridge', scrapers: index.size, execution: 'external-js' });
+    if (req.method === 'GET' && path === '/health') {
+      const scraperIds = [...new Set([...index.values()].map(s => s.id))];
+      return send(res, 200, { ok: true, name: 'omni-nuvio-bridge', scrapers: index.size, scraperIds, repos: repos.length, execution: 'external-js' });
+    }
     if (req.method === 'POST' && path === '/refresh') { await refreshRepos(); return send(res, 200, { ok: true, scrapers: index.size }); }
     if (req.method !== 'POST' || !path.startsWith('/scrape/')) return send(res, 404, { error: 'ruta no encontrada' });
     let size = 0; const chunks = [];

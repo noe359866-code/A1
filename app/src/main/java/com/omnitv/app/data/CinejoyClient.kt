@@ -19,6 +19,12 @@ object CinejoyClient {
 
     private const val BASE = "https://cinejoy.pk"
 
+    private val BROWSER_HEADERS = mapOf(
+        "User-Agent" to "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+        "Accept" to "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language" to "es-ES,es;q=0.9,en;q=0.8"
+    )
+
     /** Películas destacadas de una plataforma en cinejoy.pk. */
     suspend fun fetchProvider(providerId: Int): List<Video> = withContext(Dispatchers.IO) {
         val html = httpText("$BASE/provider/$providerId") ?: return@withContext emptyList()
@@ -32,15 +38,17 @@ object CinejoyClient {
      * limitado y DoH solo tras un fallo de DNS. Ya no hay un `HttpURLConnection`
      * propio que pueda saltarse [NetPolicy].
      */
-    private fun httpText(url: String): String? = AddonHttp.getText(url)
+    private fun httpText(url: String): String? = runCatching {
+        AddonHttp.getText(url, BROWSER_HEADERS)
+    }.getOrNull()
 
     /* ------------------------------ Parser ------------------------------ */
 
     private val linkRegex =
-        """href="(?:https?://cinejoy\.pk)?/(movie|tv|series)/(\d+)[^"]*"""".toRegex()
+        """href=['"](?:https?://cinejoy\.pk)?(?:#/?)?(?:/title)?/(movie|tv|series)/(\d+)[^'"]*['"]""".toRegex()
     private val posterRegex =
-        """image\.tmdb\.org/t/p/(?:w\d{3}|original)/([\w.\-]+\.jpg)""".toRegex()
-    private val altRegex = """alt="([^"]{2,120})"""".toRegex()
+        """image\.tmdb\.org/t/p/(?:w\d{2,4}|original)/([\w.\-]+\.(?:jpg|jpeg|png|webp))""".toRegex()
+    private val altRegex = """alt=['"]([^'"]{2,120})['"]""".toRegex()
     private val yearInSlugRegex = """-(19|20)\d{2}$""".toRegex()
 
     internal fun parseProviderPage(html: String, providerId: Int): List<Video> {
@@ -58,7 +66,7 @@ object CinejoyClient {
 
             val posterPath = posterRegex.find(window)?.groupValues?.get(1) ?: continue
             val href = match.value
-            val slugPath = href.substringAfterLast('/').substringBefore('"')
+            val slugPath = href.substringAfterLast('/').substringBefore('"').substringBefore('\'')
             val title = altRegex.find(window)?.groupValues?.get(1)
                 ?: titleFromSlug(slugPath)
             val year = yearInSlugRegex.find(slugPath)?.value

@@ -1,8 +1,13 @@
+@file:OptIn(ExperimentalComposeUiApi::class)
+
 package com.omnitv.app.ui.components
 
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -10,10 +15,10 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -25,8 +30,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
@@ -34,6 +41,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
 import coil.compose.AsyncImage
 import com.omnitv.app.data.Providers
 import com.omnitv.app.data.RemoteCatalog
@@ -57,7 +65,9 @@ import com.omnitv.app.ui.theme.TextSecondary
 fun OnlyOnSection(
     onOpenDetail: (Video) -> Unit,
     onSeeAll: (StreamingProvider) -> Unit,
-    onOpenPlatforms: () -> Unit
+    onOpenPlatforms: () -> Unit,
+    cardModifier: (Video) -> Modifier = { Modifier },
+    onItemFocused: ((Video) -> Unit)? = null
 ) {
     val selector = remember {
         listOf(8, 9, 1899, 337, 350, 2303, 15).mapNotNull { Providers.byId(it) }
@@ -72,9 +82,12 @@ fun OnlyOnSection(
         loading = false
     }
 
-    Column(Modifier.fillMaxWidth().padding(horizontal = AppSpacing.screenMargin)) {
+    Column(Modifier.fillMaxWidth().bringIntoViewIfChildrenAreFocused()) {
         // Título dinámico
-        Row(verticalAlignment = Alignment.CenterVertically) {
+        Row(
+            Modifier.padding(horizontal = AppSpacing.screenMargin),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
             Text("Solo en ", style = AppType.sectionTitle, color = TextPrimary)
             Text(
                 selected.name,
@@ -83,43 +96,69 @@ fun OnlyOnSection(
             )
         }
 
-        Spacer(Modifier.height(14.dp))
+        Spacer(Modifier.height(6.dp))
 
         // Tira de logos (selector de plataforma + «Más»)
-        LazyRow(
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            contentPadding = PaddingValues(end = 48.dp)
-        ) {
-            items(selector, key = { it.id }) { provider ->
-                ProviderLogoChip(
-                    provider = provider,
-                    selected = provider.id == selected.id,
-                    onClick = { selected = provider }
-                )
-            }
-            item(key = "more") {
-                MoreChip(onClick = onOpenPlatforms)
+        ProvideHorizontalTvBringIntoView {
+            LazyRow(
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                contentPadding = PaddingValues(horizontal = AppSpacing.screenMargin, vertical = 10.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .focusGroup()
+                    .focusRestorer()
+            ) {
+                items(selector, key = { it.id }) { provider ->
+                    ProviderLogoChip(
+                        provider = provider,
+                        selected = provider.id == selected.id,
+                        onClick = { selected = provider }
+                    )
+                }
+                item(key = "more") {
+                    MoreChip(onClick = onOpenPlatforms)
+                }
             }
         }
 
-        Spacer(Modifier.height(22.dp))
+        Spacer(Modifier.height(10.dp))
 
         if (loading) {
-            Text(
-                "Cargando el catálogo de ${selected.name}…",
-                style = AppType.metadata,
-                color = TextSecondary
-            )
-        } else {
-            LazyRow(
-                horizontalArrangement = Arrangement.spacedBy(20.dp),
-                contentPadding = PaddingValues(end = 48.dp)
+            Row(
+                modifier = Modifier.padding(horizontal = AppSpacing.screenMargin, vertical = 18.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(14.dp)
             ) {
-                items(videos.take(14), key = { it.id }) { video ->
-                    PosterCard(video, onClick = { onOpenDetail(video) })
-                }
-                item(key = "seeAll") {
-                    SeeAllCard(provider = selected, onClick = { onSeeAll(selected) })
+                LoadingSpinner(size = 24.dp)
+                Text(
+                    "Cargando el catálogo de ${selected.name}…",
+                    style = AppType.metadata,
+                    color = TextSecondary
+                )
+            }
+        } else {
+            ProvideHorizontalTvBringIntoView {
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(20.dp),
+                    contentPadding = PaddingValues(horizontal = AppSpacing.screenMargin, vertical = 14.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .focusGroup()
+                        .focusRestorer()
+                ) {
+                    items(videos.take(14), key = { it.id }) { video ->
+                        PosterCard(
+                            video = video,
+                            onClick = { onOpenDetail(video) },
+                            onFocus = onItemFocused?.let { cb -> { cb(video) } },
+                            modifier = Modifier
+                                .width(156.dp)
+                                .then(cardModifier(video))
+                        )
+                    }
+                    item(key = "seeAll") {
+                        SeeAllCard(provider = selected, onClick = { onSeeAll(selected) })
+                    }
                 }
             }
         }
@@ -134,14 +173,15 @@ private fun ProviderLogoChip(
     onClick: () -> Unit
 ) {
     var focused by remember { mutableStateOf(false) }
-    val scale by androidx.compose.animation.core.animateFloatAsState(
+    val scale by animateFloatAsState(
         if (focused) 1.08f else 1f,
-        androidx.compose.animation.core.tween(150),
+        tween(150),
         label = "logoChipScale"
     )
 
     Box(
         Modifier
+            .zIndex(if (focused) 1f else 0f)
             .graphicsLayer { scaleX = scale; scaleY = scale }
             .clip(AppRadius.md)
             .background(if (selected) GlassFill.copy(alpha = 0.95f) else GlassFill)
@@ -152,23 +192,44 @@ private fun ProviderLogoChip(
                     else -> Modifier.border(1.dp, Color.White.copy(alpha = 0.10f), AppRadius.md)
                 }
             )
+            .onFocusChanged { focused = it.isFocused }
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
                 onClick = onClick
             )
-            .onFocusChanged { focused = it.isFocused }
             .padding(horizontal = 14.dp, vertical = 10.dp),
         contentAlignment = Alignment.Center
     ) {
-        AsyncImage(
-            model = provider.logoUrl,
-            contentDescription = provider.name,
-            contentScale = ContentScale.Fit,
-            modifier = Modifier
-                .width(84.dp)
-                .height(34.dp)
-        )
+        var logoLoaded by remember(provider.id) { mutableStateOf(false) }
+        var logoFailed by remember(provider.id) { mutableStateOf(false) }
+        Box(
+            Modifier
+                .width(72.dp)
+                .height(34.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            if (!logoLoaded || logoFailed) {
+                Text(
+                    provider.name,
+                    style = AppType.cardTitle,
+                    color = TextSecondary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            AsyncImage(
+                model = provider.logoUrl,
+                contentDescription = provider.name,
+                contentScale = ContentScale.Fit,
+                onSuccess = { logoLoaded = true; logoFailed = false },
+                onError = { logoFailed = true },
+                modifier = Modifier
+                    .width(72.dp)
+                    .height(34.dp)
+                    .clip(AppRadius.xs)
+            )
+        }
     }
 }
 
@@ -176,20 +237,23 @@ private fun ProviderLogoChip(
 @Composable
 private fun MoreChip(onClick: () -> Unit) {
     var focused by remember { mutableStateOf(false) }
+    val scale by animateFloatAsState(if (focused) 1.08f else 1f, tween(150), label = "moreChipScale")
     Box(
         Modifier
+            .zIndex(if (focused) 1f else 0f)
+            .graphicsLayer { scaleX = scale; scaleY = scale }
             .clip(AppRadius.md)
             .background(if (focused) Accent else GlassFill)
             .then(
                 if (focused) Modifier.border(AppStroke.focus, Color.White, AppRadius.md)
                 else Modifier.border(1.dp, Color.White.copy(alpha = 0.10f), AppRadius.md)
             )
+            .onFocusChanged { focused = it.isFocused }
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
                 onClick = onClick
             )
-            .onFocusChanged { focused = it.isFocused }
             .padding(horizontal = 18.dp, vertical = 12.dp),
         contentAlignment = Alignment.Center
     ) {
@@ -205,22 +269,25 @@ private fun MoreChip(onClick: () -> Unit) {
 @Composable
 private fun SeeAllCard(provider: StreamingProvider, onClick: () -> Unit) {
     var focused by remember { mutableStateOf(false) }
+    val scale by animateFloatAsState(if (focused) 1.06f else 1f, tween(150), label = "seeAllScale")
     Box(
         Modifier
-            .size(160.dp, 140.dp)
-            .graphicsLayer { scaleX = if (focused) 1.05f else 1f; scaleY = if (focused) 1.05f else 1f }
+            .zIndex(if (focused) 1f else 0f)
+            .width(156.dp)
+            .aspectRatio(0.67f)
+            .graphicsLayer { scaleX = scale; scaleY = scale }
             .clip(AppRadius.md)
             .background(if (focused) Accent.copy(alpha = 0.35f) else GlassFill)
             .then(
                 if (focused) Modifier.border(AppStroke.focus, Color.White, AppRadius.md)
                 else Modifier.border(1.dp, Color.White.copy(alpha = 0.10f), AppRadius.md)
             )
+            .onFocusChanged { focused = it.isFocused }
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
                 onClick = onClick
-            )
-            .onFocusChanged { focused = it.isFocused },
+            ),
         contentAlignment = Alignment.Center
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {

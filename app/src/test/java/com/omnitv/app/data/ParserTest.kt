@@ -191,4 +191,30 @@ class ParserTest {
         assertEquals(1, SweetFoxClient.parseCompanyPage(card + card).size)
         assertTrue(SweetFoxClient.parseCompanyPage("").isEmpty())
     }
+
+    @Test
+    fun `cinejoy y sweetfox admiten comillas simples, webp y enlaces de series`() {
+        val cinejoyHtml = """
+            <a href='/tv/66732-stranger-things-2016'>
+              <img src='https://image.tmdb.org/t/p/original/66732.webp' alt='Stranger Things'>
+            </a>
+        """.trimIndent()
+        val cj = CinejoyClient.parseProviderPage(cinejoyPage(cinejoyHtml), 8).single()
+        assertEquals("tmdb:66732", cj.id)
+        assertEquals("Stranger Things", cj.title)
+        assertEquals(VideoType.SERIES, cj.type)
+        assertEquals("https://image.tmdb.org/t/p/w500/66732.webp", cj.cardUrl)
+
+        val sweetfoxHtml = """
+            <a href='/tv/84773'>
+              <img src='https://image.tmdb.org/t/p/w780/84773.png' alt='Andor'>
+              <span>2022</span>
+            </a>
+        """.trimIndent()
+        val sf = SweetFoxClient.parseCompanyPage(sweetfoxHtml).single()
+        assertEquals("tmdb:84773", sf.id)
+        assertEquals("Andor", sf.title)
+        assertEquals(VideoType.SERIES, sf.type)
+        assertEquals("https://image.tmdb.org/t/p/w500/84773.png", sf.cardUrl)
+    }
 }

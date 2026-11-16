@@ -106,7 +106,13 @@ object AnimeCatalog {
                 rows.clear()
                 rows.addAll(
                     sections.filter { it.page.videos.isNotEmpty() }
-                        .map { MediaRow(it.title, it.page.videos, it.key) }
+                        .map {
+                            MediaRow(
+                                it.title,
+                                it.page.videos.filter { v -> v.id.isNotBlank() }.distinctBy { v -> v.id },
+                                it.key
+                            )
+                        }
                 )
                 videos.clear()
                 videos.addAll(all)
@@ -275,12 +281,13 @@ object AnimeCatalog {
         visible(video, profile) && (source == "Todos" || video.source == source)
 
     private fun appendToRow(key: String, items: List<Video>) {
-        if (items.isEmpty()) return
+        val clean = items.filter { it.id.isNotBlank() }.distinctBy { it.id }
+        if (clean.isEmpty()) return
         val index = rows.indexOfFirst { it.key == key }
         if (index >= 0) {
-            rows[index] = rows[index].copy(items = (rows[index].items + items).distinctBy { it.id })
+            rows[index] = rows[index].copy(items = (rows[index].items + clean).distinctBy { it.id })
         } else {
-            rows.add(MediaRow("Más anime · ${AnimeIds.source(items.first().id).orEmpty()}", items, key))
+            rows.add(MediaRow("Más anime · ${AnimeIds.source(clean.first().id).orEmpty()}", clean, key))
         }
     }
 
@@ -305,5 +312,13 @@ object AnimeCatalog {
         pages.all { it.status == 0 } -> "sin respuesta"
         pages.all { it.status in 200..299 } -> "sin títulos"
         else -> pages.map { it.status }.filter { it > 0 }.distinct().joinToString("/")
+    }
+
+    /** Limpia las cachés de anime y fuerza recarga al abrir la pestaña Anime. */
+    fun invalidateCache() {
+        searchCache.clear()
+        detailCache.clear()
+        loadedRevision = -1
+        loaded.value = false
     }
 }

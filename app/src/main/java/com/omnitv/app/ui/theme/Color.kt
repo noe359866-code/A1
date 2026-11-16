@@ -11,11 +11,11 @@ val Accent = Color(0xFF0A84FF)        // systemBlue dark
 val AccentGreen = Color(0xFF30D158)   // systemGreen dark
 val TextPrimary = Color(0xFFFFFFFF)
 val TextSecondary = Color(0xFF8E8E93) // systemGray de iOS
-val TextTertiary = Color(0xFF48484A)  // systemGray3
-val FocusBorder = Color(0xFFFFFFFF)
+val TextTertiary = Color(0xFF48484A)  // systemGray3 (adornos no textuales)
 val GlassFill = Color(0x28787880)     // fill terciario translúcido
 val GlassFillStrong = Color(0x4D787880)
 val Danger = Color(0xFFFF453A)        // systemRed dark (acciones destructivas)
+val RatingGold = Color(0xFFFFD60A)    // estrella de valoración (estilo Cinejoy/GreyBox/NovaHD)
 
 /* -------------------------------------------------------------------------- */
 /*  Tokens semánticos                                                         */
@@ -24,16 +24,11 @@ val Danger = Color(0xFFFF453A)        // systemRed dark (acciones destructivas)
 /**
  * Texto **atenuado pero legible** (avisos, pies, notas al margen).
  *
- * `TextTertiary` no sirve para texto: sobre `Background` da 2,5:1, por debajo
- * del mínimo de 4,5:1 de las pautas de accesibilidad, y en un televisor con el
- * contraste bajo del salón desaparece. Este gris es `systemGray2` (≈ 6:1 sobre
- * el fondo) y sí se lee. `TextTertiary` se queda para adornos no textuales
- * (puntos separadores, pista del interruptor apagado).
+ * `TextTertiary` no sirve para texto: sobre `Background` da 2,15:1, por debajo
+ * del mínimo de 4,5:1 de las pautas de accesibilidad. Este gris es `systemGray2`
+ * (8,88:1 sobre el fondo).
  */
 val TextMuted = Color(0xFFAEAEB2)     // systemGray2 dark
-
-/** Verde de disponibilidad y estados correctos (alias explícito de [AccentGreen]). */
-val Success = AccentGreen
 
 /** Acento en vivo: el rojo de «AHORA» de la guía del reproductor. */
 val LiveAccent = Color(0xFFE50914)

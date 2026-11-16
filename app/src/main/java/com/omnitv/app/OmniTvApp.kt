@@ -1,12 +1,15 @@
 package com.omnitv.app
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -15,6 +18,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.input.InputMode
+import androidx.compose.ui.platform.LocalInputModeManager
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
@@ -23,19 +30,20 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
-import androidx.compose.material.Text
 import com.omnitv.app.data.CatalogRepository
-import com.omnitv.app.data.ProfileStore
-import com.omnitv.app.data.PlaybackResolver
 import com.omnitv.app.data.PlaybackResolution
+import com.omnitv.app.data.PlaybackResolver
+import com.omnitv.app.data.ProfileStore
 import com.omnitv.app.data.Providers
 import com.omnitv.app.data.RemoteCatalog
-import com.omnitv.app.data.Studios
-import com.omnitv.app.data.StreamHub
+import com.omnitv.app.data.SettingsStore
 import com.omnitv.app.data.StremioClient
+import com.omnitv.app.data.Studios
 import com.omnitv.app.data.Video
 import com.omnitv.app.player.PlayerScreen
+import com.omnitv.app.ui.components.PillButton
 import com.omnitv.app.ui.components.ProfileBadge
+import com.omnitv.app.ui.components.RequestTvFocus
 import com.omnitv.app.ui.components.TabItem
 import com.omnitv.app.ui.components.TvScaffold
 import com.omnitv.app.ui.screens.AnimeScreen
@@ -44,12 +52,13 @@ import com.omnitv.app.ui.screens.EditProfileScreen
 import com.omnitv.app.ui.screens.HomeScreen
 import com.omnitv.app.ui.screens.ManageProfilesScreen
 import com.omnitv.app.ui.screens.MoviesScreen
-import com.omnitv.app.ui.screens.PlatformCatalogScreen
 import com.omnitv.app.ui.screens.PlataformasScreen
+import com.omnitv.app.ui.screens.PlatformCatalogScreen
 import com.omnitv.app.ui.screens.ProfileSelectScreen
 import com.omnitv.app.ui.screens.SearchScreen
 import com.omnitv.app.ui.screens.SettingsScreen
 import com.omnitv.app.ui.screens.StudioCatalogScreen
+import com.omnitv.app.ui.theme.AppSpacing
 import com.omnitv.app.ui.theme.AppType
 import com.omnitv.app.ui.theme.Background
 import com.omnitv.app.ui.theme.TextPrimary
@@ -98,6 +107,15 @@ private val appTabs = listOf(
     TabItem("Ajustes", Routes.SETTINGS, R.drawable.ic_settings)
 )
 
+private val tabRoutes = setOf(
+    Routes.HOME,
+    Routes.MOVIES,
+    Routes.ANIME,
+    Routes.PLATFORMS,
+    Routes.SEARCH,
+    Routes.SETTINGS
+)
+
 /**
  * Raíz de la app: tema Omni TV + navegación.
  *
@@ -107,9 +125,16 @@ private val appTabs = listOf(
 @Composable
 fun OmniTvApp() {
     com.omnitv.app.ui.theme.OmniTvTheme {
+        val inputModeManager = LocalInputModeManager.current
+        LaunchedEffect(inputModeManager) {
+            if (inputModeManager.inputMode != InputMode.Keyboard) {
+                inputModeManager.requestInputMode(InputMode.Keyboard)
+            }
+        }
         val navController = rememberNavController()
         val backStackEntry by navController.currentBackStackEntryAsState()
         val currentRoute = backStackEntry?.destination?.route
+        val showTopBar = currentRoute in tabRoutes
 
         val profileBadge: @Composable () -> Unit = {
             ProfileBadge(
@@ -118,124 +143,130 @@ fun OmniTvApp() {
             )
         }
 
-        NavHost(
-            navController = navController,
-            startDestination = Routes.PROFILES,
-            modifier = Modifier.fillMaxSize()
+        TvScaffold(
+            tabs = appTabs,
+            currentRoute = currentRoute,
+            onTabSelected = navController::selectTab,
+            showTopBar = showTopBar,
+            onPreviewTab = { tab ->
+                val kidsPinGate = tab.route == Routes.SETTINGS &&
+                    SettingsStore.parentalPinEnabled &&
+                    ProfileStore.currentProfile?.isKids == true
+                if (!kidsPinGate) {
+                    navController.selectTab(tab)
+                }
+            },
+            trailing = profileBadge
         ) {
-            // ---------------- Perfiles ----------------
-            composable(Routes.PROFILES) {
-                ProfileSelectScreen(
-                    onSelected = { profile ->
-                        ProfileStore.select(profile.id)
-                        navController.navigate(Routes.HOME) {
-                            popUpTo(Routes.PROFILES) { inclusive = true }
-                            launchSingleTop = true
-                        }
-                    },
-                    onManage = { navController.navigate(Routes.MANAGE_PROFILES) },
-                    onAddProfile = { navController.navigate(Routes.editProfile("new")) }
-                )
-            }
-            composable(Routes.MANAGE_PROFILES) {
-                ManageProfilesScreen(
-                    onEdit = { navController.navigate(Routes.editProfile(it)) },
-                    onAddProfile = { navController.navigate(Routes.editProfile("new")) },
-                    onDone = { navController.popBackStack() }
-                )
-            }
-            composable(
-                route = Routes.EDIT_PROFILE,
-                arguments = listOf(navArgument("profileId") { type = NavType.StringType })
-            ) { entry ->
-                EditProfileScreen(
-                    profileId = entry.arguments?.getString("profileId") ?: "new",
-                    onSaved = { navController.popBackStack() },
-                    onDeleted = { navController.popBackStack() }
-                )
-            }
+            NavHost(
+                navController = navController,
+                startDestination = Routes.PROFILES,
+                modifier = Modifier.fillMaxSize()
+            ) {
+                // ---------------- Perfiles ----------------
+                composable(Routes.PROFILES) {
+                    ProfileSelectScreen(
+                        onSelected = { profile ->
+                            ProfileStore.select(profile.id)
+                            navController.navigate(Routes.HOME) {
+                                popUpTo(navController.graph.id) { inclusive = true }
+                                launchSingleTop = true
+                            }
+                        },
+                        onManage = { navController.navigate(Routes.MANAGE_PROFILES) },
+                        onAddProfile = { navController.navigate(Routes.editProfile("new")) }
+                    )
+                }
+                composable(Routes.MANAGE_PROFILES) {
+                    ManageProfilesScreen(
+                        onEdit = { navController.navigate(Routes.editProfile(it)) },
+                        onAddProfile = { navController.navigate(Routes.editProfile("new")) },
+                        onDone = { navController.popBackStack() }
+                    )
+                }
+                composable(
+                    route = Routes.EDIT_PROFILE,
+                    arguments = listOf(navArgument("profileId") { type = NavType.StringType })
+                ) { entry ->
+                    EditProfileScreen(
+                        profileId = entry.arguments?.getString("profileId") ?: "new",
+                        onSaved = { navController.popBackStack() },
+                        onDeleted = { navController.popBackStack() }
+                    )
+                }
 
-            // ---------------- Pestañas principales ----------------
-            composable(Routes.HOME) {
-                TvScaffold(appTabs, currentRoute, navController::selectTab, trailing = profileBadge) {
+                // ---------------- Pestañas principales ----------------
+                composable(Routes.HOME) {
                     HomeScreen(
                         onOpenDetail = { navController.navigate(Routes.detail(it.id.substringBefore('~'))) },
                         onPlay = { Routes.openPlayer(navController, it) },
                         onSeeAll = { navController.navigate(Routes.platform(it.id)) },
-                        onOpenPlatforms = { navController.navigate(Routes.PLATFORMS) },
+                        onOpenPlatforms = {
+                            navController.selectTab(appTabs.first { it.route == Routes.PLATFORMS })
+                        },
                         onOpenStudio = { navController.navigate(Routes.studio(it.id)) }
                     )
                 }
-            }
-            composable(Routes.MOVIES) {
-                TvScaffold(appTabs, currentRoute, navController::selectTab, trailing = profileBadge) {
+                composable(Routes.MOVIES) {
                     MoviesScreen(
                         onOpenDetail = { navController.navigate(Routes.detail(it.id.substringBefore('~'))) }
                     )
                 }
-            }
-            composable(Routes.ANIME) {
-                TvScaffold(appTabs, currentRoute, navController::selectTab, trailing = profileBadge) {
+                composable(Routes.ANIME) {
                     AnimeScreen(
                         onOpenDetail = { navController.navigate(Routes.detail(it.id.substringBefore('~'))) }
                     )
                 }
-            }
-            composable(Routes.SEARCH) {
-                TvScaffold(appTabs, currentRoute, navController::selectTab, trailing = profileBadge) {
+                composable(Routes.SEARCH) {
                     SearchScreen(
                         onOpenDetail = { navController.navigate(Routes.detail(it.id.substringBefore('~'))) }
                     )
                 }
-            }
-            composable(Routes.PLATFORMS) {
-                TvScaffold(appTabs, currentRoute, navController::selectTab, trailing = profileBadge) {
+                composable(Routes.PLATFORMS) {
                     PlataformasScreen(
                         onOpenProvider = { navController.navigate(Routes.platform(it.id)) },
-                        onOpenStudio = { navController.navigate(Routes.studio(it.id)) }
+                        onOpenStudio = { navController.navigate(Routes.studio(it.id)) },
+                        onGoHome = { navController.selectTab(appTabs.first { it.route == Routes.HOME }) }
                     )
                 }
-            }
-            composable(
-                route = Routes.STUDIO,
-                arguments = listOf(navArgument("studioId") { type = NavType.IntType })
-            ) { entry ->
-                val studioId = entry.arguments?.getInt("studioId") ?: -1
-                val studio = Studios.byId(studioId)
-                if (studio != null) {
-                    StudioCatalogScreen(
-                        studio = studio,
-                        onBack = { navController.popBackStack() },
-                        onOpenDetail = { navController.navigate(Routes.detail(it.id)) }
-                    )
-                } else {
-                    LaunchedEffect(Unit) { navController.popBackStack() }
+                composable(
+                    route = Routes.STUDIO,
+                    arguments = listOf(navArgument("studioId") { type = NavType.IntType })
+                ) { entry ->
+                    val studioId = entry.arguments?.getInt("studioId") ?: -1
+                    val studio = Studios.byId(studioId)
+                    if (studio != null) {
+                        StudioCatalogScreen(
+                            studio = studio,
+                            onBack = { navController.popBackStack() },
+                            onOpenDetail = { navController.navigate(Routes.detail(it.id.substringBefore('~'))) }
+                        )
+                    } else {
+                        LaunchedEffect(Unit) { navController.popBackStack() }
+                    }
                 }
-            }
-            composable(
-                route = Routes.PLATFORM,
-                arguments = listOf(navArgument("providerId") { type = NavType.IntType })
-            ) { entry ->
-                val providerId = entry.arguments?.getInt("providerId") ?: -1
-                val provider = Providers.byId(providerId)
-                if (provider != null) {
-                    PlatformCatalogScreen(
-                        provider = provider,
-                        onBack = { navController.popBackStack() },
-                        onOpenDetail = { navController.navigate(Routes.detail(it.id)) }
-                    )
-                } else {
-                    LaunchedEffect(Unit) { navController.popBackStack() }
+                composable(
+                    route = Routes.PLATFORM,
+                    arguments = listOf(navArgument("providerId") { type = NavType.IntType })
+                ) { entry ->
+                    val providerId = entry.arguments?.getInt("providerId") ?: -1
+                    val provider = Providers.byId(providerId)
+                    if (provider != null) {
+                        PlatformCatalogScreen(
+                            provider = provider,
+                            onBack = { navController.popBackStack() },
+                            onOpenDetail = { navController.navigate(Routes.detail(it.id.substringBefore('~'))) }
+                        )
+                    } else {
+                        LaunchedEffect(Unit) { navController.popBackStack() }
+                    }
                 }
-            }
-            composable(Routes.SETTINGS) {
-                TvScaffold(appTabs, currentRoute, navController::selectTab, trailing = profileBadge) {
+                composable(Routes.SETTINGS) {
                     SettingsScreen(
                         onSwitchProfile = { navController.navigate(Routes.PROFILES) },
                         onExit = { navController.selectTab(appTabs.first()) }
                     )
                 }
-            }
 
             // ---------------- Contenido ----------------
             composable(
@@ -252,26 +283,35 @@ fun OmniTvApp() {
                         }
                     }
                     LaunchedEffect(videoId) {
-                        val loaded = runCatching { RemoteCatalog.fetchDetail(
-                            Video(
-                                id = videoId, title = "", description = "",
-                                backdropUrl = "", cardUrl = "", year = 0,
-                                durationMinutes = 0, rating = 0.0, certification = "",
-                                quality = "HD", genres = emptyList(), videoUrl = "",
-                                isRemote = true,
-                                source = if (videoId.startsWith("tt")) StremioClient.CINEMETA_NAME else StremioClient.NUVIO_NAME,
-                                remoteType = null
+                        val loaded = runCatching {
+                            RemoteCatalog.fetchDetail(
+                                Video(
+                                    id = videoId, title = "", description = "",
+                                    backdropUrl = "", cardUrl = "", year = 0,
+                                    durationMinutes = 0, rating = 0.0, certification = "",
+                                    quality = "HD", genres = emptyList(), videoUrl = "",
+                                    isRemote = true,
+                                    source = if (videoId.startsWith("tt")) StremioClient.CINEMETA_NAME else StremioClient.NUVIO_NAME,
+                                    remoteType = null
+                                )
                             )
-                        ) }.getOrNull()
+                        }.getOrNull()
                         video = loaded
                         detailError = loaded == null
                     }
                 } else if (detailError) {
+                    val backFocus = remember { FocusRequester() }
+                    RequestTvFocus(backFocus)
                     Box(Modifier.fillMaxSize().background(Background), contentAlignment = Alignment.Center) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             Text("No se pudo cargar la ficha", style = AppType.sectionTitle, color = TextPrimary)
                             Spacer(Modifier.height(16.dp))
-                            com.omnitv.app.ui.components.PillButton("Volver", primary = false, onClick = { navController.popBackStack() })
+                            PillButton(
+                                text = "Volver",
+                                primary = false,
+                                onClick = { navController.popBackStack() },
+                                modifier = Modifier.focusRequester(backFocus)
+                            )
                         }
                     }
                 } else {
@@ -302,22 +342,43 @@ fun OmniTvApp() {
                     }
                     val result = resolution
                     when {
-                        result == null -> Box(Modifier.fillMaxSize().background(Background), contentAlignment = Alignment.Center) {
-                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text("Buscando enlaces…", style = AppType.sectionTitle, color = TextPrimary)
-                                Spacer(Modifier.height(16.dp))
-                                com.omnitv.app.ui.components.PillButton("Cancelar", primary = false, onClick = { navController.popBackStack() })
+                        result == null -> {
+                            val cancelFocus = remember { FocusRequester() }
+                            RequestTvFocus(cancelFocus)
+                            Box(Modifier.fillMaxSize().background(Background), contentAlignment = Alignment.Center) {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Text("Buscando enlaces…", style = AppType.sectionTitle, color = TextPrimary)
+                                    Spacer(Modifier.height(16.dp))
+                                    PillButton(
+                                        text = "Cancelar",
+                                        primary = false,
+                                        onClick = { navController.popBackStack() },
+                                        modifier = Modifier.focusRequester(cancelFocus)
+                                    )
+                                }
                             }
                         }
-                        result.sources.isEmpty() -> Box(Modifier.fillMaxSize().background(Background), contentAlignment = Alignment.Center) {
-                            Column(Modifier.padding(horizontal = 48.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                                Text("Sin fuentes disponibles", style = AppType.sectionTitle, color = TextPrimary)
-                                Spacer(Modifier.height(12.dp))
-                                Text(result.message, style = AppType.metadata, color = TextSecondary)
-                                Spacer(Modifier.height(24.dp))
-                                androidx.compose.foundation.layout.Row(horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(14.dp)) {
-                                    com.omnitv.app.ui.components.PillButton("Reintentar", onClick = { attempt++ })
-                                    com.omnitv.app.ui.components.PillButton("Volver", primary = false, onClick = { navController.popBackStack() })
+                        result.sources.isEmpty() -> {
+                            val retryFocus = remember { FocusRequester() }
+                            RequestTvFocus(retryFocus)
+                            Box(Modifier.fillMaxSize().background(Background), contentAlignment = Alignment.Center) {
+                                Column(Modifier.padding(horizontal = AppSpacing.screenMargin), horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Text("Sin fuentes disponibles", style = AppType.sectionTitle, color = TextPrimary)
+                                    Spacer(Modifier.height(12.dp))
+                                    Text(result.message, style = AppType.metadata, color = TextSecondary)
+                                    Spacer(Modifier.height(24.dp))
+                                    Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                                        PillButton(
+                                            text = "Reintentar",
+                                            onClick = { attempt++ },
+                                            modifier = Modifier.focusRequester(retryFocus)
+                                        )
+                                        PillButton(
+                                            text = "Volver",
+                                            primary = false,
+                                            onClick = { navController.popBackStack() }
+                                        )
+                                    }
                                 }
                             }
                         }
@@ -337,6 +398,7 @@ fun OmniTvApp() {
                     }
                 }
             }
+        }
         }
     }
 }
