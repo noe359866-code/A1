@@ -26,6 +26,7 @@ import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.unit.dp
 import com.omnitv.app.data.CatalogRepository
@@ -128,6 +129,7 @@ fun HomeScreen(
     var mountRestoreDone by remember { mutableStateOf(false) }
     val suppressAutoFocus = LocalSuppressContentAutoFocus.current
     val tabContentFocus = LocalTabContentFocus.current
+    val activeTabFocus = com.omnitv.app.ui.components.LocalActiveTabFocus.current
     SideEffect { tabContentFocus?.focus = heroFocus }
 
     LaunchedEffect(activeFeatured?.id, rows.size, suppressAutoFocus) {
@@ -168,7 +170,8 @@ fun HomeScreen(
         state = listState,
         modifier = Modifier
             .fillMaxSize()
-            .background(Background),
+            .background(Background)
+            .then(if (activeTabFocus != null) Modifier.focusProperties { left = activeTabFocus } else Modifier),
         verticalArrangement = Arrangement.spacedBy(24.dp),
         contentPadding = PaddingValues(bottom = 56.dp)
     ) {

@@ -237,7 +237,7 @@ fun SearchScreen(onOpenDetail: (Video) -> Unit) {
                             .then(if (index == 0) Modifier.focusRequester(firstChipFocus) else Modifier)
                             .then(if (pendingRestoreKey == chipKey) Modifier.focusRequester(restoreFocus) else Modifier)
                             .then(
-                                if (activeTabFocus != null) Modifier.focusProperties { up = activeTabFocus }
+                                if (activeTabFocus != null) Modifier.focusProperties { left = activeTabFocus }
                                 else Modifier
                             )
                     )
