@@ -62,18 +62,18 @@ La forma más corta:
 - El archivo se descarga con el nombre **`OmniTV.apk`**, ya listo para instalar.
 - No hay que descomprimir ni navegar por *Artifacts*.
 
-Hay dos tipos de release, y las dos adjuntan el APK con nombre fijo:
+Hay dos tipos de release, y las dos adjuntan **un único archivo** con nombre fijo:
 
-| Release | Etiqueta | Cuándo se actualiza | Contenido |
+| Release | Etiqueta | Cuándo se actualiza | Único adjunto |
 |---|---|---|---|
-| **Rodante (última compilación)** | `latest` | cada push a `main` | `OmniTV.apk` + `OmniTV-<versión>.apk` |
-| **Versionadas** | `v1.3.0`, `v1.4.0`… | al subir una etiqueta o marcar «publicar» | `OmniTV.apk` + `OmniTV-<versión>.apk` |
+| **Rodante (última compilación)** | `latest` | cada push a `main` | `OmniTV.apk` |
+| **Versionadas** | `v1.3.0`, `v1.4.0`… | al subir una etiqueta o marcar «publicar» | `OmniTV.apk` |
 
 Enlaces útiles:
 
 - Última compilación: `https://github.com/noe359866-code/A1/releases/tag/latest`
 - Todas las versiones: `https://github.com/noe359866-code/A1/releases`
-- Versión concreta: `https://github.com/noe359866-code/A1/releases/download/v1.3.0/OmniTV-1.3.0.apk`
+- Versión concreta: `https://github.com/noe359866-code/A1/releases/download/v1.3.0/OmniTV.apk`
 
 > El enlace `releases/latest/download/OmniTV.apk` (con `latest` en la ruta) también
 > funciona y apunta a la release marcada como más reciente del repositorio. Si en
@@ -102,8 +102,8 @@ No hace falta instalar nada: GitHub compila y te da el APK descargable.
 4. Espera ~8–12 minutos. Al terminar:
    - El APK queda adjunto a la release **`latest`**: descárgalo directo desde
      `…/releases/download/latest/OmniTV.apk` (sin ZIP).
-   - También aparece en **Artifacts → `OmniTV-apk-<versión>`** (ZIP), útil sólo
-     para auditar el run.
+   - Actions conserva además una copia técnica en **Artifacts → `OmniTV-apk-<versión>`**,
+     útil sólo para auditar el run; no forma parte de la Release.
    - El resumen del run muestra versión, tamaño, **SHA-256 del archivo** y
      **SHA-256 del certificado de firma**.
 5. Pasa el `.apk` a la TV (§5).
@@ -113,8 +113,8 @@ la release rodante **`latest`**, de modo que el enlace de descarga directa
 (§1.1) nunca queda desactualizado.
 
 Las **etiquetas `v*`** las gestiona `release.yml` (no `apk.yml`, para que dos
-workflows no compitan por la misma release): crea la release versionada con
-`OmniTV.apk` + `OmniTV-<versión>.apk`.
+workflows no compitan por la misma release): crea la release versionada con un
+único adjunto, `OmniTV.apk`.
 
 ---
 

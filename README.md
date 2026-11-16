@@ -231,7 +231,7 @@ y el archivo baja ya con el nombre `OmniTV.apk`, listo para instalar. No hay que
 descomprimir nada ni entrar en *Artifacts*.
 
 - **Última compilación (rodante):** [`releases/tag/latest`](https://github.com/noe359866-code/A1/releases/tag/latest) — se actualiza en cada push a `main`.
-- **Versiones estables:** [`releases`](https://github.com/noe359866-code/A1/releases) — cada etiqueta `v*` publica `OmniTV.apk` + la copia `OmniTV-<versión>.apk`.
+- **Versiones estables:** [`releases`](https://github.com/noe359866-code/A1/releases) — cada etiqueta `v*` publica un único adjunto: `OmniTV.apk`.
 - Cada release incluye el **SHA-256 del archivo** y el **SHA-256 del certificado** de firma.
 
 ```bash
@@ -242,10 +242,10 @@ adb install -r OmniTV.apk
 ### El botón de GitHub (compilar a mano)
 
 1. Pestaña **Actions** → **«Generar APK (Android TV)»** → **Run workflow**.
-2. En ~10 min el APK queda adjunto a la release `latest` (descarga directa) y también en *Artifacts → `OmniTV-apk-<versión>`* (ZIP, para auditar el run).
+2. En ~10 min el único adjunto de la release `latest` es `OmniTV.apk`, listo para descargar e instalar sin descomprimir. Actions conserva además una copia técnica en *Artifacts* para auditar el run.
 3. El resumen del run indica versión, tamaño, SHA-256 del archivo y huella de firma.
 
-`.github/workflows/apk.yml` compila `assembleRelease` (o `debug`), ejecuta los tests y publica el APK. Funciona también al subir una etiqueta `v*`.
+`.github/workflows/apk.yml` compila `assembleRelease` (o `debug`), ejecuta los tests y publica el APK; `.github/workflows/release.yml` gestiona las etiquetas `v*`.
 
 ### En local
 
