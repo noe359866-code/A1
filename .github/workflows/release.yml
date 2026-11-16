@@ -107,13 +107,15 @@ jobs:
           if-no-files-found: ignore
 
       - name: Preparar un único APK para la Release
+        env:
+          INPUT_TAG: ${{ github.event.inputs.tag }}
         run: |
           APK=$(ls app/build/outputs/apk/release/*.apk | head -n1)
           VERSION=$(grep 'versionName' app/build.gradle.kts | sed -E 's/.*"([^"]+)".*/\1/')
           if [ "${GITHUB_EVENT_NAME:-}" = "push" ] && [ "${GITHUB_REF_TYPE:-}" = "tag" ]; then
             TAG="$GITHUB_REF_NAME"
           else
-            TAG="${{ inputs.tag }}"
+            TAG="$INPUT_TAG"
             if [ -z "$TAG" ]; then TAG="v${VERSION}"; fi
           fi
           # Un solo adjunto con nombre fijo: descarga directa, sin ZIP ni copia.
