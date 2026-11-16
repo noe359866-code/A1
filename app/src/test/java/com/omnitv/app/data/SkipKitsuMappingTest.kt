@@ -39,7 +39,7 @@ class SkipKitsuMappingTest {
     }
 
     @Test
-    fun `AniSkip devuelve null sin malId; la traduccion ocurre en query`() {
+    fun `AniSkip devuelve null sin malId y la traduccion ocurre en query`() {
         val kitsuOnly = SkipTarget(null, null, 1, 2, kitsuId = "123")
         assertNull(SkipSegmentService.buildRequest(SkipSegmentParser.SOURCE_ANISKIP, kitsuOnly, true, 1440))
         // Con mal ya resuelto, la petición usa el malId (comportamiento verificado aparte)
