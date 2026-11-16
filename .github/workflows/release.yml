@@ -29,7 +29,11 @@ jobs:
             echo "::error::Las releases manuales solo se pueden crear desde main."
             exit 1
           fi
-          TAG="${INPUT_TAG:-$GITHUB_REF_NAME}"
+          TAG="${INPUT_TAG:-}"
+          if [ -z "$TAG" ]; then
+            VERSION=$(sed -nE 's/.*versionName *= *"([^"]+)".*/\1/p' app/build.gradle.kts | head -n1)
+            TAG="v$VERSION"
+          fi
           if ! [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             echo "::error::Etiqueta inválida: usa vX.Y.Z (por ejemplo v1.4.0)."
             exit 1
@@ -101,9 +105,12 @@ jobs:
         run: |
           APK=$(ls app/build/outputs/apk/release/*.apk | head -n1)
           VERSION=$(grep 'versionName' app/build.gradle.kts | sed -E 's/.*"([^"]+)".*/\1/')
-          TAG="${{ github.ref_name }}"
-          if [ -z "$TAG" ] || [ "$TAG" = "" ]; then TAG="v${VERSION}"; fi
-          if [ -n "${{ inputs.tag }}" ]; then TAG="${{ inputs.tag }}"; fi
+          if [ "${GITHUB_EVENT_NAME:-}" = "push" ] && [ "${GITHUB_REF_TYPE:-}" = "tag" ]; then
+            TAG="$GITHUB_REF_NAME"
+          else
+            TAG="${{ inputs.tag }}"
+            if [ -z "$TAG" ]; then TAG="v${VERSION}"; fi
+          fi
           # Un solo adjunto con nombre fijo: descarga directa, sin ZIP ni copia.
           OUT="OmniTV.apk"
           cp "$APK" "$OUT"
