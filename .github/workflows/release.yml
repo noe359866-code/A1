@@ -29,13 +29,18 @@ jobs:
             echo "::error::Las releases manuales solo se pueden crear desde main."
             exit 1
           fi
-          TAG="${INPUT_TAG:-}"
-          if [ -z "$TAG" ]; then
-            VERSION=$(sed -nE 's/.*versionName *= *"([^"]+)".*/\1/p' app/build.gradle.kts | head -n1)
-            TAG="v$VERSION"
+          VERSION=$(sed -nE 's/.*versionName *= *"([^"]+)".*/\1/p' app/build.gradle.kts | head -n1)
+          if [ "${GITHUB_EVENT_NAME:-}" = "push" ] && [ "${GITHUB_REF_TYPE:-}" = "tag" ]; then
+            TAG="$GITHUB_REF_NAME"
+          else
+            TAG="${INPUT_TAG:-v$VERSION}"
           fi
           if ! [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             echo "::error::Etiqueta inválida: usa vX.Y.Z (por ejemplo v1.4.0)."
+            exit 1
+          fi
+          if [ "$TAG" != "v$VERSION" ]; then
+            echo "::error::La etiqueta $TAG no coincide con versionName $VERSION de app/build.gradle.kts."
             exit 1
           fi
 
