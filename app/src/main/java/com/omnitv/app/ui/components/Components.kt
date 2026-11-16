@@ -132,7 +132,7 @@ fun formatTime(ms: Long): String {
 }
 
 /* -------------------------------------------------------------------------- */
-/*  Pestañas superiores (barra tipo tvOS)                                     */
+/*  Navegación lateral Android TV                                             */
 /* -------------------------------------------------------------------------- */
 
 data class TabItem(
@@ -153,105 +153,79 @@ fun TopTabBar(
     onBarFocusChanged: ((Boolean) -> Unit)? = null,
     trailing: @Composable () -> Unit = {}
 ) {
-    val compact = tabs.size > 5
+    var railHasFocus by remember { mutableStateOf(false) }
+    val width by animateDpAsState(
+        targetValue = if (railHasFocus) 224.dp else 76.dp,
+        animationSpec = appTween(180),
+        label = "sidebarWidth"
+    )
     val focusManager = LocalFocusManager.current
-    val tabScroll = rememberScrollState()
-    var barHasFocus by remember { mutableStateOf(false) }
-    var focusedRoute by remember { mutableStateOf<String?>(null) }
 
-    LaunchedEffect(focusedRoute, barHasFocus, currentRoute) {
-        val route = focusedRoute
-        if (barHasFocus && route != null && route != currentRoute && onPreviewSelect != null) {
-            kotlinx.coroutines.delay(150)
-            if (barHasFocus && route != currentRoute) {
-                tabs.firstOrNull { it.route == route }?.let(onPreviewSelect)
+    Column(
+        modifier = modifier
+            .width(width)
+            .fillMaxHeight()
+            .background(Surface.copy(alpha = 0.98f))
+            .onFocusChanged {
+                railHasFocus = it.hasFocus
+                onBarFocusChanged?.invoke(it.hasFocus)
+            }
+            .focusGroup()
+            .padding(horizontal = if (railHasFocus) 14.dp else 10.dp, vertical = 24.dp),
+        horizontalAlignment = if (railHasFocus) Alignment.Start else Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(bottom = 22.dp),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text("O", style = AppType.brand, color = Accent)
+            if (railHasFocus) {
+                Spacer(Modifier.width(8.dp))
+                Text("Omni TV", style = AppType.brand, color = TextPrimary, maxLines = 1)
             }
         }
-    }
 
-    Column(modifier.fillMaxWidth()) {
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .onFocusChanged {
-                    barHasFocus = it.hasFocus
-                    if (!it.hasFocus) focusedRoute = null
-                    onBarFocusChanged?.invoke(it.hasFocus)
+        tabs.forEach { tab ->
+            val selected = tab.route == currentRoute
+            SidebarItem(
+                tab = tab,
+                selected = selected,
+                expanded = railHasFocus,
+                modifier = if (selected && activeTabFocus != null) {
+                    Modifier.focusRequester(activeTabFocus)
+                } else Modifier,
+                onFocus = { },
+                onActivate = {
+                    if (selected) {
+                        if (onEnterContent != null) onEnterContent()
+                        else focusManager.moveFocus(FocusDirection.Right)
+                    } else onSelect(tab)
                 }
-                .padding(start = AppSpacing.screenMargin, end = AppSpacing.screenMargin, top = 32.dp, bottom = 14.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(if (compact) 4.dp else 10.dp)
-        ) {
-            // Marca de la app
-            Text("Omni", style = AppType.brand, color = TextPrimary)
-            Text("TV", style = AppType.brand, color = Accent)
-            Spacer(Modifier.width(if (compact) 8.dp else 20.dp))
-            Box(Modifier.weight(1f)) {
-                ProvideHorizontalTvBringIntoView(leadingPadding = 12.dp) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .horizontalScroll(tabScroll)
-                            .focusGroup()
-                            .padding(vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(if (compact) 5.dp else 10.dp)
-                    ) {
-                        tabs.forEach { tab ->
-                            val selected = tab.route == currentRoute
-                            TabPill(
-                                tab = tab,
-                                selected = selected,
-                                compact = compact,
-                                modifier = if (selected && activeTabFocus != null) {
-                                    Modifier.focusRequester(activeTabFocus)
-                                } else {
-                                    Modifier
-                                },
-                                onFocus = { focusedRoute = tab.route },
-                                onEnterDown = {
-                                    if (selected) {
-                                        if (onEnterContent != null) onEnterContent()
-                                        else focusManager.moveFocus(FocusDirection.Down)
-                                    } else {
-                                        onSelect(tab)
-                                    }
-                                },
-                                onClick = {
-                                    if (selected) {
-                                        if (onEnterContent != null) onEnterContent()
-                                        else focusManager.moveFocus(FocusDirection.Down)
-                                    } else {
-                                        onSelect(tab)
-                                    }
-                                }
-                            )
-                        }
-                    }
-                }
-            }
-            Spacer(Modifier.width(8.dp))
+            )
+        }
+
+        Spacer(Modifier.weight(1f))
+        if (railHasFocus) {
+            trailing()
+        } else {
+            // El perfil permanece accesible en el extremo inferior de la barra.
             trailing()
         }
-        // Separador sutil bajo la barra
-        Box(
-            Modifier
-                .fillMaxWidth()
-                .height(2.dp)
-                .background(Color.White.copy(alpha = 0.08f))
-        )
     }
 }
 
 @Composable
-private fun TabPill(
+private fun SidebarItem(
     tab: TabItem,
     selected: Boolean,
-    compact: Boolean,
-    onClick: () -> Unit,
+    expanded: Boolean,
     modifier: Modifier = Modifier,
-    onFocus: (() -> Unit)? = null,
-    onEnterDown: (() -> Unit)? = null
+    onFocus: () -> Unit,
+    onActivate: () -> Unit
 ) {
     var focused by remember { mutableStateOf(false) }
     val interactionSource = remember { MutableInteractionSource() }
@@ -262,63 +236,48 @@ private fun TabPill(
             focused -> FocusScale.tab
             else -> 1f
         },
-        appTween(150), label = "tabScale"
+        appTween(150), label = "sidebarItemScale"
     )
-
-    val background = when {
+    val foreground = if (focused) Background else if (selected) TextPrimary else TextSecondary
+    val fill = when {
         focused -> Color.White
-        selected -> GlassFillStrong
+        selected -> Accent.copy(alpha = 0.20f)
         else -> Color.Transparent
     }
-    val content = if (focused) Background else if (selected) TextPrimary else TextSecondary
 
     Row(
         modifier = modifier
+            .fillMaxWidth()
+            .height(52.dp)
             .zIndex(if (focused) 1f else 0f)
             .graphicsLayer { scaleX = scale; scaleY = scale }
-            .clip(AppRadius.lg)
-            .background(background)
-            .then(
-                if (focused) Modifier.border(AppStroke.focus, Background.copy(alpha = 0.85f), AppRadius.lg)
-                else Modifier
-            )
+            .clip(AppRadius.md)
+            .background(fill)
+            .then(if (focused) Modifier.border(AppStroke.focus, Background, AppRadius.md) else Modifier)
             .onFocusChanged {
                 focused = it.isFocused
-                if (it.isFocused) onFocus?.invoke()
+                if (it.isFocused) onFocus()
             }
-            .onPreviewKeyEvent { event ->
-                if (event.type == KeyEventType.KeyDown && TvKeyCodes.isDown(event.nativeKeyEvent.keyCode)) {
-                    if (onEnterDown != null) {
-                        onEnterDown()
-                        true
-                    } else {
-                        false
-                    }
-                } else {
-                    false
-                }
-            }
-            .clickable(
-                interactionSource = interactionSource,
-                indication = null,
-                onClick = onClick
-            )
-            .padding(horizontal = if (compact) 12.dp else 20.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically
+            .clickable(interactionSource = interactionSource, indication = null, onClick = onActivate)
+            .padding(horizontal = if (expanded) 14.dp else 0.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = if (expanded) Arrangement.Start else Arrangement.Center
     ) {
         Image(
             painter = painterResource(tab.iconRes),
-            contentDescription = null,
-            modifier = Modifier.size(if (compact) 18.dp else 21.dp),
-            colorFilter = ColorFilter.tint(content)
+            contentDescription = tab.label,
+            modifier = Modifier.size(24.dp),
+            colorFilter = ColorFilter.tint(foreground)
         )
-        Spacer(Modifier.width(if (compact) 6.dp else 10.dp))
-        Text(tab.label, style = AppType.tab, color = content, maxLines = 1, softWrap = false)
+        if (expanded) {
+            Spacer(Modifier.width(14.dp))
+            Text(tab.label, style = AppType.tab, color = foreground, maxLines = 1, softWrap = false)
+        }
     }
 }
 
 /* -------------------------------------------------------------------------- */
-/*  Scaffold con barra de pestañas persistente                                */
+/*  Scaffold con navegación lateral persistente                              */
 /* -------------------------------------------------------------------------- */
 
 @Composable
@@ -334,23 +293,21 @@ fun TvScaffold(
     val activeTabFocus = remember { FocusRequester() }
     val tabContentFocus = remember { TabContentFocusTarget() }
     val focusManager = LocalFocusManager.current
-    var topBarFocused by remember { mutableStateOf(false) }
+    var railFocused by remember { mutableStateOf(false) }
     var enterContentRequested by remember { mutableStateOf(false) }
     var enterTick by remember { mutableIntStateOf(0) }
-    var enterDelayFrames by remember { mutableIntStateOf(0) }
 
     LaunchedEffect(showTopBar) {
         if (!showTopBar) {
-            topBarFocused = false
+            railFocused = false
             enterContentRequested = false
         }
     }
 
     LaunchedEffect(enterTick) {
         if (enterTick == 0) return@LaunchedEffect
-        repeat(enterDelayFrames) { withFrameNanos { } }
-        for (attempt in 0 until 8) {
-            if (!topBarFocused) {
+        repeat(8) {
+            if (!railFocused) {
                 enterContentRequested = false
                 return@LaunchedEffect
             }
@@ -361,20 +318,18 @@ fun TvScaffold(
             }
             withFrameNanos { }
         }
-        if (topBarFocused) {
-            focusManager.moveFocus(FocusDirection.Down)
-        }
+        if (railFocused) focusManager.moveFocus(FocusDirection.Right)
         enterContentRequested = false
     }
 
-    val suppressAutoContentFocus = showTopBar && topBarFocused && !enterContentRequested
+    val suppressAutoContentFocus = showTopBar && railFocused && !enterContentRequested
 
     CompositionLocalProvider(
         LocalActiveTabFocus provides activeTabFocus,
         LocalTabContentFocus provides tabContentFocus,
         LocalSuppressContentAutoFocus provides suppressAutoContentFocus
     ) {
-        Column(
+        Row(
             Modifier
                 .fillMaxSize()
                 .background(Background)
@@ -386,25 +341,23 @@ fun TvScaffold(
                     currentRoute = currentRoute,
                     onSelect = { tab ->
                         enterContentRequested = true
-                        enterDelayFrames = 3
                         onTabSelected(tab)
                         enterTick++
                     },
-                    onPreviewSelect = onPreviewTab,
+                    onPreviewSelect = null,
                     onEnterContent = {
                         enterContentRequested = true
-                        enterDelayFrames = 0
                         enterTick++
                     },
                     onBarFocusChanged = { focused ->
-                        topBarFocused = focused
+                        railFocused = focused
                         if (!focused) enterContentRequested = false
                     },
                     activeTabFocus = activeTabFocus,
                     trailing = trailing
                 )
             }
-            Box(Modifier.weight(1f)) {
+            Box(Modifier.weight(1f).fillMaxHeight()) {
                 content()
             }
         }
