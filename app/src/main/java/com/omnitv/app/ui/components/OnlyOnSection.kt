@@ -3,7 +3,6 @@
 package com.omnitv.app.ui.components
 
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -48,6 +47,8 @@ import com.omnitv.app.data.RemoteCatalog
 import com.omnitv.app.data.StreamingProvider
 import com.omnitv.app.data.Video
 import com.omnitv.app.ui.theme.Accent
+import com.omnitv.app.ui.theme.BadgeAccent
+import com.omnitv.app.ui.theme.FocusScale
 import com.omnitv.app.ui.theme.AppRadius
 import com.omnitv.app.ui.theme.AppSpacing
 import com.omnitv.app.ui.theme.AppStroke
@@ -55,6 +56,7 @@ import com.omnitv.app.ui.theme.AppType
 import com.omnitv.app.ui.theme.GlassFill
 import com.omnitv.app.ui.theme.TextPrimary
 import com.omnitv.app.ui.theme.TextSecondary
+import com.omnitv.app.ui.theme.appTween
 
 /**
  * Sección «Solo en {plataforma}» — como el «Only on Netflix» de
@@ -174,8 +176,8 @@ private fun ProviderLogoChip(
 ) {
     var focused by remember { mutableStateOf(false) }
     val scale by animateFloatAsState(
-        if (focused) 1.08f else 1f,
-        tween(150),
+        if (focused) FocusScale.key else 1f,
+        appTween(150),
         label = "logoChipScale"
     )
 
@@ -237,13 +239,13 @@ private fun ProviderLogoChip(
 @Composable
 private fun MoreChip(onClick: () -> Unit) {
     var focused by remember { mutableStateOf(false) }
-    val scale by animateFloatAsState(if (focused) 1.08f else 1f, tween(150), label = "moreChipScale")
+    val scale by animateFloatAsState(if (focused) FocusScale.key else 1f, appTween(150), label = "moreChipScale")
     Box(
         Modifier
             .zIndex(if (focused) 1f else 0f)
             .graphicsLayer { scaleX = scale; scaleY = scale }
             .clip(AppRadius.md)
-            .background(if (focused) Accent else GlassFill)
+            .background(if (focused) BadgeAccent else GlassFill)
             .then(
                 if (focused) Modifier.border(AppStroke.focus, Color.White, AppRadius.md)
                 else Modifier.border(1.dp, Color.White.copy(alpha = 0.10f), AppRadius.md)
@@ -269,7 +271,7 @@ private fun MoreChip(onClick: () -> Unit) {
 @Composable
 private fun SeeAllCard(provider: StreamingProvider, onClick: () -> Unit) {
     var focused by remember { mutableStateOf(false) }
-    val scale by animateFloatAsState(if (focused) 1.06f else 1f, tween(150), label = "seeAllScale")
+    val scale by animateFloatAsState(if (focused) FocusScale.tab else 1f, appTween(150), label = "seeAllScale")
     Box(
         Modifier
             .zIndex(if (focused) 1f else 0f)

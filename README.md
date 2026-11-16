@@ -2,7 +2,7 @@
 
 <p align="center">
   <strong>Experiencia premium para Android TV</strong><br>
-  Kotlin · Jetpack Compose · Media3 ExoPlayer · Diseño tvOS
+  Kotlin · Jetpack Compose · Media3 ExoPlayer · Diseño inspirado en tvOS
 </p>
 
 <p align="center">
@@ -24,7 +24,7 @@ Omni TV es una aplicación **exclusiva para Android TV / Google TV** con estánd
 **Principios de diseño:**
 
 - **Sin demo:** no se sustituyen títulos por vídeos de prueba ni se muestran servidores inventados.
-- **Diseño tvOS:** fondo #0B0B0F, acento #0A84FF, tipografía de 10 pies, foco D-pad de 3dp.
+- **Diseño inspirado en tvOS, adaptado a Android TV:** fondo #0B0B0F, acento #0A84FF, tipografía de 10 pies, foco D-pad de 3dp. Híbrido deliberado: perfiles y reproductor estilo Netflix/Xuper TV sobre la base tvOS.
 - **Privacidad local:** addons y claves nunca salen del televisor; backups excluidos por sistema.
 - **Red honesta:** HTTPS siempre; HTTP solo en LAN; DoH opcional con validación de certificado.
 
@@ -35,14 +35,15 @@ Omni TV es una aplicación **exclusiva para Android TV / Google TV** con estánd
 | Área | Detalle |
 |------|---------|
 | **Solo Android TV** | `leanback` requerido, `touchscreen` opcional, `LEANBACK_LAUNCHER` + banner 320×180 |
-| **Diseño Apple TV** | Superficies #16161C, tarjetas con escala 1.08 y borde blanco, botones píldora, velos degradados |
+| **Diseño inspirado en tvOS** | Superficies #16161C, foco con escala por jerarquía (`FocusScale` 1.02–1.12), borde blanco, botones píldora, velos degradados |
 | **Navegación D-pad** | Pestañas tvOS, `focusRestorer`, foco inicial inteligente en cada pantalla |
 | **Perfiles Netflix** | Selector con avatares ilustrados, modo infantil con PIN parental opcional, Mi Lista y Continuar viendo por perfil |
 | **Reproductor Xuper TV** | Información del título/siguiente, multi-servidor, ABR HLS, audio/subs/calidad, zoom, ±10s, temporizador de pausa |
 | **Catálogo real** | Cinemeta + Nuvio + addons del usuario + cinejoy (plataformas) + sweetfox (estudios) |
 | **Catálogo anime** | Pestaña solo anime con Jikan (MyAnimeList) y Kitsu: filas curadas, búsqueda, episodios reales, filtro por fuente y clasificación por edad ([detalle](docs/ANIME_CATALOG.md)) |
 | **Búsqueda con mando** | Teclado propio lateral (37 teclas), también para nombres de perfil; búsqueda sin distinguir acentos/mayúsculas |
-| **Vinculación segura** | Servidor :8080 + QR solo con la URL, código de 6 caracteres por `POST /unlock`, sesión con cookie `HttpOnly`/`SameSite=Strict`, regeneración de código, rate-limit, cifrado Keystore AES-GCM |
+| **Vinculación segura** | Servidor :8080 + QR que abre el panel directo (303 → `/`, el código no queda en el historial), sesión con cookie `HttpOnly`/`SameSite=Strict` ligada a IP/código, regeneración de código, rate-limit, cifrado Keystore AES-GCM |
+| **Trakt opcional** | Sincroniza inicio/pausa/fin de reproducción con trakt.tv (flujo de dispositivo, claves del usuario, sin claves en la app) — ver [paridad con referencias](docs/PARIDAD_REFERENCIAS.md) |
 
 ---
 
@@ -94,9 +95,9 @@ Basado en Media3 ExoPlayer con investigación de Xuper TV:
 
 - Selector obligatorio al iniciar
 - Estado aislado por perfil: progreso (95% = visto, <2% = descartado) y Mi Lista
-- Infantil: filtra el catálogo local TP/7+ y bloquea secciones remotas; **no hay PIN**, se puede cambiar de perfil
+- Infantil: filtra el catálogo local TP/7+ y bloquea secciones remotas; PIN parental opcional de 4 cifras protege la salida del perfil infantil (`SettingsStore`, límite de 5 fallos → bloqueo de 30 s)
 - CRUD completo con validación, persistido en `SharedPreferences` JSON
-- 8 avatares vectoriales originales · cambio rápido desde barra superior
+- 12 avatares vectoriales originales · cambio rápido desde barra superior
 
 ---
 
@@ -137,6 +138,7 @@ Puente Cloudstream: `tools/cloudstream-bridge/` (runtime externo). Puente de str
 | Dato | Almacenamiento | Cifrado | Backup |
 |------|---------------|---------|--------|
 | Claves API `NOMBRE=clave` | `omni_tv_settings` | AES-256-GCM Keystore (Android 6+) | **Excluido** |
+| Tokens de Trakt | `omni_tv_settings` | AES-256-GCM Keystore (Android 6+) | **Excluido** |
 | Cuenta / addons / streams / repos y puente Nuvio | `omni_tv_settings` | No (URLs) | **Excluido** |
 | Código emparejamiento | `omni_tv_settings` | No | **Excluido** |
 | Perfiles / Mi Lista | `omni_tv_profiles` | No | Incluido |
@@ -176,11 +178,14 @@ Solución: teclado propio superpuesto:
 
 ## 🎨 Sistema de diseño
 
-- **Paleta:** Background #0B0B0F · Surface #16161C · Elevated #1F1F26 · Accent #0A84FF · Success #30D158
+- **Paleta:** Background #0B0B0F · Surface #16161C · Elevated #1F1F26 · Accent #0A84FF · AccentGreen #30D158
 - **Tipografía 10 pies:** hero 54sp · title 40sp · section 27sp · body 21sp · metadata 18sp · chip 15sp (mínimo legible a 3m)
-- **Geometría:** radios 4/8/14/22dp + cápsula, espaciado 4–48dp, margen seguro 48dp, 5 columnas
-- **Foco:** anillo 3dp blanco siempre visible + escala 1.08 + sombra; regla: foco=blanco, seleccionado=azul
-- **Contraste:** TextMuted 6:1 para texto; TextTertiary solo para adornos
+- **Geometría:** radios 4/8/14/22dp + cápsula (tokens `AppRadius`), espaciado interno 4–48dp (escala informal con literales; `AppSpacing.screenMargin = 48dp` es el único token obligatorio, overscan), 5 columnas
+- **Chips de filtro:** `TvChip` por defecto a `AppType.body` 21sp (lectura a distancia); `AppType.chip` 15sp versalitas queda para badges y etiquetas cortas
+- **Foco:** anillo 3dp blanco siempre visible + escala por jerarquía con nombre (`FocusScale` en `Dimens.kt`): filas de episodio 1.02 · chips/píldoras/categorías 1.05 · pestañas/Continuar viendo/tiles de plataforma 1.06 · pósters/tarjetas 1.07 · controles medios (teclas, logo chips, «+»/más, píldoras del reproductor) 1.08 · controles grandes (botones circulares, gestión de perfiles) 1.10 · tiles de perfil/toggle 1.12; al pulsar, los controles principales se contraen a ×0.94 (**pressed state**) + sombra; regla: foco=blanco, seleccionado=azul
+- **Pulsación:** los componentes principales responden a OK/Enter (contracción ×0.94 vía `collectIsPressedAsState`) aunque `indication = null`; el estado `disabled` sigue sin variante visual propia (ver «Limitaciones»)
+- **Contraste (WCAG 2.x, medido):** TextPrimary 18:1 · TextSecondary 6,0:1 · TextMuted 8,9:1 · LiveAccentText 6,6:1 (blanco-sobre-acento badges/botones: ≥4,5:1 vía `BadgeAccent` 4,78:1) · TextTertiary 2,15:1 solo para adornos
+- **Badges:** fondo sólido `BadgeAccent` (#0070E0) con blanco — 4,78:1 AA (el acento #0A84FF se reserva para foco/rellenos/iconos, no para texto de 15 sp)
 - **Componentes unificados:** PosterCard, PillButton, TvChip, TvToggle, HeroBanner, SectionRow — un patrón, una implementación
 - **Barra de 6 pestañas:** la activa/enfocada muestra etiqueta; el resto se compacta a icono con `contentDescription`, sin recortes ni desbordamiento
 

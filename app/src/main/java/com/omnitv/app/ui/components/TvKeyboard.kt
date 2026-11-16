@@ -1,13 +1,13 @@
 package com.omnitv.app.ui.components
 
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -43,17 +43,19 @@ import com.omnitv.app.R
 import com.omnitv.app.data.ConfirmKeyUpGuard
 import com.omnitv.app.data.TvKeyCodes
 import com.omnitv.app.data.TvKeypad
-import com.omnitv.app.ui.theme.Accent
+import com.omnitv.app.ui.theme.BadgeAccent
 import com.omnitv.app.ui.theme.AppRadius
 import com.omnitv.app.ui.theme.AppStroke
 import com.omnitv.app.ui.theme.AppType
 import com.omnitv.app.ui.theme.Background
+import com.omnitv.app.ui.theme.FocusScale
 import com.omnitv.app.ui.theme.GlassFill
 import com.omnitv.app.ui.theme.GlassFillStrong
 import com.omnitv.app.ui.theme.OnLight
 import com.omnitv.app.ui.theme.SurfaceCard
 import com.omnitv.app.ui.theme.SurfaceElevated
 import com.omnitv.app.ui.theme.TextPrimary
+import com.omnitv.app.ui.theme.appTween
 
 /**
  * Teclado propio para Android TV. No depende del IME del receptor.
@@ -248,7 +250,16 @@ private fun KeyButton(
     modifier: Modifier = Modifier
 ) {
     var focused by remember { mutableStateOf(false) }
-    val scale by animateFloatAsState(if (focused) 1.08f else 1f, tween(110), label = "keyScale")
+    val interactionSource = remember { MutableInteractionSource() }
+    val pressed by interactionSource.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        when {
+            pressed -> FocusScale.key * FocusScale.pressFactor
+            focused -> FocusScale.key
+            else -> 1f
+        },
+        appTween(110), label = "keyScale"
+    )
     val radius = if (embedded) AppRadius.xs else AppRadius.sm
     val bg = when {
         focused && embedded -> SurfaceElevated
@@ -257,7 +268,7 @@ private fun KeyButton(
         else -> GlassFillStrong
     }
     val border = when {
-        focused && embedded -> Modifier.border(2.dp, Color.White, radius)
+        focused && embedded -> Modifier.border(AppStroke.focus, Color.White, radius)
         focused -> Modifier.border(AppStroke.focus, Background, radius)
         embedded -> Modifier.border(1.dp, Color.White.copy(alpha = 0.08f), radius)
         else -> Modifier
@@ -280,7 +291,7 @@ private fun KeyButton(
                 focused = it.isFocused
                 if (it.isFocused) onFocus()
             }
-            .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onClick),
+            .clickable(interactionSource = interactionSource, indication = null, onClick = onClick),
         contentAlignment = Alignment.Center
     ) {
         Text(
@@ -304,17 +315,26 @@ private fun ActionKey(
     embedded: Boolean = false
 ) {
     var focused by remember { mutableStateOf(false) }
-    val scale by animateFloatAsState(if (focused) 1.05f else 1f, tween(110), label = "actionKeyScale")
+    val interactionSource = remember { MutableInteractionSource() }
+    val pressed by interactionSource.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        when {
+            pressed -> FocusScale.chip * FocusScale.pressFactor
+            focused -> FocusScale.chip
+            else -> 1f
+        },
+        appTween(110), label = "actionKeyScale"
+    )
     val radius = if (embedded) AppRadius.xs else AppRadius.sm
     val background = when {
         focused && embedded -> SurfaceElevated
         focused -> Color.White
-        primary -> Accent
+        primary -> BadgeAccent // fill con texto blanco: 4,78:1 (AA)
         embedded -> GlassFill
         else -> GlassFillStrong
     }
     val border = when {
-        focused && embedded -> Modifier.border(2.dp, Color.White, radius)
+        focused && embedded -> Modifier.border(AppStroke.focus, Color.White, radius)
         focused -> Modifier.border(AppStroke.focus, Background, radius)
         embedded -> Modifier.border(1.dp, Color.White.copy(alpha = 0.08f), radius)
         else -> Modifier
@@ -333,7 +353,7 @@ private fun ActionKey(
                 focused = it.isFocused
                 if (it.isFocused) onFocus()
             }
-            .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onClick)
+            .clickable(interactionSource = interactionSource, indication = null, onClick = onClick)
             .padding(horizontal = if (embedded) 6.dp else if (compact) 10.dp else 20.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.Center

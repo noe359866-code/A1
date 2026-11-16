@@ -111,5 +111,6 @@ object ExtractorRegistry {
 
 // Helpers comunes
 internal fun parseQuality(label: String): String =
-    listOf("2160p", "4K", "1080p", "1080", "720p", "720", "480p", "480", "360p")
+    if (label.isBlank()) "HD" // antes: "" emparejaba con "2160p" por contains("")
+    else listOf("2160p", "4K", "1080p", "1080", "720p", "720", "480p", "480", "360p")
         .firstOrNull { it.contains(label, true) || label.contains(it, true) } ?: "HD"

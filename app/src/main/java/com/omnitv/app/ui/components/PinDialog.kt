@@ -21,7 +21,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
+
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
@@ -35,6 +35,7 @@ import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.unit.dp
 import com.omnitv.app.data.ConfirmKeyUpGuard
+import com.omnitv.app.data.PinAttemptGuard
 import com.omnitv.app.data.ParentalPin
 import com.omnitv.app.data.TvKeyCodes
 import com.omnitv.app.ui.theme.Accent
@@ -67,25 +68,21 @@ fun PinDialog(
     var first by remember { mutableStateOf("") }
     var confirming by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf("") }
-    var failures by rememberSaveable { mutableStateOf(0) }
-    var lockedUntil by rememberSaveable { mutableStateOf(0L) }
     val keyGrid = remember { List(4) { List(3) { FocusRequester() } } }
     val keyUpGuard = remember { ConfirmKeyUpGuard(initialSuppressUntilDown = true) }
     RequestTvFocus(keyGrid[0][0])
 
     BackHandler(onBack = onDismiss)
 
-    fun locked(): Boolean = lockedUntil > System.currentTimeMillis()
+    /** El bloqueo vive en [PinAttemptGuard] para que descartar el diálogo no lo reinicie. */
+    fun locked(): Boolean {
+        if (!PinAttemptGuard.isLocked()) return false
+        error = "Demasiados intentos. Espera ${PinAttemptGuard.lockedSecondsRemaining()} s."
+        return true
+    }
 
     fun submit(pin: String) {
-        val now = System.currentTimeMillis()
-        if (lockedUntil > 0L && now >= lockedUntil) {
-            lockedUntil = 0L
-            failures = 0
-            error = ""
-        }
         if (locked()) {
-            error = "Demasiados intentos. Espera unos segundos."
             entry = ""
             return
         }
@@ -103,11 +100,17 @@ fun PinDialog(
             error = "Los dos PIN no coinciden. Vuelve a empezar."
             return
         }
-        if (onSubmit(pin)) return
-        failures++
-        if (failures >= 5) lockedUntil = now + 30_000L
+        if (onSubmit(pin)) {
+            PinAttemptGuard.recordSuccess()
+            return
+        }
+        PinAttemptGuard.recordFailure()
         entry = ""
-        error = "PIN incorrecto. Inténtalo de nuevo."
+        error = if (PinAttemptGuard.isLocked()) {
+            "Demasiados intentos. Espera ${PinAttemptGuard.lockedSecondsRemaining()} s."
+        } else {
+            "PIN incorrecto. Inténtalo de nuevo."
+        }
     }
 
     fun pressDigit(digit: Char) {

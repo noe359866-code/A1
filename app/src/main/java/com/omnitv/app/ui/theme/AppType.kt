@@ -143,12 +143,12 @@ object AppType {
         letterSpacing = 3.sp
     )
 
-    /** Código de emparejamiento / valores monospace: 22 sp. */
-    val monospaceCode = TextStyle(
+    /** Código de emparejamiento en pantalla de salón: 40 sp, legible a 3 m. */
+    val pairingCode = TextStyle(
         fontFamily = FontFamily.Monospace,
         fontWeight = FontWeight.Bold,
-        fontSize = 22.sp,
-        letterSpacing = 1.5.sp
+        fontSize = 40.sp,
+        letterSpacing = 8.sp
     )
 
     /** Numerales editoriales del bloque «Top 10 hoy» (estilo Cinejoy / NovaHD). */

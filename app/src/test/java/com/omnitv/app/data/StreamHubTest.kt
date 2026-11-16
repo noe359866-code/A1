@@ -39,6 +39,33 @@ class StreamHubTest {
     }
 
     @Test
+    fun `misma url de varios addons conserva la mejor calidad sin perder cabeceras`() {
+        val weak = StreamSource(
+            label = "Addon A", url = "https://cdn.example/v.mp4",
+            headers = mapOf("Referer" to "https://addon.example")
+        )
+        val strong = StreamSource(label = "Addon B", url = "https://cdn.example/v.mp4", quality = "2160p")
+        val merged = StreamHub.dedupeByUrlBestQuality(listOf(weak, strong)).single()
+        assertEquals("Addon A", merged.label) // primera etiqueta (identifica al addon)
+        assertEquals("2160p", merged.quality) // máxima calidad detectada
+        assertEquals(mapOf("Referer" to "https://addon.example"), merged.headers) // cabeceras intactas
+    }
+
+    @Test
+    fun `la variante mas debil no pisa la calidad ya registrada`() {
+        val first = StreamSource(label = "A", url = "https://cdn.example/v.mp4", quality = "1080p")
+        val later = StreamSource(label = "B", url = "https://cdn.example/v.mp4", quality = "360p")
+        assertEquals("1080p", StreamHub.dedupeByUrlBestQuality(listOf(first, later)).single().quality)
+    }
+
+    @Test
+    fun `urls distintas no se fusionan`() {
+        val a = StreamSource(label = "A", url = "https://cdn.example/a.mp4")
+        val b = StreamSource(label = "B", url = "https://cdn.example/b.mp4")
+        assertEquals(2, StreamHub.dedupeByUrlBestQuality(listOf(a, b)).size)
+    }
+
+    @Test
     fun `el episodio remoto usa su id Stremio y tipo series`() {
         val episode = Video(
             id = "tt0944947~s1e2", title = "Episodio", description = "",

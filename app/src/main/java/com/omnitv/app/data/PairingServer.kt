@@ -13,8 +13,9 @@ import kotlin.concurrent.thread
  * Mini servidor web embebido (puerto 8080) que sirve el **panel de
  * vinculación** de Omni TV.
  *
- * Al escanear el QR de Ajustes, el móvil abre `http://{ip-del-tv}:8080/`
- * (con el código de emparejamiento) y el usuario puede:
+ * Al escanear el QR de Ajustes, el móvil abre `http://{ip-del-tv}:8080/?code={código}`
+ * y el panel se desbloquea solo (303 → `/` con cookie de sesión). Quien abra la
+ * URL a mano verá el formulario para introducir el código. Desde el panel se puede:
  *
  * - **Enlazar su cuenta** (email),
  * - **Añadir addons** (URLs de `manifest.json` de Stremio: aparecen como
@@ -22,12 +23,13 @@ import kotlin.concurrent.thread
  * - **Añadir APIs** (nombre + clave, guardadas para integraciones).
  *
  * Seguridad: cualquiera en la misma red puede llegar a este puerto, así que
- * **sin el código de emparejamiento no se entrega ni se acepta nada** — la
+ * **sin el código de emparejamiento o una sesión vigente no se entrega ni se acepta nada** — la
  * página sin código solo muestra el campo para introducirlo (ver
- * [PairingRouter] y [PairingPortal]). El código ya no viaja en la URL del QR:
- * se canjea por una sesión [SessionGuard] con cookie `HttpOnly`/`SameSite=Strict`.
- * Los intentos fallidos se limitan por cliente ([AttemptGuard]), el guardado
- * rechaza orígenes cruzados y el tamaño de las peticiones está acotado.
+ * [PairingRouter] y [PairingPortal]). El código viaja en el QR a propósito: es
+ * la única credencial práctica de emparejamiento «de sofá»; el 303 al final
+ * borra el código de la URL del navegador, el guardado está ligado a la IP de
+ * origen, el guardado rechaza orígenes cruzados y el tamaño de las peticiones
+ * está acotado. Rotar el código en Ajustes invalida todas las sesiones.
  */
 object PairingServer {
 
@@ -116,12 +118,23 @@ object PairingServer {
     fun panelUrl(): String = localIpv4().takeIf { it.isNotEmpty() }?.let { "http://$it:$PORT/" }.orEmpty()
 
     /**
-     * URL que codifica el QR: **solo la dirección del panel**, sin el código.
-     * El móvil introduce el código por `POST /unlock` y recibe una cookie de
-     * sesión; así el secreto no queda en el historial, en `Referer` ni en
-     * capturas del QR compartidas.
+     * URL que codifica el QR: `http://{ip}:8080/?code={código}`.
+     *
+     * Escaneo = conexión directa: [PairingRouter] responde 303 a `/` con la
+     * cookie de sesión y el navegador se queda en una URL limpia (el código
+     * no queda en el historial). El flujo manual sigue disponible: la página
+     * que pide el código a mano se sirve a quien abra la URL sin `?code=`.
+     *
+     * El QR es, de hecho, la única forma de emparejar "a distancia de sofá":
+     * quien puede fotografiarlo ya está delante del televisor. Rotar el código
+     * en Ajustes invalida todas las sesiones abiertas al instante.
      */
-    fun pairingUrl(): String = panelUrl()
+    fun pairingUrl(): String {
+        val base = panelUrl()
+        if (base.isEmpty()) return ""
+        val code = SettingsStore.pairingCode
+        return if (code.isBlank() || code == "------") base else "$base?code=$code"
+    }
 
     /** Los ajustes reales del televisor, vistos desde el panel. */
     private object SettingsPanelStore : PanelStore {
@@ -196,6 +209,7 @@ object PairingServer {
 internal fun panelResponseHeaders(response: PanelResponse, bodyBytes: Int): String {
     val reason = when (response.status) {
         200 -> "OK"
+        303 -> "See Other"
         400 -> "Bad Request"
         403 -> "Forbidden"
         404 -> "Not Found"

@@ -4,13 +4,24 @@
 
 ## Por qué funciona para todo el mundo
 
-Las tres bases de datos comunitarias permiten **lectura anónima**:
+Las cuatro bases de datos comunitarias permiten **lectura anónima**:
 
 | Fuente | Endpoint de lectura | Identidad | Clave para leer |
 |---|---|---|---|
 | SkipDB | `GET https://api.skipdb.tv/api/segments` | IMDb + temporada/episodio + `duration` (segundos) | No |
 | TheIntroDB v4 | `GET https://api.theintrodb.org/v4/media` | TMDB (preferido) o IMDb + `duration_ms` | No (opcional) |
 | IntroDB | `GET https://api.introdb.app/segments` | IMDb + temporada/episodio o `is_movie` | No |
+| AniSkip v2 | `GET https://api.aniskip.com/v2/skip-times/{malId}/{episodio}` | **id MyAnimeList** + episodio | No |
+
+**Anime desde Kitsu.** Una ficha con id `kitsu:…` no casa con ninguna fuente
+directamente (TheIntroDB/SkipDB/IntroDB son IMDb/TMDB; AniSkip es MAL). Si no hay
+id MAL, Omni TV traduce el id de Kitsu al de MyAnimeList **una vez por título** vía
+el endpoint público `kitsu.io/api/edge/mappings` (`filter[itemId]` +
+`filter[externalSite]=myanimelist/anime`), con caché de 7 días y tolerancia a
+títulos sin correspondencia (exclusivos de Kitsu se quedan sin tramos, nunca con
+tramos ajenos). El número de episodio puede no coincidir entre cour
+múltiples; los tramos con fin fuera de la duración se descartan igualmente. Un 2xx es
+respuesta definitiva y se cachea 7 días; un fallo de red no se cachea.
 
 Consecuencias de diseño:
 
@@ -39,6 +50,7 @@ Consecuencias de diseño:
 ## Límites honestos
 
 - SkipDB e IntroDB **solo aceptan IMDb**: un título que llega únicamente con id `tmdb:…` se consulta solo en TheIntroDB. No se inventa la conversión.
+- AniSkip **solo acepta MAL**: una ficha de Kitsu se traduce vía Kitsu (ver arriba). Sin correspondencia, no hay tramos para ese título — nunca se aplican tiempos de otro show.
 - Los tiempos son comunitarios: pueden no encajar con un corte distinto (logo extra, versión extendida). Por eso se envía la duración y se marca la incertidumbre.
 - Sin temporada/episodio no se consulta TV; sin id IMDb/TMDB no se consulta nada.
 - No hay envío de tiempos desde el televisor en esta versión.
@@ -48,7 +60,8 @@ Consecuencias de diseño:
 - **SkipDB**: datos ODbL 1.0 con atribución (mostrada en Ajustes). Su término de reciprocidad afecta a quien use SkipDB para nutrir una base de datos privada de tramos; **el uso de solo lectura para mostrar los tiempos al usuario no lo activa**. Omni TV no almacena ni redistribuye una base derivada: consulta la API en el momento.
 - **IntroDB**: integración en reproductores permitida, incluida uso comercial razonable; atribución apreciada (incluida). Prohibido el rastreo masivo: la app hace una consulta por reproducción, nunca descarga la base completa.
 - **TheIntroDB**: API gratuita; la clave opcional es del usuario final, nunca una clave de aplicación compartida.
+- **AniSkip**: API gratuita y abierta; la app hace una consulta por episodio, nunca sincroniza la base.
 
 ## Pruebas
 
-`./gradlew :app:testDebugUnitTest` cubre los tres formatos JSON, extremos nulos, centinela `0/0`, segundos vs milisegundos, incertidumbre por duración, prioridad de fusión, recorte a la duración, construcción de URLs por fuente y el cliente HTTP (cabeceras opcionales, lectura sin clave y distinción de HTTP 429) contra un servidor real en loopback.
+`./gradlew :app:testDebugUnitTest` cubre los cuatro formatos JSON (incl. AniSkip `op/ed/recap`), extremos nulos, centinela `0/0`, segundos vs milisegundos, incertidumbre por duración, prioridad de fusión, recorte a la duración, construcción de URLs por fuente, el cliente HTTP (cabeceras opcionales, lectura sin clave y distinción de HTTP 429) contra un servidor real en loopback, y el mapeo Kitsu → MAL (parseo tolerante a datos ajenos, `cacheKey` distinto para cada id, `buildRequest` fallando cerrado sin `malId`).

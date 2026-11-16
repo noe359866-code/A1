@@ -77,11 +77,11 @@ internal object PairingPortal {
   <form method="POST" action="/unlock">
     <div class="card">
       <h2>🔒 Código de emparejamiento</h2>
-      <label>Está en el televisor: Ajustes → Vincular
+      <label>En la TV: Ajustes → Vincular → código grande bajo el QR
         <input name="code" placeholder="6 caracteres" autocomplete="off" autocapitalize="characters"
-          maxlength="12" required>
+          maxlength="12" required autofocus>
       </label>
-      <p class="hint">El código se envía por formulario, no en la dirección. El QR solo lleva la URL del panel.</p>
+      <p class="hint">El QR ya lleva el código: al escanearlo entras directo. Escribe los 6 caracteres solo si llegaste aquí a mano (letras y números, sin 0/O ni 1/I).</p>
     </div>
     <button type="submit">Entrar</button>
   </form>"""
@@ -113,7 +113,7 @@ internal object PairingPortal {
       <label>URLs de manifest.json (una por línea)
         <textarea name="addons" placeholder="https://v3-cinemeta.strem.io/manifest.json">$addonsValue</textarea>
       </label>
-      <p class="hint">URL del manifest, conservando su configuración. Se comprobarán resources/types/idPrefixes: catálogo y fichas en Inicio; streams HTTP al reproducir. Un índice Nuvio con scrapers[] va en el campo de abajo.</p>
+      <p class="hint">URL del manifest, conservando su configuración en la ruta (p. ej. <code>https://…/clave/manifest.json</code>); no admite «?parámetros» ni «#fragmento» — eso último es lo habitual en addons con clave (Torrentio/Debrid). Se comprobarán resources/types/idPrefixes: catálogo y fichas en Inicio; streams HTTP al reproducir. Un índice Nuvio con scrapers[] va en el campo de abajo.</p>
     </div>
     <div class="card">
       <h2>🎬 Proyectos de streams (URL base)</h2>
@@ -159,12 +159,15 @@ internal object PairingPortal {
     <div class="card">
       <h2>🔑 Añadir APIs</h2>
       <label>Una por línea con el formato NOMBRE=clave
-        <textarea name="apis" placeholder="TMDB=tu_api_key&#10;TRAKT=tu_api_key">$apisValue</textarea>
+        <textarea name="apis" placeholder="TMDB=tu_api_key&#10;TRAKT=tu_client_id&#10;TRAKT_SECRET=tu_client_secret">$apisValue</textarea>
       </label>
       <p class="hint">$storageHint</p>
       <p class="hint">Saltar intro/créditos ya funciona sin clave (AniSkip para anime y SkipDB/IntroDB para cine y series). Si tienes cuenta, añade
         <code>THEINTRODB=tu_clave</code> para subir tu límite de consultas o <code>TMDB=tu_clave</code> para el puente Nuvio; <code>SKIPDB=…</code> e
         <code>INTRODB=…</code> quedan guardadas para futuras funciones de envío.</p>
+      <p class="hint"><strong>Trakt (progreso en tu cuenta):</strong> crea una app gratuita en <code>trakt.tv/oauth/applications</code> y añade
+        <code>TRAKT=tu_client_id</code> y <code>TRAKT_SECRET=tu_client_secret</code>. Luego en el televisor ve a Ajustes → Integraciones →
+        «Vincular Trakt» y confirma en trakt.tv/activate el código que aparece. El televisor solo envía inicio/pausa/fin de cada reproducción.</p>
     </div>
     <button type="submit">Guardar en el televisor</button>
   </form>"""

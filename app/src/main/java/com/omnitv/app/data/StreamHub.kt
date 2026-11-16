@@ -118,6 +118,31 @@ object StreamHub {
     val lastStatus = mutableStateOf("")
 
     /**
+     * Misma URL entregada por varios addons: conserva la variante con mejor
+     * calidad detectada. Etiqueta, cabeceras y subtítulos se toman de la
+     * PRIMERA aparición (la etiqueta puede llevar nombre de addon útil); el
+     * `quality` resulta el MÁXIMO visto. Así el ranking no puntúa a ciegas por
+     * una primera aparición pobre, y las cabeceras necesarias para reproducir
+     * nunca se descartan.
+     */
+    internal fun dedupeByUrlBestQuality(sources: List<StreamSource>): List<StreamSource> {
+        val merged = LinkedHashMap<String, StreamSource>()
+        for (source in sources) {
+            val existing = merged[source.url]
+            if (existing == null) {
+                merged[source.url] = source
+                continue
+            }
+            val better = StreamRanker.scoreText(source.quality.ifBlank { source.label }) >
+                StreamRanker.scoreText(existing.quality.ifBlank { existing.label })
+            if (better && source.quality.isNotBlank()) {
+                merged[source.url] = existing.copy(quality = source.quality)
+            }
+        }
+        return merged.values.toList()
+    }
+
+    /**
      * Id Stremio del vídeo (tipo, id). Los episodios usan su `streamId`
      * (`tt123:1:2` / `tmdb:123:1:2`); los episodios locales (demo) no se
      * resuelven remotamente.
@@ -173,15 +198,19 @@ object StreamHub {
                             url = link.url,
                             format = link.format,
                             headers = link.headers,
-                            subtitles = link.subtitles
+                            subtitles = link.subtitles,
+                            quality = link.quality
                         )
                     }
                 }
                 .flatten()
-                .distinctBy { it.url }
-                .take(24)
+                .let(::dedupeByUrlBestQuality)
+            // La mejor calidad primero; con «Calidad preferida» concreta, esa
+            // resolución encabeza la lista (ver StreamRanker).
+            val ranked = StreamRanker.sort(sources, SettingsStore.preferredQuality).take(24)
 
-            lastStatus.value = if (sources.isEmpty()) {
+
+            lastStatus.value = if (ranked.isEmpty()) {
                 when {
                     addons.any { it.id == "cloudstream-bridge" } -> CloudstreamBridge.status.value
                     addons.any { it.id == "nuvio-plugins" } -> NuvioScraperResolver.lastStatus.value
@@ -189,9 +218,9 @@ object StreamHub {
                     else -> "Ningún addon entregó enlaces para este título"
                 }
             } else {
-                "${sources.size} enlaces de ${sources.map { it.label.substringBefore(" · ") }.distinct().size} addons"
+                "${ranked.size} enlaces de ${ranked.map { it.label.substringBefore(" · ") }.distinct().size} addons"
             }
-            return sources
+            return ranked
         } finally {
             resolving.value = false
         }

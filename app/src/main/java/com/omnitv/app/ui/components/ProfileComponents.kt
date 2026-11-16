@@ -4,7 +4,6 @@ package com.omnitv.app.ui.components
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -56,6 +55,8 @@ import com.omnitv.app.data.Profile
 import com.omnitv.app.data.TvKeyCodes
 import com.omnitv.app.data.avatarLabel
 import com.omnitv.app.data.avatarRes
+import com.omnitv.app.ui.theme.BadgeAccent
+import com.omnitv.app.ui.theme.FocusScale
 import com.omnitv.app.ui.theme.Accent
 import com.omnitv.app.ui.theme.AppRadius
 import com.omnitv.app.ui.theme.AppStroke
@@ -65,6 +66,7 @@ import com.omnitv.app.ui.theme.GlassFillStrong
 import com.omnitv.app.ui.theme.SurfaceCard
 import com.omnitv.app.ui.theme.TextPrimary
 import com.omnitv.app.ui.theme.TextSecondary
+import com.omnitv.app.ui.theme.appTween
 
 /* -------------------------------------------------------------------------- */
 /*  Avatar ilustrado estilo Netflix (tile cuadrado limpio con marco doble)    */
@@ -104,7 +106,7 @@ fun AvatarView(
                     .align(Alignment.BottomEnd)
                     .padding(6.dp)
                     .clip(AppRadius.xs)
-                    .background(Accent)
+                    .background(BadgeAccent)
                     .padding(horizontal = 6.dp, vertical = 2.dp)
             ) {
                 Text(badgeText, style = AppType.chip, color = Color.White)
@@ -120,7 +122,7 @@ private fun ProfileTileFrame(
     size: Dp,
     content: @Composable BoxScope.() -> Unit
 ) {
-    val outerShape = RoundedCornerShape(14.dp)
+    val outerShape = AppRadius.md
     Box(
         modifier = Modifier
             .size(size + 12.dp)
@@ -143,7 +145,7 @@ fun KidsChip(modifier: Modifier = Modifier) {
     Box(
         modifier
             .clip(AppRadius.xs)
-            .background(Accent)
+            .background(BadgeAccent)
             .padding(horizontal = 8.dp, vertical = 2.dp)
     ) {
         Text("KIDS", style = AppType.chip, color = Color.White)
@@ -163,7 +165,7 @@ fun ProfileTile(
     onFocus: (() -> Unit)? = null
 ) {
     var focused by remember { mutableStateOf(false) }
-    val scale by animateFloatAsState(if (focused) 1.12f else 1f, tween(150), label = "tileScale")
+    val scale by animateFloatAsState(if (focused) FocusScale.hero else 1f, appTween(150), label = "tileScale")
 
     Column(
         modifier = modifier
@@ -219,7 +221,7 @@ fun ManageProfileTile(
     onFocus: (() -> Unit)? = null
 ) {
     var focused by remember { mutableStateOf(false) }
-    val scale by animateFloatAsState(if (focused) 1.10f else 1f, tween(150), label = "manageScale")
+    val scale by animateFloatAsState(if (focused) FocusScale.control else 1f, appTween(150), label = "manageScale")
     val shape = avatarShape(128.dp)
 
     Column(
@@ -290,7 +292,7 @@ fun AddProfileTile(
     onFocus: (() -> Unit)? = null
 ) {
     var focused by remember { mutableStateOf(false) }
-    val scale by animateFloatAsState(if (focused) 1.12f else 1f, tween(150), label = "addScale")
+    val scale by animateFloatAsState(if (focused) FocusScale.hero else 1f, appTween(150), label = "addScale")
     val shape = avatarShape(136.dp)
 
     Column(
@@ -348,7 +350,7 @@ fun AddProfileTile(
 @Composable
 fun ProfileBadge(profile: Profile?, onClick: () -> Unit, modifier: Modifier = Modifier) {
     var focused by remember { mutableStateOf(false) }
-    val scale by animateFloatAsState(if (focused) 1.12f else 1f, tween(150), label = "badgeScale")
+    val scale by animateFloatAsState(if (focused) FocusScale.hero else 1f, appTween(150), label = "badgeScale")
     val shape = avatarShape(48.dp)
 
     Box(
@@ -401,7 +403,7 @@ fun AvatarOption(
     label: String = ""
 ) {
     var focused by remember { mutableStateOf(false) }
-    val scale by animateFloatAsState(if (focused) 1.15f else 1f, tween(140), label = "optionScale")
+    val scale by animateFloatAsState(if (focused) FocusScale.hero else 1f, appTween(140), label = "optionScale")
     val shape = avatarShape(72.dp)
 
     Column(

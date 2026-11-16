@@ -110,6 +110,35 @@ La revisión encontró diferencias importantes entre esa intención y la impleme
   anteriores de `PairingRouterTest` siguen cubriendo la compatibilidad con
   `?code=`.
 
+### Cuarta pasada · QR directo y código legible en el televisor
+
+- **El QR vuelve a llevar el código**: `PairingServer.pairingUrl()` devuelve
+  `http://IP:8080/?code={código}`. Al escanearlo, el panel se desbloquea solo;
+  el router responde **303 → `/`** con la cookie de sesión y el navegador se
+  queda en una URL limpia (el código no sobrevive en el historial). El flujo
+  anterior (formulario con `POST /unlock`) se conserva para quien abra la
+  URL a mano, y sigue siendo el camino para enlaces antiguos.
+- **Código imposible de pasar por alto**: Ajustes → Vincular muestra el
+  código de 6 caracteres a **40 sp** (antes 22 sp), con su propia etiqueta
+  «CÓDIGO DE EMPAREJAMIENTO». Si el servidor de vinculación no responde, la
+  pantalla muestra el error real en lugar de un QR que no abre nada.
+- El panel del móvil indica exactamente dónde vive el código (Ajustes →
+  Vincular, junto al QR) y sus 6 caracteres admitidos (sin 0/O ni 1/I).
+- Motivo del cambio: el flujo de «escanea y teclea el código de la TV» fue
+  la mayor fuente de fricción reportada; un QR que fotografía quien está
+  delante de la TV no mejora la seguridad frente a un QR con el código, y
+  con el 303 tampoco queda guardado en el historial del teléfono.
+- **Ajustes → Vincular, robustez**: si el servidor de vinculación no puede
+  arrancar (sin red, puerto ocupado), la tarjeta muestra el error real en
+  vez de un QR que no abre nada; el QR solo se dibuja con el servidor activo.
+- **Agentes HTTP reales**: `AddonHttp` y el reproductor anuncian
+  `OmniTV/<versionName>` (antes `OmniTV/1.2` a mano, ya desactualizado en 1.3.0).
+- **Panel, `/save`**: las URLs duplicadas de addons ya no se cuentan como
+  «no válidas» (solo cuentan los rechazos de verdad), y el mensaje de error
+  explica los dos motivos reales de rechazo (red pública/http y «?parámetros»
+  o «#fragmento» en el manifest de Stremio). La ayuda del panel de addons
+  Stremio ya advierte de la restricción de query/fragmento.
+
 ## Hallazgos que siguen abiertos
 
 | Prioridad | Zona | Hallazgo / trabajo necesario |
@@ -122,7 +151,7 @@ La revisión encontró diferencias importantes entre esa intención y la impleme
 | Resuelta | Errores remotos | `CatalogPage.status`, `RemoteCatalog.lastError` y `searchError` distinguen fallo de red/429 de una búsqueda sin resultados. |
 | Resuelta | Streams / Media3 | Headers por fuente, subtítulos externos (VTT/SRT/TTML) y HLS/DASH llegan a Media3. Sigue **sin soporte torrent** (infoHash/magnet se descartan por diseño). |
 | Parcial | Infantil | Ya hay PIN de 4 cifras con huella con salt y límite de intentos para salir de un perfil infantil, gestionar perfiles y abrir Ajustes. Sigue siendo un bloqueo de uso doméstico: no impide desinstalar la app, borrar datos ni usar el sistema; las clasificaciones remotas no son una política parental completa. |
-| Parcial | Seguridad local | QR sin código, `POST /unlock`, cookie de sesión ligada a IP/código, regeneración que invalida sesiones y rechazo de orígenes cruzados en `/unlock` y `/save`. Quedan: HTTP sin TLS en la LAN, compatibilidad heredada con `?code=`, ausencia de token CSRF por formulario y claves en claro solo en API 22. Revisar exposición en redes de invitados/VPN. |
+| Parcial | Seguridad local | El QR lleva el código pero el acceso aterriza en `/` por 303+cookie (sin el código en la URL); sesión ligada a IP/código, regeneración que invalida sesiones, rate-limit y rechazo de orígenes cruzados en `/unlock` y `/save`. Quedan: HTTP sin TLS en la LAN, ausencia de token CSRF por formulario y claves en claro solo en API 22. Revisar exposición en redes de invitados/VPN. |
 | Resuelta | WebView / Coil | `WebViewResolver` eliminado; `CronetFetcher` instalado en el `ImageLoader` singleton y corregido para no corromper imágenes binarias. |
 | Resuelta | UI / memoria | Detalle compone episodios por tandas de 20. El héroe y los textos con escala grande aún necesitan prueba de overscan/accesibilidad (incluida en «Validación en dispositivo»). |
 | Baja | Mantenimiento | Código experimental, docs históricos y avisos del compilador corregidos; Gradle actualizado a 8.10.2 (CI ya solo anota que no es la última versión). Persisten versiones Kotlin/Media3/Compose de 2024 y 9 ramas `arena/*` huérfanas en GitHub. |
@@ -148,5 +177,5 @@ La revisión encontró diferencias importantes entre esa intención y la impleme
 3. D-pad arriba/abajo/izquierda/derecha/OK/Atrás en todas las pantallas; ningún control fuera del área segura.
 4. Home durante vídeo y tráiler: silencio/pausa; volver: posición guardada; pantalla de TV puede descansar normalmente al navegar.
 5. MP4/HLS reales, cambio de servidor, pista de audio/subtítulos, error y reintento, siguiente episodio y temporizador.
-6. QR desde otro equipo de la LAN: comprobar que la URL no lleva código, introducirlo por el formulario, sesión con cookie, regenerar el código para cerrar sesiones, código incorrecto/bloqueo, PIN infantil, cierre del puerto al salir de la app y ausencia de claves en backups.
+6. QR desde otro equipo de la LAN: escanear y comprobar que el panel se abre solo (303 a `/`), que la URL final no lleva código, que el formulario manual sigue funcionando, la sesión con cookie, la regeneración del código para cerrar sesiones, el código incorrecto/bloqueo, el PIN infantil, el cierre del puerto al salir de la app y la ausencia de claves en backups.
 7. Repetir con red lenta/sin red, escala de fuente grande y overscan activado.

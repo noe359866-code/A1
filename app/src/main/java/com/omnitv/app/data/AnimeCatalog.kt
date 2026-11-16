@@ -45,7 +45,7 @@ object AnimeCatalog {
     private val searchMutex = Mutex()
     private val detailMutex = Mutex()
 
-    private var loadedRevision = -1
+    private var loadedAt = 0L
     private var nextJikanPage = 2
     private var nextKitsuOffset = 20
 
@@ -63,12 +63,12 @@ object AnimeCatalog {
         val page: AnimePage
     )
 
-    fun needsReload(): Boolean = !loaded.value || loadedRevision != SettingsStore.revision
+    // Sus fuentes (Jikan/Kitsu) no dependen de ningún ajuste: basta el TTL.
+    fun needsReload(): Boolean = !loaded.value || System.currentTimeMillis() - loadedAt > TTL_MS
 
     /** Carga inicial o recarga tras un cambio de ajustes/addons. */
     suspend fun refresh(force: Boolean = false) = refreshMutex.withLock {
         if (!force && !needsReload()) return@withLock
-        val revision = SettingsStore.revision
         loading.value = true
         lastError.value = ""
         try {
@@ -102,36 +102,34 @@ object AnimeCatalog {
             }
             val all = sections.flatMap { it.page.videos }.distinctBy { it.id }
             all.forEach { CatalogRepository.registerRemote(it) }
-            if (revision == SettingsStore.revision) {
-                rows.clear()
-                rows.addAll(
-                    sections.filter { it.page.videos.isNotEmpty() }
-                        .map {
-                            MediaRow(
-                                it.title,
-                                it.page.videos.filter { v -> v.id.isNotBlank() }.distinctBy { v -> v.id },
-                                it.key
-                            )
-                        }
-                )
-                videos.clear()
-                videos.addAll(all)
-                loaded.value = true
-                loadedRevision = revision
-                nextJikanPage = 2
-                nextKitsuOffset = 20
-                val jikanPages = sections.filter { it.provider == AnimeIds.SOURCE_JIKAN }.map { it.page }
-                val kitsuPages = sections.filter { it.provider == AnimeIds.SOURCE_KITSU }.map { it.page }
-                val jikanOk = jikanPages.any { it.ok }
-                val kitsuOk = kitsuPages.any { it.ok }
-                canLoadMore.value = jikanOk || kitsuOk
-                lastError.value = when {
-                    jikanOk && kitsuOk -> ""
-                    !jikanOk && !kitsuOk ->
-                        "No se pudo cargar el catálogo de anime (Jikan: ${statusLabel(jikanPages)}; Kitsu: ${statusLabel(kitsuPages)}). Revisa la conexión."
-                    !jikanOk -> "Jikan no respondió (${statusLabel(jikanPages)}); se muestran los títulos de Kitsu."
-                    else -> "Kitsu no respondió (${statusLabel(kitsuPages)}); se muestran los títulos de Jikan."
-                }
+            rows.clear()
+            rows.addAll(
+                sections.filter { it.page.videos.isNotEmpty() }
+                    .map {
+                        MediaRow(
+                            it.title,
+                            it.page.videos.filter { v -> v.id.isNotBlank() }.distinctBy { v -> v.id },
+                            it.key
+                        )
+                    }
+            )
+            videos.clear()
+            videos.addAll(all)
+            loaded.value = true
+            loadedAt = System.currentTimeMillis()
+            nextJikanPage = 2
+            nextKitsuOffset = 20
+            val jikanPages = sections.filter { it.provider == AnimeIds.SOURCE_JIKAN }.map { it.page }
+            val kitsuPages = sections.filter { it.provider == AnimeIds.SOURCE_KITSU }.map { it.page }
+            val jikanOk = jikanPages.any { it.ok }
+            val kitsuOk = kitsuPages.any { it.ok }
+            canLoadMore.value = jikanOk || kitsuOk
+            lastError.value = when {
+                jikanOk && kitsuOk -> ""
+                !jikanOk && !kitsuOk ->
+                    "No se pudo cargar el catálogo de anime (Jikan: ${statusLabel(jikanPages)}; Kitsu: ${statusLabel(kitsuPages)}). Revisa la conexión."
+                !jikanOk -> "Jikan no respondió (${statusLabel(jikanPages)}); se muestran los títulos de Kitsu."
+                else -> "Kitsu no respondió (${statusLabel(kitsuPages)}); se muestran los títulos de Jikan."
             }
         } finally {
             loading.value = false
@@ -318,7 +316,7 @@ object AnimeCatalog {
     fun invalidateCache() {
         searchCache.clear()
         detailCache.clear()
-        loadedRevision = -1
+        loadedAt = 0L
         loaded.value = false
     }
 }

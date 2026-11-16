@@ -3,7 +3,6 @@
 package com.omnitv.app.player
 
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -50,6 +49,9 @@ import androidx.compose.ui.zIndex
 import com.omnitv.app.data.ConfirmKeyUpGuard
 import com.omnitv.app.ui.components.RequestTvFocus
 import com.omnitv.app.ui.components.consumeStrayConfirmKeyUp
+import com.omnitv.app.ui.theme.FocusScale
+import com.omnitv.app.ui.theme.GlassDark
+import com.omnitv.app.ui.theme.GlassBorder
 import com.omnitv.app.ui.theme.Accent
 import com.omnitv.app.ui.theme.AppRadius
 import com.omnitv.app.ui.theme.AppStroke
@@ -57,13 +59,12 @@ import com.omnitv.app.ui.theme.AppType
 import com.omnitv.app.ui.theme.OnLight
 import com.omnitv.app.ui.theme.SurfaceBright
 import com.omnitv.app.ui.theme.TextSecondary
+import com.omnitv.app.ui.theme.appTween
 
 /* -------------------------------------------------------------------------- */
-/*  Estilo «vidrio» oscuro del reproductor                                    */
+/*  Estilo «vidrio» oscuro del reproductor (tokens en ui.theme.Color.kt)      */
 /* -------------------------------------------------------------------------- */
 
-val GlassDark = Color(0xE60E0E13)
-val GlassBorder = Color(0x33FFFFFF)
 val ControlWhite = SurfaceBright
 
 /** Panel translúcido tipo overlay de reproductor. */
@@ -98,7 +99,7 @@ fun ControlPill(
     onFocusChanged: ((Boolean) -> Unit)? = null
 ) {
     var focused by remember { mutableStateOf(false) }
-    val scale by animateFloatAsState(if (focused) 1.08f else 1f, tween(140), label = "pillScale")
+    val scale by animateFloatAsState(if (focused) FocusScale.key else 1f, appTween(140), label = "pillScale")
 
     val background = when {
         focused -> ControlWhite
@@ -157,7 +158,7 @@ fun TransportButton(
     primary: Boolean = false
 ) {
     var focused by remember { mutableStateOf(false) }
-    val scale by animateFloatAsState(if (focused) 1.12f else 1f, tween(140), label = "transportScale")
+    val scale by animateFloatAsState(if (focused) FocusScale.hero else 1f, appTween(140), label = "transportScale")
 
     val background = when {
         focused -> ControlWhite
@@ -308,7 +309,7 @@ fun EpgChip(text: String, color: Color, modifier: Modifier = Modifier) {
 @Composable
 fun CenterPlayButton(iconRes: Int, onClick: () -> Unit, modifier: Modifier = Modifier) {
     var focused by remember { mutableStateOf(false) }
-    val scale by animateFloatAsState(if (focused) 1.1f else 1f, tween(150), label = "centerScale")
+    val scale by animateFloatAsState(if (focused) 1.1f else 1f, appTween(150), label = "centerScale")
 
     Box(
         modifier = modifier

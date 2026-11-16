@@ -4,7 +4,6 @@ package com.omnitv.app.ui.screens
 
 import androidx.annotation.OptIn
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -84,7 +83,8 @@ import com.omnitv.app.ui.components.PosterCard
 import com.omnitv.app.ui.components.ProvideHorizontalTvBringIntoView
 import com.omnitv.app.ui.components.TvChip
 import com.omnitv.app.ui.components.dpadRepeatThrottle
-import com.omnitv.app.ui.theme.Accent
+import com.omnitv.app.ui.theme.BadgeAccent
+import com.omnitv.app.ui.theme.FocusScale
 import com.omnitv.app.ui.theme.AccentGreen
 import com.omnitv.app.ui.theme.AppRadius
 import com.omnitv.app.ui.theme.AppSpacing
@@ -98,6 +98,7 @@ import com.omnitv.app.ui.theme.SurfaceElevated
 import com.omnitv.app.ui.theme.TextPrimary
 import com.omnitv.app.ui.theme.TextSecondary
 import com.omnitv.app.ui.theme.TextTertiary
+import com.omnitv.app.ui.theme.appTween
 import java.util.Calendar
 import java.util.Locale
 
@@ -129,13 +130,20 @@ fun DetailScreen(
 
     val related = remember(full.id, full.episodes.size) { CatalogRepository.related(full.id) }
     var muted by remember { mutableStateOf(true) }
-    var selectedSeason by rememberSaveable(video.id) { mutableStateOf(1) }
+    // Mover lastFocusedKey antes que selectedSeason permite inicializar la
+    // temporada desde la clave de restauración «ep:S:N» (return desde el reproductor).
+    var lastFocusedKey by rememberSaveable(video.id) { mutableStateOf<String?>(null) }
+    val pendingRestoreKey = remember { lastFocusedKey }
+    var selectedSeason by rememberSaveable(video.id) {
+        mutableStateOf(
+            pendingRestoreKey?.removePrefix("ep:")?.split(":")
+                ?.firstOrNull()?.toIntOrNull() ?: 1
+        )
+    }
 
     val playFocus = remember { FocusRequester() }
     val restoreFocus = remember { FocusRequester() }
-    var lastFocusedKey by rememberSaveable(video.id) { mutableStateOf<String?>(null) }
     var initialFocusDone by rememberSaveable(video.id) { mutableStateOf(false) }
-    val pendingRestoreKey = remember { lastFocusedKey }
     var mountRestoreDone by remember(video.id) { mutableStateOf(false) }
 
     LaunchedEffect(video.id, full.episodes.size) {
@@ -148,8 +156,15 @@ fun DetailScreen(
                     return@LaunchedEffect
                 }
             }
+            // Catálogo remoto: los episodios pueden llegar DESPUÉS del primer
+            // intento de restaurar (fetchDetail). Foco provisional en «Reproducir»
+            // pero sin dar el restore por cerrado: el efecto se reejecuta al
+            // cambiar full.episodes.size y reintenta el salto al episodio.
+            val remotePending = video.isRemote && full.episodes.isEmpty()
             if (runCatching { playFocus.requestFocus() }.isSuccess) {
                 initialFocusDone = true
+                if (!remotePending) mountRestoreDone = true
+            } else if (!remotePending) {
                 mountRestoreDone = true
             }
         } else if (!initialFocusDone || pendingRestoreKey == "play") {
@@ -453,7 +468,17 @@ fun DetailScreen(
                     }
 
                     Spacer(Modifier.height(12.dp))
-                    var visibleEpisodes by rememberSaveable(video.id, currentSeason) { mutableStateOf(20) }
+                    // Si el episodio a restaurar está más allá de la ventana inicial,
+                    // ampliamos visibleEpisodes para que la EpisodeRow exista y el
+                    // restoreFocus pueda adjuntarse (solo en su temporada).
+                    var visibleEpisodes by rememberSaveable(video.id, currentSeason) {
+                        mutableStateOf(
+                            pendingRestoreKey?.removePrefix("ep:")?.split(":")
+                                ?.takeIf { it.size == 2 && it[0].toIntOrNull() == currentSeason }
+                                ?.getOrNull(1)?.toIntOrNull()
+                                ?.coerceAtLeast(20) ?: 20
+                        )
+                    }
                     val shownEpisodes = seasonEpisodes.take(visibleEpisodes)
                     Column(
                         modifier = Modifier.padding(horizontal = AppSpacing.screenMargin),
@@ -627,7 +652,7 @@ private fun AccentChip(text: String) {
     Box(
         Modifier
             .clip(AppRadius.xs)
-            .background(Accent)
+            .background(BadgeAccent)
             .padding(horizontal = 10.dp, vertical = 4.dp)
     ) {
         Text(text, style = AppType.chip, color = Color.White)
@@ -694,8 +719,8 @@ private fun EpisodeRow(
 ) {
     var focused by remember { mutableStateOf(false) }
     val scale by animateFloatAsState(
-        if (focused) 1.02f else 1f,
-        tween(150),
+        if (focused) FocusScale.row else 1f,
+        appTween(150),
         label = "episodeScale"
     )
 

@@ -4,7 +4,6 @@ package com.omnitv.app.ui.screens
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -78,6 +77,8 @@ import com.omnitv.app.data.SettingsStore
 import com.omnitv.app.data.SkipKind
 import com.omnitv.app.data.SkipSegmentParser
 import com.omnitv.app.data.SkipSegmentService
+import com.omnitv.app.data.TraktProtocol
+import com.omnitv.app.data.TraktService
 import com.omnitv.app.data.TvKeyCodes
 import com.omnitv.app.ui.components.AvatarView
 import com.omnitv.app.ui.components.KidsChip
@@ -90,6 +91,8 @@ import com.omnitv.app.ui.components.RequestTvFocus
 import com.omnitv.app.ui.components.SettingRow
 import com.omnitv.app.ui.components.TvToggle
 import com.omnitv.app.ui.components.consumeStrayConfirmKeyUp
+import com.omnitv.app.ui.theme.FocusScale
+import com.omnitv.app.ui.theme.WarnOrange
 import com.omnitv.app.ui.theme.Accent
 import com.omnitv.app.ui.theme.AccentGreen
 import com.omnitv.app.ui.theme.AppRadius
@@ -101,7 +104,9 @@ import com.omnitv.app.ui.theme.SurfaceCard
 import com.omnitv.app.ui.theme.SurfaceElevated
 import com.omnitv.app.ui.theme.TextPrimary
 import com.omnitv.app.ui.theme.TextSecondary
+import com.omnitv.app.ui.theme.appTween
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -168,8 +173,10 @@ fun SettingsScreen(
 
     var qualityDialogVisible by remember { mutableStateOf(false) }
     var speedDialogVisible by remember { mutableStateOf(false) }
+    var traktDialogVisible by remember { mutableStateOf(false) }
+    val traktLinkFocus = remember { FocusRequester() }
 
-    val anyModalOpen = qualityDialogVisible || speedDialogVisible || pinTask != null
+    val anyModalOpen = qualityDialogVisible || speedDialogVisible || traktDialogVisible || pinTask != null
     val suppressAutoFocus = LocalSuppressContentAutoFocus.current
     val tabContentFocus = LocalTabContentFocus.current
     SideEffect {
@@ -215,7 +222,18 @@ fun SettingsScreen(
         }
     }
 
-    LaunchedEffect(SettingsStore.revision) { checkIntegrations() }
+    // Solo se recomprueba cuando cambia algo de integraciones, no con cualquier
+    // ajuste (antes: cada toggle disparaba red forzada a todos los addons).
+    val integrationSignature = listOf(
+        SettingsStore.customAddons.joinToString(","),
+        SettingsStore.streamAddons.joinToString(","),
+        SettingsStore.nuvioPlugins.joinToString(","),
+        SettingsStore.disabledNuvioScrapers.sorted().joinToString(","),
+        SettingsStore.cloudstreamBridge,
+        SettingsStore.nuvioBridge,
+        SettingsStore.ffmpegBridge
+    ).joinToString("|")
+    LaunchedEffect(integrationSignature) { checkIntegrations() }
     LaunchedEffect(selectedCategory) {
         if (selectedCategory == SettingsCategory.PAIRING && !PairingServer.running.value) {
             withContext(Dispatchers.IO) { PairingServer.start() }
@@ -350,7 +368,18 @@ fun SettingsScreen(
                             mediaStatus = mediaStatus,
                             refreshing = refreshing,
                             onRefresh = { scope.launch { checkIntegrations() } },
-                            onOpenPairing = { selectedCategory = SettingsCategory.PAIRING }
+                            onOpenPairing = { selectedCategory = SettingsCategory.PAIRING },
+                            onOpenTraktLink = {
+                                if (TraktService.isConfigured()) {
+                                    restoreAfterModal = traktLinkFocus
+                                    traktDialogVisible = true
+                                } else {
+                                    // Sin claves no hay flujo de dispositivo: se manda al panel.
+                                    selectedCategory = SettingsCategory.PAIRING
+                                }
+                            },
+                            onUnlinkTrakt = { SettingsStore.clearTraktTokens() },
+                            traktButtonModifier = Modifier.focusRequester(traktLinkFocus)
                         )
                     }
 
@@ -368,6 +397,10 @@ fun SettingsScreen(
         /* ------------------------------------------------------------------ */
         /*  Diálogos Modales                                                  */
         /* ------------------------------------------------------------------ */
+
+        if (traktDialogVisible) {
+            TraktLinkDialog(onDismiss = { traktDialogVisible = false })
+        }
 
         if (qualityDialogVisible) {
             OptionSelectDialog(
@@ -504,7 +537,7 @@ private fun CategoryItem(
     modifier: Modifier = Modifier
 ) {
     var isFocused by remember { mutableStateOf(false) }
-    val scale by animateFloatAsState(if (isFocused) 1.05f else 1f, tween(140), label = "catScale")
+    val scale by animateFloatAsState(if (isFocused) FocusScale.chip else 1f, appTween(140), label = "catScale")
 
     Row(
         modifier = modifier
@@ -612,13 +645,13 @@ private fun StatusBadge(
     modifier: Modifier = Modifier
 ) {
     val dotColor = when {
-        isWarning -> Color(0xFFFF9F0A)
+        isWarning -> WarnOrange
         isSuccess -> AccentGreen
         else -> TextSecondary
     }
     val bg = when {
-        isWarning -> Color(0x28FF9F0A)
-        isSuccess -> Color(0x2830D158)
+        isWarning -> WarnOrange.copy(alpha = 0.16f)
+        isSuccess -> AccentGreen.copy(alpha = 0.16f)
         else -> Color.White.copy(alpha = 0.10f)
     }
 
@@ -750,21 +783,25 @@ private fun PlaybackSettingsContent() {
         SettingRow(
             title = "Autoplay",
             subtitle = "Los vídeos empiezan a reproducirse automáticamente al abrirlos",
+            onClick = { SettingsStore.setAutoplayEnabled(!SettingsStore.autoplay) },
             trailing = { TvToggle(SettingsStore.autoplay, onCheckedChange = { SettingsStore.setAutoplayEnabled(it) }) }
         )
         SettingRow(
             title = "Siguiente automático",
             subtitle = "Al terminar un episodio, reproduce el siguiente con cuenta atrás de 10 s",
+            onClick = { SettingsStore.setAutoNextEnabled(!SettingsStore.autoNext) },
             trailing = { TvToggle(SettingsStore.autoNext, onCheckedChange = { SettingsStore.setAutoNextEnabled(it) }) }
         )
         SettingRow(
             title = "Iniciar silenciado",
             subtitle = "Los vídeos comienzan con el volumen silenciado",
+            onClick = { SettingsStore.setMutedStartEnabled(!SettingsStore.mutedStart) },
             trailing = { TvToggle(SettingsStore.mutedStart, onCheckedChange = { SettingsStore.setMutedStartEnabled(it) }) }
         )
         SettingRow(
             title = "Subtítulos por defecto",
             subtitle = "Activa los subtítulos automáticamente si hay pistas disponibles",
+            onClick = { SettingsStore.setSubtitlesByDefault(!SettingsStore.subtitlesDefault) },
             trailing = { TvToggle(SettingsStore.subtitlesDefault, onCheckedChange = { SettingsStore.setSubtitlesByDefault(it) }) }
         )
     }
@@ -803,6 +840,7 @@ private fun SkipSettingsContent() {
         SettingRow(
             title = "Tramos saltables",
             subtitle = "Muestra el botón «Saltar» y marca los tramos en la barra con marcas de la comunidad",
+            onClick = { SettingsStore.saveSkipSegmentsEnabled(!enabled) },
             trailing = { TvToggle(enabled, onCheckedChange = { SettingsStore.saveSkipSegmentsEnabled(it) }) }
         )
         listOf(SkipKind.INTRO, SkipKind.RECAP, SkipKind.CREDITS, SkipKind.PREVIEW).forEach { kind ->
@@ -816,6 +854,11 @@ private fun SkipSettingsContent() {
                     }
                 } else {
                     "Activa «Tramos saltables» arriba para habilitar el salto automático"
+                },
+                onClick = {
+                    val next = !(kind.name in SettingsStore.autoSkipKinds && enabled)
+                    if (!enabled) SettingsStore.saveSkipSegmentsEnabled(true)
+                    SettingsStore.setAutoSkip(kind, next)
                 },
                 trailing = {
                     TvToggle(
@@ -835,8 +878,17 @@ private fun SkipSettingsContent() {
                 subtitle = when (source) {
                     SkipSegmentParser.SOURCE_SKIPDB -> "Ajusta marcas a la duración del stream · Requiere id IMDb"
                     SkipSegmentParser.SOURCE_THEINTRODB -> "Intro, resumen, créditos y avance · Admite id TMDB o IMDb"
-                    SkipSegmentParser.SOURCE_ANISKIP -> "Opening, ending y resumen de anime · Usa id MyAnimeList"
+                    SkipSegmentParser.SOURCE_ANISKIP -> "Opening, ending y resumen de anime · Usa id MyAnimeList (los ids de Kitsu se traducen automáticamente)"
                     else -> "Intro, resumen, créditos y escena final · Requiere id IMDb"
+                },
+                onClick = {
+                    val checked = !active
+                    if (!checked && active && SettingsStore.skipSources.size <= 1) {
+                        sourceHint = "Debe quedar al menos una fuente activa"
+                    } else {
+                        sourceHint = null
+                        SettingsStore.setSkipSource(source, checked)
+                    }
                 },
                 trailing = {
                     TvToggle(
@@ -881,7 +933,27 @@ private fun PairingSettingsContent(
             verticalAlignment = Alignment.Top
         ) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                if (pairingUrl.isNotEmpty()) {
+                if (!PairingServer.running.value) {
+                    // Un QR que no responde es peor que ninguno: se explica el fallo.
+                    Box(
+                        Modifier
+                            .size(188.dp)
+                            .clip(AppRadius.md)
+                            .background(SurfaceElevated)
+                            .padding(14.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            StatusBadge(text = "SERVIDOR DETENIDO", isSuccess = false, isWarning = true)
+                            Spacer(Modifier.height(8.dp))
+                            Text(
+                                PairingServer.lastError.value.ifBlank { "Vuelve a abrir Ajustes o reinicia la app." },
+                                style = AppType.chip,
+                                color = TextSecondary
+                            )
+                        }
+                    }
+                } else if (pairingUrl.isNotEmpty()) {
                     QrCode(
                         data = pairingUrl,
                         modifier = Modifier
@@ -914,28 +986,31 @@ private fun PairingSettingsContent(
                 Text("Escanea el código QR con tu móvil", style = AppType.sectionTitle, color = TextPrimary)
                 Spacer(Modifier.height(8.dp))
                 Text(
-                    "Abre la cámara de tu móvil, escanea el QR e introduce el código de emparejamiento. " +
+                    "Abre la cámara, escanea el QR y el panel se conecta solo. " +
+                        "Si tu navegador no abriera, entra en la URL de la izquierda y escribe este código. " +
                         "Desde el panel podrás instalar tus addons de Stremio, repositorios Nuvio y claves de API.",
                     style = AppType.body,
                     color = TextSecondary
                 )
                 Spacer(Modifier.height(14.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("Código de emparejamiento: ", style = AppType.metadata, color = TextSecondary)
-                    Spacer(Modifier.width(6.dp))
-                    Box(
-                        Modifier
-                            .clip(AppRadius.sm)
-                            .background(Accent.copy(alpha = 0.20f))
-                            .border(1.dp, Accent.copy(alpha = 0.5f), AppRadius.sm)
-                            .padding(horizontal = 12.dp, vertical = 4.dp)
-                    ) {
-                        Text(
-                            SettingsStore.pairingCode,
-                            style = AppType.monospaceCode,
-                            color = Accent
-                        )
-                    }
+                Text(
+                    "CÓDIGO DE EMPAREJAMIENTO",
+                    style = AppType.chip,
+                    color = TextSecondary
+                )
+                Spacer(Modifier.height(6.dp))
+                Box(
+                    Modifier
+                        .clip(AppRadius.sm)
+                        .background(Accent.copy(alpha = 0.20f))
+                        .border(2.dp, Accent.copy(alpha = 0.6f), AppRadius.sm)
+                        .padding(horizontal = 22.dp, vertical = 8.dp)
+                ) {
+                    Text(
+                        SettingsStore.pairingCode,
+                        style = AppType.pairingCode,
+                        color = Accent
+                    )
                 }
                 Spacer(Modifier.height(14.dp))
                 PillButton(
@@ -981,7 +1056,10 @@ private fun IntegrationsSettingsContent(
     mediaStatus: String,
     refreshing: Boolean,
     onRefresh: () -> Unit,
-    onOpenPairing: () -> Unit
+    onOpenPairing: () -> Unit,
+    onOpenTraktLink: () -> Unit = {},
+    onUnlinkTrakt: () -> Unit = {},
+    traktButtonModifier: Modifier = Modifier
 ) {
     val stremioStatuses = AddonRegistry.statuses.value
     val streamEndpoints = SettingsStore.streamAddons
@@ -1072,6 +1150,9 @@ private fun IntegrationsSettingsContent(
                     SettingRow(
                         title = scraper.name,
                         subtitle = subtitle,
+                        onClick = {
+                            if (repoEnabled) SettingsStore.setNuvioScraperEnabled(scraper.id, !(repoEnabled && userEnabled))
+                        },
                         trailing = {
                             TvToggle(
                                 checked = repoEnabled && userEnabled,
@@ -1086,6 +1167,12 @@ private fun IntegrationsSettingsContent(
                 }
             }
         }
+
+        TraktSettingsCard(
+            onLink = onOpenTraktLink,
+            onUnlink = onUnlinkTrakt,
+            linkButtonModifier = traktButtonModifier
+        )
 
         SettingsCard(iconRes = R.drawable.ic_server, title = "Extensiones de Cloudstream y FFmpeg") {
             Column(Modifier.fillMaxWidth().padding(horizontal = 22.dp, vertical = 14.dp)) {
@@ -1137,11 +1224,200 @@ private fun IntegrationsSettingsContent(
 }
 
 @Composable
+private fun TraktSettingsCard(
+    onLink: () -> Unit,
+    onUnlink: () -> Unit,
+    linkButtonModifier: Modifier = Modifier
+) {
+    val configured = TraktService.isConfigured()
+    val linked = SettingsStore.traktLinked
+    SettingsCard(iconRes = R.drawable.ic_check, title = "Trakt · progreso en tu cuenta") {
+        Column(Modifier.fillMaxWidth().padding(horizontal = 22.dp, vertical = 14.dp)) {
+            Row(
+                Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text("Sincronizar con Trakt", style = AppType.body, color = TextPrimary)
+                    Text(
+                        when {
+                            linked -> "Vinculado · los vídeos que empieces, pauses y termines se marcarán en tu cuenta de trakt.tv"
+                            configured -> "Claves de tu app Trakt guardadas · falta vincular el televisor en trakt.tv"
+                            else -> "Opcional · necesitas una app Trakt gratuita y sus claves en Vincular (QR)"
+                        },
+                        style = AppType.metadata,
+                        color = TextSecondary
+                    )
+                }
+                Spacer(Modifier.width(12.dp))
+                StatusBadge(
+                    text = when {
+                        linked -> "CONECTADO"
+                        configured -> "SIN VINCULAR"
+                        else -> "SIN CONFIGURAR"
+                    },
+                    isSuccess = linked,
+                    isWarning = !linked && configured
+                )
+            }
+            Spacer(Modifier.height(10.dp))
+            if (!configured) {
+                StatusLine(
+                    "Cómo activarlo",
+                    "1) Crea una app en trakt.tv/oauth/applications · 2) En Vincular (QR) → Añadir APIs: TRAKT=tu_client_id y TRAKT_SECRET=tu_client_secret"
+                )
+            } else if (linked) {
+                StatusLine("Qué se sincroniza", "Inicio, pausa y fin de reproducción (scrobble). Nada más: el historial completo no se sube.")
+            }
+            Spacer(Modifier.height(6.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                if (linked) {
+                    PillButton(
+                        text = "Desvincular Trakt",
+                        iconRes = R.drawable.ic_link,
+                        primary = false,
+                        onClick = onUnlink,
+                        modifier = linkButtonModifier
+                    )
+                } else {
+                    PillButton(
+                        text = if (configured) "Vincular Trakt" else "Configurar TRAKT en Vincular (QR)",
+                        iconRes = R.drawable.ic_link,
+                        primary = configured,
+                        onClick = onLink,
+                        modifier = linkButtonModifier
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TraktLinkDialog(onDismiss: () -> Unit) {
+    var deviceCode by remember { mutableStateOf<TraktProtocol.DeviceCode?>(null) }
+    var error by remember { mutableStateOf<String?>(null) }
+    var linked by remember { mutableStateOf(false) }
+    var requesting by remember { mutableStateOf(true) }
+    val closeFocus = remember { FocusRequester() }
+    val keyUpGuard = remember { ConfirmKeyUpGuard(initialSuppressUntilDown = true) }
+
+    BackHandler(onBack = onDismiss)
+
+    // Paso 1: pedir código de dispositivo a Trakt.
+    LaunchedEffect(Unit) {
+        requesting = true
+        error = null
+        deviceCode = withContext(Dispatchers.IO) { TraktService.requestDeviceCode() }
+        requesting = false
+        if (deviceCode == null) {
+            error = "Trakt no devolvió un código. Revisa TRAKT/TRAKT_SECRET en Vincular (QR) y la conexión a trakt.tv."
+        }
+    }
+
+    // Paso 2: sondear el canje hasta que el usuario autorice en trakt.tv.
+    LaunchedEffect(deviceCode) {
+        val dc = deviceCode ?: return@LaunchedEffect
+        val deadline = System.currentTimeMillis() + dc.expiresInSec * 1000
+        while (System.currentTimeMillis() < deadline && !linked && error == null) {
+            delay(dc.intervalSec * 1000)
+            when (withContext(Dispatchers.IO) { TraktService.pollDeviceToken(dc.deviceCode) }) {
+                TraktService.PollResult.Linked -> linked = true
+                TraktService.PollResult.Expired -> error = "El código caducó antes de vincular."
+                TraktService.PollResult.Denied -> error = "Has denegado el acceso en Trakt."
+                TraktService.PollResult.Failed -> error = "Trakt no respondió. Inténtalo de nuevo."
+                TraktService.PollResult.Pending -> Unit
+            }
+        }
+        if (!linked && error == null) error = "El código caducó antes de vincular."
+    }
+
+    RequestTvFocus(closeFocus, key = "traktLink")
+
+    Box(
+        Modifier
+            .fillMaxSize()
+            .background(Background.copy(alpha = 0.95f))
+            .consumeStrayConfirmKeyUp(keyUpGuard)
+            .onPreviewKeyEvent { event ->
+                if (event.type == KeyEventType.KeyDown && TvKeyCodes.isBack(event.nativeKeyEvent.keyCode)) {
+                    onDismiss()
+                    true
+                } else {
+                    false
+                }
+            },
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            Modifier
+                .width(600.dp)
+                .focusGroup()
+                .clip(AppRadius.lg)
+                .background(SurfaceCard)
+                .border(1.dp, Color.White.copy(alpha = 0.12f), AppRadius.lg)
+                .padding(28.dp)
+        ) {
+            Text("Vincular Trakt", style = AppType.sectionTitle, color = TextPrimary)
+            Spacer(Modifier.height(8.dp))
+            when {
+                linked -> {
+                    Text(
+                        "Trakt conectado ✓ A partir de ahora tus reproducciones se sincronizarán con tu cuenta.",
+                        style = AppType.body,
+                        color = TextPrimary
+                    )
+                }
+                error != null -> {
+                    Text(error.orEmpty(), style = AppType.body, color = TextPrimary)
+                }
+                requesting -> {
+                    Text("Pidiendo código a Trakt…", style = AppType.body, color = TextPrimary)
+                }
+                deviceCode != null -> {
+                    val dc = deviceCode!!
+                    Text(
+                        "Abre ${dc.verificationUrl} en tu móvil o PC e introduce este código:",
+                        style = AppType.body,
+                        color = TextSecondary
+                    )
+                    Spacer(Modifier.height(18.dp))
+                    Box(
+                        Modifier
+                            .clip(AppRadius.sm)
+                            .background(Accent.copy(alpha = 0.20f))
+                            .border(2.dp, Accent.copy(alpha = 0.6f), AppRadius.sm)
+                            .padding(horizontal = 22.dp, vertical = 8.dp)
+                    ) {
+                        Text(dc.userCode, style = AppType.pairingCode, color = Accent)
+                    }
+                    Spacer(Modifier.height(18.dp))
+                    Text(
+                        "Esperando a que confirmes en Trakt… el televisor se vinculará solo.",
+                        style = AppType.metadata,
+                        color = TextSecondary
+                    )
+                }
+            }
+            Spacer(Modifier.height(20.dp))
+            PillButton(
+                text = if (linked || error != null) "Cerrar" else "Cancelar",
+                iconRes = R.drawable.ic_check,
+                primary = linked || error != null,
+                onClick = onDismiss,
+                modifier = Modifier.focusRequester(closeFocus)
+            )
+        }
+    }
+}
+
+@Composable
 private fun NetworkSettingsContent() {
     SettingsCard(iconRes = R.drawable.ic_server, title = "Red y Privacidad") {
         SettingRow(
             title = "DNS sobre HTTPS de Cloudflare (1.1.1.1)",
             subtitle = "Resuelve nombres mediante DoH seguro (cloudflare-dns.com). El certificado se valida estrictamente contra el dominio original.",
+            onClick = { SettingsStore.saveCloudflareDns(!SettingsStore.cloudflareDns) },
             trailing = { TvToggle(SettingsStore.cloudflareDns, onCheckedChange = { SettingsStore.saveCloudflareDns(it) }) }
         )
         Column(Modifier.fillMaxWidth().padding(horizontal = 22.dp, vertical = 16.dp)) {
@@ -1187,7 +1463,7 @@ private fun SystemSettingsContent() {
             StatusLine(
                 "Caché de catálogos",
                 if (cacheCleared) "Caché limpiada · se actualizará al abrir el catálogo"
-                else "Incluye filas de portada, plataformas, estudios, anime y plugins Nuvio"
+                else "Incluye portada, plataformas, estudios, anime, plugins Nuvio y sus enlaces resueltos"
             )
             Spacer(Modifier.height(10.dp))
             PillButton(
@@ -1198,6 +1474,7 @@ private fun SystemSettingsContent() {
                     RemoteCatalog.invalidateCache()
                     AnimeCatalog.invalidateCache()
                     NuvioPluginManager.clearCache()
+                    NuvioScraperResolver.clearResultCache()
                     cacheCleared = true
                 }
             )
@@ -1434,13 +1711,11 @@ private fun QrCode(data: String, modifier: Modifier = Modifier) {
                 512,
                 hints
             )
-            val bmp = android.graphics.Bitmap.createBitmap(512, 512, android.graphics.Bitmap.Config.ARGB_8888)
-            for (x in 0 until 512) {
-                for (y in 0 until 512) {
-                    bmp.setPixel(x, y, if (matrix.get(x, y)) android.graphics.Color.BLACK else android.graphics.Color.WHITE)
-                }
+            val size = 512
+            val pixels = IntArray(size * size) { i ->
+                if (matrix.get(i % size, i / size)) android.graphics.Color.BLACK else android.graphics.Color.WHITE
             }
-            bmp
+            android.graphics.Bitmap.createBitmap(pixels, size, size, android.graphics.Bitmap.Config.ARGB_8888)
         }.getOrNull()
     }
 
