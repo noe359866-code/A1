@@ -21,6 +21,20 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      - name: Validar origen y etiqueta de release
+        env:
+          INPUT_TAG: ${{ github.event.inputs.tag }}
+        run: |
+          if [ "${GITHUB_EVENT_NAME:-}" = "workflow_dispatch" ] && [ "$GITHUB_REF" != "refs/heads/main" ]; then
+            echo "::error::Las releases manuales solo se pueden crear desde main."
+            exit 1
+          fi
+          TAG="${INPUT_TAG:-$GITHUB_REF_NAME}"
+          if ! [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Etiqueta inválida: usa vX.Y.Z (por ejemplo v1.4.0)."
+            exit 1
+          fi
+
       - name: JDK 17
         uses: actions/setup-java@v6
         with:
@@ -53,9 +67,12 @@ jobs:
             echo "SIGNING_MODE=keystore de producción" >> "$GITHUB_ENV"
             echo "::notice::APK firmado con keystore de producción"
           else
-            echo "SIGNING_MODE=keystore debug (sideload)" >> "$GITHUB_ENV"
-            echo "::warning::Sin secretos OMNITV_KEYSTORE_*: el APK se firma con debug"
+            echo "::error::No se publican releases firmadas con debug. Configura OMNITV_KEYSTORE_BASE64, OMNITV_KEYSTORE_PASSWORD y OMNITV_KEY_ALIAS."
+            exit 1
           fi
+          test -s "$RUNNER_TEMP/omnitv-release.jks"
+          keytool -list -keystore "$RUNNER_TEMP/omnitv-release.jks" -storepass "$OMNITV_KEYSTORE_PASSWORD" -alias "$OMNITV_KEY_ALIAS" > /dev/null
+          echo "::notice::Keystore de producción y alias verificados"
 
       - name: Build APK release
         run: |
