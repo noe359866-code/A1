@@ -177,7 +177,7 @@ fun PlataformasScreen(
                         modifier = Modifier
                             .focusRequester(kidsHomeFocus)
                             .then(
-                                if (activeTabFocus != null) Modifier.focusProperties { up = activeTabFocus }
+                                if (activeTabFocus != null) Modifier.focusProperties { left = activeTabFocus }
                                 else Modifier
                             )
                     )
@@ -213,7 +213,7 @@ fun PlataformasScreen(
                         .then(if (pendingRestoreKey == itemKey) Modifier.focusRequester(restoreFocus) else Modifier)
                         .then(
                             if (index < 5 && activeTabFocus != null) {
-                                Modifier.focusProperties { up = activeTabFocus }
+                                Modifier.focusProperties { left = activeTabFocus }
                             } else {
                                 Modifier
                             }
