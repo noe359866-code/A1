@@ -249,6 +249,36 @@ class PairingRouterTest {
     }
 
     @Test
+    fun `same-site con Origin exacto permite vincular desde el navegador`() {
+        val response = post(
+            "/unlock",
+            "code=$CODE",
+            headers = mapOf(
+                "Host" to "192.168.1.10:8080",
+                "Origin" to "http://192.168.1.10:8080",
+                "Sec-Fetch-Site" to "same-site"
+            )
+        )
+        assertEquals(303, response.status)
+        assertTrue(response.extraHeaders.contains("Location: /"))
+    }
+
+    @Test
+    fun `same-site con Origin distinto se rechaza`() {
+        val response = post(
+            "/unlock",
+            "code=$CODE",
+            headers = mapOf(
+                "Host" to "192.168.1.10:8080",
+                "Origin" to "http://192.168.1.11:8080",
+                "Sec-Fetch-Site" to "same-site"
+            )
+        )
+        assertEquals(403, response.status)
+        assertEquals(0, store.writes)
+    }
+
+    @Test
     fun `Sec-Fetch-Site cross-site tambien se rechaza`() {
         val response = post(
             "/save",
