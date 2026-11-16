@@ -2,10 +2,12 @@
 #
 # Cómo se usa (2 clics):
 #   1. Pestaña «Actions» → «Generar APK (Android TV)» → «Run workflow».
-#   2. Al terminar (~10 min), el APK queda en el artefacto «OmniTV-apk».
-#      Si además marcas «publicar», aparece como Release descargable.
+#   2. Al terminar (~10 min), el APK queda en el artefacto «OmniTV-apk-<versión>».
+#      Si además marcas «publicar» desde main y con firma de producción,
+#      aparece como Release versionada.
 #
-# También se ejecuta al subir una etiqueta v* (ej: v1.3.0).
+# Los pushes a main actualizan «latest» solo con firma de producción.
+# Las etiquetas v* las gestiona release.yml.
 #
 # Diferencia con release.yml: este workflow SIEMPRE deja un APK descargable
 # (artefacto), sin exigir keystore de producción y sin publicar una Release a
@@ -116,6 +118,17 @@ jobs:
           else
             echo "SIGNING_MODE=depuración (sideload)" >> "$GITHUB_ENV"
             echo "::warning::Sin secretos OMNITV_KEYSTORE_*: el APK se firmará con la clave de depuración. No sirve para actualizar una instalación firmada con producción."
+          fi
+
+      - name: Validar firma antes de publicar
+        run: |
+          if [ "$PUBLISH" = "true" ] && [ "$SIGNING_MODE" != "producción" ]; then
+            echo "::error::Una Release versionada exige la keystore de producción. Configura OMNITV_KEYSTORE_BASE64, OMNITV_KEYSTORE_PASSWORD y OMNITV_KEY_ALIAS."
+            exit 1
+          fi
+          if [ "$PUBLISH_DEV" = "true" ] && [ "$SIGNING_MODE" != "producción" ]; then
+            echo "PUBLISH_DEV=false" >> "$GITHUB_ENV"
+            echo "::warning::No se actualiza latest: falta la firma de producción. El APK de prueba quedará solo como artefacto."
           fi
 
       - name: Versión para esta compilación
