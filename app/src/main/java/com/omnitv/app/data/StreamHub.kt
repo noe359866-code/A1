@@ -1,6 +1,7 @@
 package com.omnitv.app.data
 
 import androidx.compose.runtime.mutableStateOf
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -102,6 +103,18 @@ class ProjectStreamAddon(
 }
 
 /**
+ * Convierte errores de un addon en un fallback vacío, pero nunca consume
+ * CancellationException: el reproductor debe poder cancelar la fan-out al salir.
+ */
+internal suspend fun <T> runAddonCancellable(fallback: T, block: suspend () -> T): T = try {
+    block()
+} catch (cancelled: CancellationException) {
+    throw cancelled
+} catch (_: Exception) {
+    fallback
+}
+
+/**
  * «Omni Streams» — el addon interno de la app. Su única función es
  * **entregar streams de otros proyectos**: consulta en paralelo todos los
  * proyectos configurados (StreamFlix Reborn y afines vía
@@ -180,7 +193,7 @@ object StreamHub {
                     async {
                         val timeoutMs = if (addon.id == "cloudstream-bridge" || addon.id == "nuvio-plugins") 25_000L else 12_000L
                         withTimeoutOrNull(timeoutMs) {
-                            runCatching { addon.resolve(video) }.getOrDefault(emptyList())
+                            runAddonCancellable(emptyList()) { addon.resolve(video) }
                         }.orEmpty()
                     }
                 }.awaitAll()
