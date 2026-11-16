@@ -336,7 +336,8 @@ class PairingRouterTest {
     fun `los valores guardados se escapan en el HTML`() {
         store.savedAccount = "\"><script>alert(1)</script>"
         store.savedAddons = listOf("https://a.ejemplo/</textarea><script>x()</script>")
-        val body = get("/?code=$CODE").body
+        val redirect = get("/?code=$CODE")
+        val body = getAuthed("/", sessionOf(redirect)).body
 
         assertFalse(body.contains("<script>"))
         assertTrue(body.contains("&lt;script&gt;alert(1)&lt;/script&gt;"))
