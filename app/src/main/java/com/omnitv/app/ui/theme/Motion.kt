@@ -2,7 +2,7 @@ package com.omnitv.app.ui.theme
 
 import android.content.Context
 import android.provider.Settings
-import androidx.compose.animation.core.AnimationSpec
+import androidx.compose.animation.core.FiniteAnimationSpec
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.tween
@@ -29,7 +29,7 @@ object AppMotion {
     val easing = CubicBezierEasing(0.2f, 0.8f, 0.2f, 1f)
 
     /** Especificación de animación consciente del movimiento reducido. */
-    fun <T> spec(durationMs: Int, reducedMotion: Boolean): AnimationSpec<T> =
+    fun <T> spec(durationMs: Int, reducedMotion: Boolean): FiniteAnimationSpec<T> =
         if (reducedMotion) snap() else tween(durationMs, easing = easing)
 }
 
@@ -46,10 +46,10 @@ fun rememberReducedMotion(): Boolean {
 }
 
 /**
- * `AnimationSpec<T>` para los [animateFloatAsState]/[animateDpAsState] de la app:
- * `snap()` si el sistema tiene el movimiento reducido; si no, `tween` con la
+ * `FiniteAnimationSpec<T>` para los [animateFloatAsState]/[animateDpAsState]/[Crossfade]
+ * de la app: `snap()` si el sistema tiene el movimiento reducido; si no, `tween` con la
  * curva [AppMotion.easing]. Sustituye a los `tween(...)` sueltos.
  */
 @Composable
-fun <T> appTween(durationMs: Int): AnimationSpec<T> =
+fun <T> appTween(durationMs: Int): FiniteAnimationSpec<T> =
     AppMotion.spec(durationMs, rememberReducedMotion())

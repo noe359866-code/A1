@@ -28,7 +28,7 @@ object TraktService {
     fun isLinked(): Boolean = SettingsStore.traktLinked
 
     /** `POST /oauth/device/code`. Null si no hay credenciales o Trakt no responde. */
-    fun requestDeviceCode(): TraktProtocol.DeviceCode? {
+    internal fun requestDeviceCode(): TraktProtocol.DeviceCode? {
         val (clientId, _) = SettingsStore.traktCredentials() ?: return null
         val body = JSONObject().put("client_id", clientId).toString()
         val result = AddonHttp.request(

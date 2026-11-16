@@ -177,7 +177,6 @@ object SettingsStore {
      * fuerza la recarga de toda la portada en la próxima pantalla.
      */
     fun catalogStamp(): String = customAddons.joinToString(",")
-        private set
 
     fun init(context: Context) {
         if (prefs != null) return
