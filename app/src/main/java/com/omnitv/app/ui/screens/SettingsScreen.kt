@@ -1,15 +1,15 @@
+@file:OptIn(ExperimentalComposeUiApi::class)
+
 package com.omnitv.app.ui.screens
 
 import androidx.activity.compose.BackHandler
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -29,52 +29,67 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.painterResource
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
+import androidx.compose.ui.zIndex
 import com.omnitv.app.BuildConfig
 import com.omnitv.app.R
 import com.omnitv.app.data.AddonRegistry
+import com.omnitv.app.data.AnimeCatalog
 import com.omnitv.app.data.CloudstreamBridge
+import com.omnitv.app.data.ConfirmKeyUpGuard
 import com.omnitv.app.data.MediaBridge
 import com.omnitv.app.data.NuvioPluginManager
 import com.omnitv.app.data.NuvioScraperResolver
 import com.omnitv.app.data.PairingServer
 import com.omnitv.app.data.PlaybackDiagnostics
 import com.omnitv.app.data.ProfileStore
+import com.omnitv.app.data.RemoteCatalog
 import com.omnitv.app.data.SettingsStore
 import com.omnitv.app.data.SkipKind
 import com.omnitv.app.data.SkipSegmentParser
 import com.omnitv.app.data.SkipSegmentService
+import com.omnitv.app.data.TvKeyCodes
 import com.omnitv.app.ui.components.AvatarView
 import com.omnitv.app.ui.components.KidsChip
+import com.omnitv.app.ui.components.LocalActiveTabFocus
+import com.omnitv.app.ui.components.LocalSuppressContentAutoFocus
+import com.omnitv.app.ui.components.LocalTabContentFocus
 import com.omnitv.app.ui.components.PillButton
 import com.omnitv.app.ui.components.PinDialog
 import com.omnitv.app.ui.components.RequestTvFocus
 import com.omnitv.app.ui.components.SettingRow
 import com.omnitv.app.ui.components.TvToggle
+import com.omnitv.app.ui.components.consumeStrayConfirmKeyUp
 import com.omnitv.app.ui.theme.Accent
 import com.omnitv.app.ui.theme.AccentGreen
 import com.omnitv.app.ui.theme.AppRadius
@@ -82,13 +97,13 @@ import com.omnitv.app.ui.theme.AppSpacing
 import com.omnitv.app.ui.theme.AppStroke
 import com.omnitv.app.ui.theme.AppType
 import com.omnitv.app.ui.theme.Background
-import com.omnitv.app.ui.theme.Danger
-import com.omnitv.app.ui.theme.GlassFill
 import com.omnitv.app.ui.theme.SurfaceCard
 import com.omnitv.app.ui.theme.SurfaceElevated
 import com.omnitv.app.ui.theme.TextPrimary
 import com.omnitv.app.ui.theme.TextSecondary
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /**
  * Categorías de ajustes en panel lateral para Android TV.
@@ -125,7 +140,9 @@ fun SettingsScreen(
     onExit: () -> Unit = {}
 ) {
     val profile = ProfileStore.currentProfile
-    var selectedCategory by remember { mutableStateOf(SettingsCategory.PROFILE) }
+    var selectedCategory by rememberSaveable { mutableStateOf(SettingsCategory.PROFILE) }
+    val activeTabFocus = LocalActiveTabFocus.current
+    val focusManager = LocalFocusManager.current
 
     val panelUrl = remember(PairingServer.running.value) { PairingServer.panelUrl() }
     val pairingUrl = remember(PairingServer.running.value) { PairingServer.pairingUrl() }
@@ -136,9 +153,12 @@ fun SettingsScreen(
     val gated = SettingsStore.parentalPinEnabled && profile?.isKids == true && !pinUnlocked
     LaunchedEffect(gated) { if (gated) pinTask = PinTask.GATE }
 
-    // Foco inicial en la primera categoría del panel lateral
-    val firstCategoryFocus = remember { FocusRequester() }
-    if (!gated) RequestTvFocus(firstCategoryFocus)
+    val categoryRequesters = remember { SettingsCategory.entries.associateWith { FocusRequester() } }
+    val qualityRowFocus = remember { FocusRequester() }
+    val speedRowFocus = remember { FocusRequester() }
+    val pinButtonFocus = remember { FocusRequester() }
+    var restoreAfterModal by remember { mutableStateOf<FocusRequester?>(null) }
+    var initialFocusDone by rememberSaveable { mutableStateOf(false) }
 
     val scope = rememberCoroutineScope()
     var bridgeStatus by remember { mutableStateOf("Comprobando puente…") }
@@ -146,9 +166,41 @@ fun SettingsScreen(
     var mediaStatus by remember { mutableStateOf("Comprobando puente multimedia…") }
     var refreshing by remember { mutableStateOf(false) }
 
-    // Selectores modales
     var qualityDialogVisible by remember { mutableStateOf(false) }
     var speedDialogVisible by remember { mutableStateOf(false) }
+
+    val anyModalOpen = qualityDialogVisible || speedDialogVisible || pinTask != null
+    val suppressAutoFocus = LocalSuppressContentAutoFocus.current
+    val tabContentFocus = LocalTabContentFocus.current
+    SideEffect {
+        tabContentFocus?.focus = categoryRequesters[selectedCategory]
+            ?: categoryRequesters.getValue(SettingsCategory.PROFILE)
+    }
+
+    LaunchedEffect(gated, suppressAutoFocus) {
+        if (suppressAutoFocus) return@LaunchedEffect
+        if (!gated && !initialFocusDone) {
+            initialFocusDone = true
+            val target = categoryRequesters[selectedCategory] ?: categoryRequesters.getValue(SettingsCategory.PROFILE)
+            for (attempt in 0 until 6) {
+                withFrameNanos { }
+                if (runCatching { target.requestFocus() }.isSuccess) return@LaunchedEffect
+            }
+        }
+    }
+
+    LaunchedEffect(anyModalOpen) {
+        if (!anyModalOpen) {
+            val target = restoreAfterModal
+            if (target != null) {
+                restoreAfterModal = null
+                for (attempt in 0 until 6) {
+                    withFrameNanos { }
+                    if (runCatching { target.requestFocus() }.isSuccess) break
+                }
+            }
+        }
+    }
 
     suspend fun checkIntegrations() {
         refreshing = true
@@ -164,9 +216,14 @@ fun SettingsScreen(
     }
 
     LaunchedEffect(SettingsStore.revision) { checkIntegrations() }
+    LaunchedEffect(selectedCategory) {
+        if (selectedCategory == SettingsCategory.PAIRING && !PairingServer.running.value) {
+            withContext(Dispatchers.IO) { PairingServer.start() }
+        }
+    }
 
     Box(Modifier.fillMaxSize().background(Background)) {
-        Row(
+        if (!gated) Row(
             Modifier
                 .fillMaxSize()
                 .padding(horizontal = AppSpacing.screenMargin, vertical = 24.dp)
@@ -178,6 +235,7 @@ fun SettingsScreen(
                 Modifier
                     .width(330.dp)
                     .fillMaxHeight()
+                    .focusGroup()
                     .verticalScroll(rememberScrollState())
                     .padding(end = 24.dp)
             ) {
@@ -186,11 +244,16 @@ fun SettingsScreen(
                 Text("Configuración de Omni TV", style = AppType.metadata, color = TextSecondary)
                 Spacer(Modifier.height(24.dp))
 
-                SettingsCategory.values().forEachIndexed { index, category ->
+                SettingsCategory.entries.forEachIndexed { index, category ->
+                    val integrationsTotal = SettingsStore.customAddons.size +
+                        SettingsStore.streamAddons.size +
+                        SettingsStore.nuvioPlugins.size +
+                        (if (SettingsStore.cloudstreamBridge.isNotBlank()) 1 else 0)
                     val badgeText = when (category) {
                         SettingsCategory.PROFILE -> profile?.name
                         SettingsCategory.QUALITY -> SettingsStore.preferredQuality
-                        SettingsCategory.PAIRING -> "${SettingsStore.customAddons.size + SettingsStore.streamAddons.size} addons"
+                        SettingsCategory.PAIRING -> "${SettingsStore.customAddons.size + SettingsStore.streamAddons.size + SettingsStore.nuvioPlugins.size} configs"
+                        SettingsCategory.INTEGRATIONS -> integrationsTotal.takeIf { it > 0 }?.let { "$it activas" }
                         SettingsCategory.NETWORK -> if (SettingsStore.cloudflareDns) "1.1.1.1" else null
                         SettingsCategory.SYSTEM -> "v${BuildConfig.VERSION_NAME}"
                         else -> null
@@ -201,7 +264,19 @@ fun SettingsScreen(
                         isSelected = category == selectedCategory,
                         badgeText = badgeText,
                         onFocus = { selectedCategory = category },
-                        modifier = if (index == 0) Modifier.focusRequester(firstCategoryFocus) else Modifier
+                        onClick = {
+                            selectedCategory = category
+                            focusManager.moveFocus(FocusDirection.Right)
+                        },
+                        modifier = Modifier
+                            .focusRequester(categoryRequesters.getValue(category))
+                            .then(
+                                if (index == 0 && activeTabFocus != null) {
+                                    Modifier.focusProperties { up = activeTabFocus }
+                                } else {
+                                    Modifier
+                                }
+                            )
                     )
                     Spacer(Modifier.height(8.dp))
                 }
@@ -214,10 +289,10 @@ fun SettingsScreen(
                 Modifier
                     .weight(1f)
                     .fillMaxHeight()
+                    .focusGroup()
                     .verticalScroll(rememberScrollState())
                     .padding(start = 12.dp, bottom = 48.dp)
             ) {
-                // Cabecera descriptiva de la sección seleccionada
                 SectionHeader(category = selectedCategory)
                 Spacer(Modifier.height(20.dp))
 
@@ -226,8 +301,15 @@ fun SettingsScreen(
                         ProfileSettingsContent(
                             profile = profile,
                             onSwitchProfile = onSwitchProfile,
-                            onConfigurePin = { pinTask = PinTask.SET },
-                            onClearPin = { pinTask = PinTask.CLEAR }
+                            onConfigurePin = {
+                                restoreAfterModal = pinButtonFocus
+                                pinTask = PinTask.SET
+                            },
+                            onClearPin = {
+                                restoreAfterModal = pinButtonFocus
+                                pinTask = PinTask.CLEAR
+                            },
+                            pinButtonModifier = Modifier.focusRequester(pinButtonFocus)
                         )
                     }
 
@@ -237,8 +319,16 @@ fun SettingsScreen(
 
                     SettingsCategory.QUALITY -> {
                         QualitySettingsContent(
-                            onOpenQualityDialog = { qualityDialogVisible = true },
-                            onOpenSpeedDialog = { speedDialogVisible = true }
+                            onOpenQualityDialog = {
+                                restoreAfterModal = qualityRowFocus
+                                qualityDialogVisible = true
+                            },
+                            onOpenSpeedDialog = {
+                                restoreAfterModal = speedRowFocus
+                                speedDialogVisible = true
+                            },
+                            qualityRowModifier = Modifier.focusRequester(qualityRowFocus),
+                            speedRowModifier = Modifier.focusRequester(speedRowFocus)
                         )
                     }
 
@@ -259,7 +349,8 @@ fun SettingsScreen(
                             cloudstreamStatus = cloudstreamStatus,
                             mediaStatus = mediaStatus,
                             refreshing = refreshing,
-                            onRefresh = { scope.launch { checkIntegrations() } }
+                            onRefresh = { scope.launch { checkIntegrations() } },
+                            onOpenPairing = { selectedCategory = SettingsCategory.PAIRING }
                         )
                     }
 
@@ -278,7 +369,6 @@ fun SettingsScreen(
         /*  Diálogos Modales                                                  */
         /* ------------------------------------------------------------------ */
 
-        // Selector modal de Calidad
         if (qualityDialogVisible) {
             OptionSelectDialog(
                 title = "Calidad de vídeo preferida",
@@ -303,7 +393,6 @@ fun SettingsScreen(
             )
         }
 
-        // Selector modal de Velocidad
         if (speedDialogVisible) {
             OptionSelectDialog(
                 title = "Velocidad de reproducción",
@@ -324,7 +413,6 @@ fun SettingsScreen(
             )
         }
 
-        // Capa de PIN parental
         val task = pinTask
         if (task != null) {
             key(task) {
@@ -412,6 +500,7 @@ private fun CategoryItem(
     isSelected: Boolean,
     badgeText: String? = null,
     onFocus: () -> Unit,
+    onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     var isFocused by remember { mutableStateOf(false) }
@@ -419,6 +508,7 @@ private fun CategoryItem(
 
     Row(
         modifier = modifier
+            .zIndex(if (isFocused) 1f else 0f)
             .fillMaxWidth()
             .graphicsLayer { scaleX = scale; scaleY = scale }
             .clip(AppRadius.md)
@@ -434,18 +524,32 @@ private fun CategoryItem(
                 else if (isSelected) Modifier.border(1.dp, Accent.copy(alpha = 0.5f), AppRadius.md)
                 else Modifier
             )
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null,
-                onClick = onFocus
-            )
             .onFocusChanged {
                 isFocused = it.isFocused
                 if (it.isFocused) onFocus()
             }
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null,
+                onClick = onClick
+            )
             .padding(horizontal = 16.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
+        Box(
+            Modifier
+                .width(3.dp)
+                .height(22.dp)
+                .clip(AppRadius.pill)
+                .background(
+                    when {
+                        isFocused -> Color.White
+                        isSelected -> Accent
+                        else -> Color.Transparent
+                    }
+                )
+        )
+        Spacer(Modifier.width(10.dp))
         Box(
             Modifier
                 .size(36.dp)
@@ -487,7 +591,8 @@ private fun CategoryItem(
             ) {
                 Text(
                     badgeText,
-                    style = TextStyle(fontSize = 11.sp, color = TextSecondary),
+                    style = AppType.chip,
+                    color = TextSecondary,
                     maxLines = 1
                 )
             }
@@ -544,7 +649,8 @@ private fun ProfileSettingsContent(
     profile: com.omnitv.app.data.Profile?,
     onSwitchProfile: () -> Unit,
     onConfigurePin: () -> Unit,
-    onClearPin: () -> Unit
+    onClearPin: () -> Unit,
+    pinButtonModifier: Modifier = Modifier
 ) {
     SettingsCard(iconRes = R.drawable.ic_user, title = "Perfil de espectador") {
         Row(
@@ -614,6 +720,7 @@ private fun ProfileSettingsContent(
                     iconRes = R.drawable.ic_shield,
                     primary = !SettingsStore.parentalPinEnabled,
                     danger = SettingsStore.parentalPinEnabled,
+                    modifier = pinButtonModifier,
                     onClick = {
                         if (SettingsStore.parentalPinEnabled) onClearPin() else onConfigurePin()
                     }
@@ -666,19 +773,23 @@ private fun PlaybackSettingsContent() {
 @Composable
 private fun QualitySettingsContent(
     onOpenQualityDialog: () -> Unit,
-    onOpenSpeedDialog: () -> Unit
+    onOpenSpeedDialog: () -> Unit,
+    qualityRowModifier: Modifier = Modifier,
+    speedRowModifier: Modifier = Modifier
 ) {
     SettingsCard(iconRes = R.drawable.ic_quality, title = "Calidad y velocidad de reproducción") {
         SettingRow(
             title = "Calidad preferida",
             subtitle = "Resolución seleccionada por defecto al iniciar cada vídeo",
             trailing = { ValueText(SettingsStore.preferredQuality) },
+            modifier = qualityRowModifier,
             onClick = onOpenQualityDialog
         )
         SettingRow(
             title = "Velocidad de reproducción",
             subtitle = "Ritmo de reproducción predeterminado",
             trailing = { ValueText(SettingsStore.speedLabel()) },
+            modifier = speedRowModifier,
             onClick = onOpenSpeedDialog
         )
     }
@@ -686,44 +797,70 @@ private fun QualitySettingsContent(
 
 @Composable
 private fun SkipSettingsContent() {
+    var sourceHint by remember { mutableStateOf<String?>(null) }
+    val enabled = SettingsStore.skipSegmentsEnabled
     SettingsCard(iconRes = R.drawable.ic_skip_next, title = "Saltar intro y créditos") {
         SettingRow(
             title = "Tramos saltables",
-            subtitle = "Muestra el botón «Saltar» con marcas temporales de la comunidad (SkipDB, TheIntroDB, IntroDB)",
-            trailing = { TvToggle(SettingsStore.skipSegmentsEnabled, onCheckedChange = { SettingsStore.saveSkipSegmentsEnabled(it) }) }
+            subtitle = "Muestra el botón «Saltar» y marca los tramos en la barra con marcas de la comunidad",
+            trailing = { TvToggle(enabled, onCheckedChange = { SettingsStore.saveSkipSegmentsEnabled(it) }) }
         )
-        listOf(SkipKind.INTRO, SkipKind.RECAP, SkipKind.CREDITS).forEach { kind ->
+        listOf(SkipKind.INTRO, SkipKind.RECAP, SkipKind.CREDITS, SkipKind.PREVIEW).forEach { kind ->
             SettingRow(
                 title = "Saltar ${kind.label} automáticamente",
-                subtitle = "Salto instantáneo sin requerir pulsar el botón del mando",
+                subtitle = if (enabled) {
+                    if (kind == SkipKind.CREDITS) {
+                        "Abre «A continuación» en créditos finales o salta a la escena post-créditos"
+                    } else {
+                        "Salto instantáneo sin requerir pulsar el botón del mando"
+                    }
+                } else {
+                    "Activa «Tramos saltables» arriba para habilitar el salto automático"
+                },
                 trailing = {
                     TvToggle(
-                        kind.name in SettingsStore.autoSkipKinds,
-                        onCheckedChange = { SettingsStore.setAutoSkip(kind, it) }
+                        kind.name in SettingsStore.autoSkipKinds && enabled,
+                        onCheckedChange = {
+                            if (!enabled) SettingsStore.saveSkipSegmentsEnabled(true)
+                            SettingsStore.setAutoSkip(kind, it)
+                        }
                     )
                 }
             )
         }
         SettingsStore.SKIP_SOURCE_NAMES.forEach { source ->
+            val active = source in SettingsStore.skipSources
             SettingRow(
                 title = "Fuente $source",
                 subtitle = when (source) {
                     SkipSegmentParser.SOURCE_SKIPDB -> "Ajusta marcas a la duración del stream · Requiere id IMDb"
                     SkipSegmentParser.SOURCE_THEINTRODB -> "Intro, resumen, créditos y avance · Admite id TMDB o IMDb"
-                    else -> "Intro, resumen y créditos · Requiere id IMDb"
+                    SkipSegmentParser.SOURCE_ANISKIP -> "Opening, ending y resumen de anime · Usa id MyAnimeList"
+                    else -> "Intro, resumen, créditos y escena final · Requiere id IMDb"
                 },
                 trailing = {
                     TvToggle(
-                        source in SettingsStore.skipSources,
-                        onCheckedChange = { SettingsStore.setSkipSource(source, it) }
+                        active,
+                        onCheckedChange = { checked ->
+                            if (!checked && active && SettingsStore.skipSources.size <= 1) {
+                                sourceHint = "Debe quedar al menos una fuente activa"
+                            } else {
+                                sourceHint = null
+                                SettingsStore.setSkipSource(source, checked)
+                            }
+                        }
                     )
                 }
             )
         }
         Column(Modifier.fillMaxWidth().padding(horizontal = 22.dp, vertical = 14.dp)) {
+            if (sourceHint != null) {
+                Text(sourceHint!!, style = AppType.metadata, color = Accent)
+                Spacer(Modifier.height(6.dp))
+            }
             StatusLine("Última consulta", SkipSegmentService.lastStatus.value.ifBlank { "Sin consultas todavía" })
             Text(
-                "Datos de SkipDB (ODbL 1.0), TheIntroDB e IntroDB. Las bases de datos se leen de forma anónima y segura.",
+                "Datos de SkipDB (ODbL 1.0), TheIntroDB, IntroDB y AniSkip. Pulsa OK para saltar o Atrás para ocultar el aviso.",
                 style = AppType.metadata,
                 color = TextSecondary
             )
@@ -820,6 +957,11 @@ private fun PairingSettingsContent(
                 Spacer(Modifier.height(6.dp))
                 StatusLine("Addons de catálogo", "${SettingsStore.customAddons.size} instalados")
                 StatusLine("Addons de reproducción", "${SettingsStore.streamAddons.size} instalados")
+                StatusLine("Repositorios Nuvio", "${SettingsStore.nuvioPlugins.size} guardados")
+                StatusLine(
+                    "Puente Cloudstream",
+                    if (SettingsStore.cloudstreamBridge.isNotBlank()) "Configurado" else "No configurado"
+                )
                 StatusLine("APIs configuradas", "${SettingsStore.apiKeys.size}")
                 StatusLine(
                     "Cifrado de claves",
@@ -838,42 +980,158 @@ private fun IntegrationsSettingsContent(
     cloudstreamStatus: String,
     mediaStatus: String,
     refreshing: Boolean,
-    onRefresh: () -> Unit
+    onRefresh: () -> Unit,
+    onOpenPairing: () -> Unit
 ) {
-    SettingsCard(iconRes = R.drawable.ic_server, title = "Addons Stremio y Puentes") {
-        Column(Modifier.fillMaxWidth().padding(horizontal = 22.dp, vertical = 18.dp)) {
-            Text(
-                "Stremio: manifests con recursos de streams y catálogo. Nuvio/Cloudstream: scrapers con puente externo.",
-                style = AppType.body,
-                color = TextSecondary
-            )
-            Spacer(Modifier.height(14.dp))
+    val stremioStatuses = AddonRegistry.statuses.value
+    val streamEndpoints = SettingsStore.streamAddons
+    val nuvioRepos = NuvioPluginManager.repositories.value
+    val nuvioScrapers = nuvioRepos.flatMap { it.manifest?.scrapers.orEmpty() }.distinctBy { it.id }
+    val disabledScrapers = SettingsStore.disabledNuvioScrapers
+    val csExtensions = CloudstreamBridge.extensions.value
 
-            if (AddonRegistry.statuses.value.isEmpty()) {
-                StatusLine("Addons Stremio", "Sin addons instalados")
-            } else {
-                AddonRegistry.statuses.value.forEach { StatusLine(it.label, it.summary) }
+    Column(verticalArrangement = Arrangement.spacedBy(18.dp)) {
+        SettingsCard(iconRes = R.drawable.ic_link, title = "Addons de Stremio y Omni Streams") {
+            Column(Modifier.fillMaxWidth().padding(horizontal = 22.dp, vertical = 14.dp)) {
+                Text(
+                    "Addons con manifest.json (catálogo, fichas y streams HTTP) y endpoints compatibles con Omni Streams.",
+                    style = AppType.body,
+                    color = TextSecondary
+                )
+                Spacer(Modifier.height(12.dp))
+                if (stremioStatuses.isEmpty()) {
+                    StatusLine("Addons Stremio", "Sin addons instalados · añádelos en Vincular (QR)")
+                } else {
+                    stremioStatuses.forEach { st ->
+                        Row(
+                            Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(Modifier.weight(1f)) {
+                                Text(st.label, style = AppType.body, color = TextPrimary)
+                                Text(st.summary, style = AppType.metadata, color = TextSecondary)
+                            }
+                            Spacer(Modifier.width(12.dp))
+                            StatusBadge(
+                                text = when {
+                                    st.checking -> "COMPROBANDO"
+                                    st.manifest != null -> "ACTIVO"
+                                    else -> "ERROR"
+                                },
+                                isSuccess = st.manifest != null && !st.checking,
+                                isWarning = st.manifest == null && !st.checking
+                            )
+                        }
+                    }
+                }
+                if (streamEndpoints.isNotEmpty()) {
+                    Spacer(Modifier.height(8.dp))
+                    streamEndpoints.forEach { endpoint ->
+                        val host = runCatching { java.net.URI(endpoint).host }.getOrNull() ?: endpoint
+                        StatusLine("Omni Streams · $host", endpoint)
+                    }
+                }
+            }
+        }
+
+        SettingsCard(iconRes = R.drawable.ic_server, title = "Plugins de Nuvio") {
+            Column(Modifier.fillMaxWidth().padding(horizontal = 22.dp, vertical = 14.dp)) {
+                Row(
+                    Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Puente JS externo", style = AppType.body, color = TextPrimary)
+                        Text(bridgeStatus, style = AppType.metadata, color = TextSecondary)
+                    }
+                    Spacer(Modifier.width(12.dp))
+                    val connected = bridgeStatus.startsWith("Puente conectado")
+                    StatusBadge(
+                        text = if (connected) "CONECTADO" else if (SettingsStore.nuvioBridge.isBlank()) "SIN PUENTE" else "AVISO",
+                        isSuccess = connected,
+                        isWarning = !connected && SettingsStore.nuvioBridge.isNotBlank()
+                    )
+                }
+                Spacer(Modifier.height(10.dp))
+                if (nuvioRepos.isEmpty()) {
+                    StatusLine("Repositorios Nuvio", "Sin repositorios guardados")
+                } else {
+                    nuvioRepos.forEach { StatusLine(it.label, it.summary) }
+                }
             }
 
-            Spacer(Modifier.height(8.dp))
-
-            if (NuvioPluginManager.repositories.value.isEmpty()) {
-                StatusLine("Plugins Nuvio", "Sin repositorios guardados")
-            } else {
-                NuvioPluginManager.repositories.value.forEach { StatusLine(it.label, it.summary) }
+            if (nuvioScrapers.isNotEmpty()) {
+                nuvioScrapers.forEach { scraper ->
+                    val repoEnabled = scraper.enabled
+                    val userEnabled = scraper.id !in disabledScrapers
+                    val formatsText = scraper.formatsLabel
+                    val subtitle = buildString {
+                        append(formatsText)
+                        if (!repoEnabled) append(" · desactivado por el repositorio")
+                    }
+                    SettingRow(
+                        title = scraper.name,
+                        subtitle = subtitle,
+                        trailing = {
+                            TvToggle(
+                                checked = repoEnabled && userEnabled,
+                                onCheckedChange = { enabled ->
+                                    if (repoEnabled) {
+                                        SettingsStore.setNuvioScraperEnabled(scraper.id, enabled)
+                                    }
+                                }
+                            )
+                        }
+                    )
+                }
             }
+        }
 
-            StatusLine("Puente JS Nuvio", bridgeStatus)
-            StatusLine("Puente Cloudstream", cloudstreamStatus)
-            StatusLine("Puente multimedia FFmpeg", mediaStatus)
+        SettingsCard(iconRes = R.drawable.ic_server, title = "Extensiones de Cloudstream y FFmpeg") {
+            Column(Modifier.fillMaxWidth().padding(horizontal = 22.dp, vertical = 14.dp)) {
+                Row(
+                    Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Puente Cloudstream", style = AppType.body, color = TextPrimary)
+                        Text(cloudstreamStatus, style = AppType.metadata, color = TextSecondary)
+                    }
+                    Spacer(Modifier.width(12.dp))
+                    val csConnected = cloudstreamStatus.startsWith("Puente Cloudstream conectado")
+                    StatusBadge(
+                        text = if (csConnected) "CONECTADO" else if (SettingsStore.cloudstreamBridge.isBlank()) "DESACTIVADO" else "AVISO",
+                        isSuccess = csConnected,
+                        isWarning = !csConnected && SettingsStore.cloudstreamBridge.isNotBlank()
+                    )
+                }
+                if (csExtensions.isNotEmpty()) {
+                    Spacer(Modifier.height(6.dp))
+                    StatusLine(
+                        "Extensiones informadas",
+                        csExtensions.take(12).joinToString(" · ") +
+                            if (csExtensions.size > 12) " (+${csExtensions.size - 12})" else ""
+                    )
+                }
+                Spacer(Modifier.height(6.dp))
+                StatusLine("Puente multimedia FFmpeg", mediaStatus)
 
-            Spacer(Modifier.height(18.dp))
-            PillButton(
-                text = if (refreshing) "Comprobando…" else "Comprobar manifests y puentes",
-                iconRes = R.drawable.ic_refresh,
-                primary = false,
-                onClick = onRefresh
-            )
+                Spacer(Modifier.height(16.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                    PillButton(
+                        text = if (refreshing) "Comprobando…" else "Comprobar todo",
+                        iconRes = R.drawable.ic_refresh,
+                        primary = true,
+                        onClick = onRefresh
+                    )
+                    PillButton(
+                        text = "Configurar en Vincular (QR)",
+                        iconRes = R.drawable.ic_link,
+                        primary = false,
+                        onClick = onOpenPairing
+                    )
+                }
+            }
         }
     }
 }
@@ -901,6 +1159,8 @@ private fun NetworkSettingsContent() {
 
 @Composable
 private fun SystemSettingsContent() {
+    var cacheCleared by remember { mutableStateOf(false) }
+
     SettingsCard(iconRes = R.drawable.ic_info, title = "Información del sistema") {
         SettingRow(
             title = "Versión de Omni TV",
@@ -923,6 +1183,25 @@ private fun SystemSettingsContent() {
                 )
             }
         )
+        Column(Modifier.fillMaxWidth().padding(horizontal = 22.dp, vertical = 16.dp)) {
+            StatusLine(
+                "Caché de catálogos",
+                if (cacheCleared) "Caché limpiada · se actualizará al abrir el catálogo"
+                else "Incluye filas de portada, plataformas, estudios, anime y plugins Nuvio"
+            )
+            Spacer(Modifier.height(10.dp))
+            PillButton(
+                text = if (cacheCleared) "Caché limpiada" else "Limpiar caché de catálogos",
+                iconRes = R.drawable.ic_delete,
+                primary = false,
+                onClick = {
+                    RemoteCatalog.invalidateCache()
+                    AnimeCatalog.invalidateCache()
+                    NuvioPluginManager.clearCache()
+                    cacheCleared = true
+                }
+            )
+        }
     }
 }
 
@@ -1004,23 +1283,37 @@ private fun <T> OptionSelectDialog(
     onSelect: (T) -> Unit,
     onDismiss: () -> Unit
 ) {
-    val initialFocus = remember { FocusRequester() }
+    val optionRequesters = remember(options.size) { List(options.size) { FocusRequester() } }
+    val closeFocus = remember { FocusRequester() }
     val initialIndex = remember(options, selectedOption) {
         val idx = options.indexOf(selectedOption)
         if (idx >= 0) idx else 0
     }
-    RequestTvFocus(initialFocus)
+    val initialFocus = optionRequesters.getOrElse(initialIndex) { closeFocus }
+    val keyUpGuard = remember { ConfirmKeyUpGuard(initialSuppressUntilDown = true) }
+
+    RequestTvFocus(initialFocus, key = title)
     BackHandler(onBack = onDismiss)
 
     Box(
         Modifier
             .fillMaxSize()
-            .background(Background.copy(alpha = 0.95f)),
+            .background(Background.copy(alpha = 0.95f))
+            .consumeStrayConfirmKeyUp(keyUpGuard)
+            .onPreviewKeyEvent { event ->
+                if (event.type == KeyEventType.KeyDown && TvKeyCodes.isBack(event.nativeKeyEvent.keyCode)) {
+                    onDismiss()
+                    true
+                } else {
+                    false
+                }
+            },
         contentAlignment = Alignment.Center
     ) {
         Column(
             Modifier
                 .width(600.dp)
+                .focusGroup()
                 .clip(AppRadius.lg)
                 .background(SurfaceCard)
                 .border(1.dp, Color.White.copy(alpha = 0.12f), AppRadius.lg)
@@ -1042,6 +1335,7 @@ private fun <T> OptionSelectDialog(
                     Row(
                         Modifier
                             .fillMaxWidth()
+                            .zIndex(if (isFocused) 1f else 0f)
                             .clip(AppRadius.md)
                             .background(
                                 when {
@@ -1055,13 +1349,19 @@ private fun <T> OptionSelectDialog(
                                 else if (isSelected) Modifier.border(1.dp, Accent.copy(alpha = 0.5f), AppRadius.md)
                                 else Modifier
                             )
+                            .focusRequester(optionRequesters[index])
+                            .focusProperties {
+                                up = if (index > 0) optionRequesters[index - 1] else FocusRequester.Cancel
+                                down = if (index < optionRequesters.lastIndex) optionRequesters[index + 1] else closeFocus
+                                left = FocusRequester.Cancel
+                                right = FocusRequester.Cancel
+                            }
+                            .onFocusChanged { isFocused = it.isFocused }
                             .clickable(
                                 interactionSource = remember { MutableInteractionSource() },
                                 indication = null,
                                 onClick = { onSelect(option) }
                             )
-                            .onFocusChanged { isFocused = it.isFocused }
-                            .then(if (index == initialIndex) Modifier.focusRequester(initialFocus) else Modifier)
                             .padding(horizontal = 18.dp, vertical = 14.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
@@ -1102,7 +1402,15 @@ private fun <T> OptionSelectDialog(
                 PillButton(
                     text = "Cerrar",
                     primary = false,
-                    onClick = onDismiss
+                    onClick = onDismiss,
+                    modifier = Modifier
+                        .focusRequester(closeFocus)
+                        .focusProperties {
+                            up = optionRequesters.lastOrNull() ?: FocusRequester.Cancel
+                            down = FocusRequester.Cancel
+                            left = FocusRequester.Cancel
+                            right = FocusRequester.Cancel
+                        }
                 )
             }
         }

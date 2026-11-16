@@ -20,7 +20,6 @@ data class StremioManifest(
     val addonCatalogs: List<StremioCatalog> = emptyList(),
     val raw: JSONObject
 ) {
-    fun supportsResource(name: String): Boolean = resources.any { it.name == name }
     fun isCatalogAddon(): Boolean = catalogs.any { supports("catalog", it.type, "") }
     fun isStreamAddon(): Boolean = resources.any { it.name == "stream" }
     fun isMetaAddon(): Boolean = resources.any { it.name == "meta" }
@@ -91,27 +90,41 @@ data class StremioExtra(
 
 object StremioManifestParser {
     /** Valida lo indispensable; `scrapers[]` por sí solo NO es un addon Stremio. */
-    fun validate(json: JSONObject): String? = when {
-        json.optString("id").isBlank() -> "Falta id en el manifest"
-        json.optString("name").isBlank() -> "Falta name en el manifest"
-        json.optJSONArray("resources")?.length() == 0 || json.optJSONArray("resources") == null ->
-            "Falta resources: ¿es un repositorio de plugins Nuvio?"
-        parseResources(json.optJSONArray("resources")).isEmpty() -> "resources no contiene recursos válidos"
-        json.optJSONArray("types")?.length() == 0 || json.optJSONArray("types") == null -> "Falta types en el manifest"
-        else -> null
+    fun validate(json: JSONObject): String? {
+        if (json.optString("id").isBlank()) return "Falta id en el manifest"
+        if (json.optString("name").isBlank()) return "Falta name en el manifest"
+        val resArr = json.optJSONArray("resources")
+        if (resArr == null || resArr.length() == 0) {
+            return "Falta resources: ¿es un repositorio de plugins Nuvio?"
+        }
+        val resources = parseResources(resArr)
+        if (resources.isEmpty()) return "resources no contiene recursos válidos"
+        val topTypes = json.optJSONArray("types").toStringList()
+        val resourceTypes = resources.flatMap { it.types }
+        val catalogTypes = parseCatalogs(json.optJSONArray("catalogs")).map { it.type }
+        if (topTypes.isEmpty() && resourceTypes.isEmpty() && catalogTypes.isEmpty()) {
+            return "Falta types en el manifest"
+        }
+        return null
     }
 
     fun parse(json: JSONObject): StremioManifest {
         val id = json.optString("id")
+        val resources = parseResources(json.optJSONArray("resources"))
+        val catalogs = parseCatalogs(json.optJSONArray("catalogs"))
+        val declaredTypes = json.optJSONArray("types").toStringList()
+        val effectiveTypes = declaredTypes.ifEmpty {
+            (resources.flatMap { it.types } + catalogs.map { it.type }).distinct()
+        }
         return StremioManifest(
             id = id,
             version = json.optString("version", "0.0.0"),
             name = json.optString("name", id.ifEmpty { "Addon" }),
             description = json.optString("description", ""),
             logo = json.optString("logo").takeIf { it.isNotBlank() },
-            resources = parseResources(json.optJSONArray("resources")),
-            catalogs = parseCatalogs(json.optJSONArray("catalogs")),
-            types = json.optJSONArray("types").toStringList(),
+            resources = resources,
+            catalogs = catalogs,
+            types = effectiveTypes,
             idPrefixes = json.optJSONArray("idPrefixes").toStringList(),
             behaviorHints = json.optJSONObject("behaviorHints")?.let { obj ->
                 buildMap { obj.keys().forEach { key -> put(key, obj.optString(key)) } }

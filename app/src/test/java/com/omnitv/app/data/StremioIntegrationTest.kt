@@ -1,7 +1,6 @@
 package com.omnitv.app.data
 
 import kotlinx.coroutines.runBlocking
-import org.json.JSONArray
 import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -74,6 +73,23 @@ class StremioIntegrationTest {
         val withNuvio = StreamHub.configuredAddons(emptyList(), emptyList(), listOf("https://repo.example/manifest.json"), "")
         assertEquals("nuvio-plugins", withNuvio.single().id)
         assertTrue(StreamHub.configuredAddons(emptyList(), emptyList(), emptyList(), "").isEmpty())
+    }
+
+    @Test
+    fun `manifest sin types raiz es valido si resources o catalogs declaran tipos`() {
+        val resourceTyped = JSONObject(
+            """{"id":"test.res","name":"ResTyped","resources":[{"name":"stream","types":["movie"]}]}"""
+        )
+        assertNull(StremioManifestParser.validate(resourceTyped))
+        val parsedRes = StremioManifestParser.parse(resourceTyped)
+        assertEquals(listOf("movie"), parsedRes.types)
+        assertTrue(parsedRes.supports("stream", "movie", "tt1"))
+        assertFalse(parsedRes.supports("stream", "series", "tt1"))
+
+        val noTypesAnywhere = JSONObject(
+            """{"id":"test.bad","name":"SinTipos","resources":["stream"]}"""
+        )
+        assertNotNull(StremioManifestParser.validate(noTypesAnywhere))
     }
 
     @Test

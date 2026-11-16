@@ -121,8 +121,8 @@ internal object PairingPortal {
         <textarea name="streamAddons" placeholder="https://tu-proyecto.ejemplo">$streamsValue</textarea>
       </label>
       <p class="hint">El addon interno «Omni Streams» les pide los streams con el protocolo
-        <code>stream/{tipo}/{id}</code> (Stremio). Compatible con proyectos tipo
-        proyectos que expongan esa API. Los addons Stremio se instalan arriba por su manifest, no aquí.</p>
+        <code>stream/{tipo}/{id}</code> (Stremio). Compatible con servicios externos
+        que expongan esa API. Los addons Stremio se instalan arriba por su manifest, no aquí.</p>
       <p class="hint">Se admite <code>https://</code> siempre, y <code>http://</code> solo si es una IP de tu
         red local (p. ej. <code>http://192.168.1.20:8787</code>, el puente en tu PC o móvil).</p>
     </div>
@@ -162,8 +162,8 @@ internal object PairingPortal {
         <textarea name="apis" placeholder="TMDB=tu_api_key&#10;TRAKT=tu_api_key">$apisValue</textarea>
       </label>
       <p class="hint">$storageHint</p>
-      <p class="hint">Saltar intro/créditos ya funciona sin clave. Si tienes cuenta, añade
-        <code>THEINTRODB=tu_clave</code> para subir tu límite de consultas; <code>SKIPDB=…</code> e
+      <p class="hint">Saltar intro/créditos ya funciona sin clave (AniSkip para anime y SkipDB/IntroDB para cine y series). Si tienes cuenta, añade
+        <code>THEINTRODB=tu_clave</code> para subir tu límite de consultas o <code>TMDB=tu_clave</code> para el puente Nuvio; <code>SKIPDB=…</code> e
         <code>INTRODB=…</code> quedan guardadas para futuras funciones de envío.</p>
     </div>
     <button type="submit">Guardar en el televisor</button>

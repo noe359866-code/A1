@@ -85,9 +85,7 @@ dependencies {
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.ui)
     implementation(libs.androidx.ui.graphics)
-    implementation(libs.androidx.ui.tooling.preview)
     implementation(libs.androidx.foundation)
-    debugImplementation(libs.androidx.ui.tooling)
 
     // Componentes de texto (Material 2) y tema (Material 3), versiones del BOM.
     // No se usa androidx.tv:tv-material: su Material 2 para TV no expone Text

@@ -8,8 +8,8 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -36,6 +36,7 @@ import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
@@ -45,7 +46,10 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
+import com.omnitv.app.data.ConfirmKeyUpGuard
 import com.omnitv.app.ui.components.RequestTvFocus
+import com.omnitv.app.ui.components.consumeStrayConfirmKeyUp
 import com.omnitv.app.ui.theme.Accent
 import com.omnitv.app.ui.theme.AppRadius
 import com.omnitv.app.ui.theme.AppStroke
@@ -89,7 +93,9 @@ fun ControlPill(
     label: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
-    active: Boolean = false
+    active: Boolean = false,
+    maxWidth: Dp = 180.dp,
+    onFocusChanged: ((Boolean) -> Unit)? = null
 ) {
     var focused by remember { mutableStateOf(false) }
     val scale by animateFloatAsState(if (focused) 1.08f else 1f, tween(140), label = "pillScale")
@@ -103,8 +109,9 @@ fun ControlPill(
 
     Row(
         modifier = modifier
+            .zIndex(if (focused) 1f else 0f)
             .height(52.dp)
-            .widthIn(max = 180.dp)
+            .widthIn(max = maxWidth)
             .graphicsLayer { scaleX = scale; scaleY = scale }
             .clip(AppRadius.pill)
             .background(background)
@@ -113,8 +120,11 @@ fun ControlPill(
                 else if (focused) Modifier.border(AppStroke.focus, Color.White, AppRadius.pill)
                 else Modifier
             )
+            .onFocusChanged {
+                focused = it.isFocused
+                onFocusChanged?.invoke(it.isFocused)
+            }
             .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onClick)
-            .onFocusChanged { focused = it.isFocused }
             .padding(horizontal = 18.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -157,13 +167,14 @@ fun TransportButton(
 
     Box(
         modifier = modifier
+            .zIndex(if (focused) 1f else 0f)
             .size(size)
             .graphicsLayer { scaleX = scale; scaleY = scale }
             .clip(CircleShape)
             .background(background)
             .then(if (focused) Modifier.border(AppStroke.focus, Color.White, CircleShape) else Modifier)
-            .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onClick)
-            .onFocusChanged { focused = it.isFocused },
+            .onFocusChanged { focused = it.isFocused }
+            .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onClick),
         contentAlignment = Alignment.Center
     ) {
         Image(
@@ -193,12 +204,24 @@ fun OptionMenu(
     options: List<PlayerOption>,
     modifier: Modifier = Modifier
 ) {
-    val initialFocus = remember(title) { FocusRequester() }
+    val rowRequesters = remember(title, options.size) { List(options.size) { FocusRequester() } }
     val initialIndex = options.indexOfFirst { it.selected }.coerceAtLeast(0)
-    RequestTvFocus(initialFocus, key = title)
-    GlassPanel(modifier = modifier.width(360.dp)) {
+    val initialFocus = rowRequesters.getOrNull(initialIndex)
+    val keyUpGuard = remember(title) { ConfirmKeyUpGuard(initialSuppressUntilDown = true) }
+    if (initialFocus != null) {
+        RequestTvFocus(initialFocus, key = title)
+    }
+    GlassPanel(
+        modifier = modifier
+            .width(360.dp)
+            .consumeStrayConfirmKeyUp(keyUpGuard)
+    ) {
         Column(
-            Modifier.heightIn(max = 220.dp).verticalScroll(rememberScrollState()).padding(vertical = 14.dp)
+            Modifier
+                .focusGroup()
+                .heightIn(max = 220.dp)
+                .verticalScroll(rememberScrollState())
+                .padding(vertical = 14.dp)
         ) {
             Text(
                 title.uppercase(),
@@ -207,7 +230,17 @@ fun OptionMenu(
                 modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp)
             )
             options.forEachIndexed { index, option ->
-                OptionRow(option, if (index == initialIndex) Modifier.focusRequester(initialFocus) else Modifier)
+                OptionRow(
+                    option = option,
+                    modifier = Modifier
+                        .focusRequester(rowRequesters[index])
+                        .focusProperties {
+                            up = if (index > 0) rowRequesters[index - 1] else FocusRequester.Cancel
+                            down = if (index < rowRequesters.lastIndex) rowRequesters[index + 1] else FocusRequester.Cancel
+                            left = FocusRequester.Cancel
+                            right = FocusRequester.Cancel
+                        }
+                )
             }
         }
     }
@@ -224,8 +257,8 @@ private fun OptionRow(option: PlayerOption, modifier: Modifier = Modifier) {
             .clip(AppRadius.sm)
             .background(if (focused) Color.White.copy(alpha = 0.18f) else Color.Transparent)
             .then(if (focused) Modifier.border(AppStroke.focus, Color.White, AppRadius.sm) else Modifier)
-            .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = option.onSelect)
             .onFocusChanged { focused = it.isFocused }
+            .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = option.onSelect)
             .padding(horizontal = 12.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -279,13 +312,15 @@ fun CenterPlayButton(iconRes: Int, onClick: () -> Unit, modifier: Modifier = Mod
 
     Box(
         modifier = modifier
+            .zIndex(if (focused) 1f else 0f)
             .size(110.dp)
             .graphicsLayer { scaleX = scale; scaleY = scale }
             .clip(CircleShape)
             .background(Color.White.copy(alpha = 0.92f))
             .border(AppStroke.focus, Color.White, CircleShape)
-            .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onClick)
-            .onFocusChanged { focused = it.isFocused },
+            .focusProperties { canFocus = false }
+            .onFocusChanged { focused = it.isFocused }
+            .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null, onClick = onClick),
         contentAlignment = Alignment.Center
     ) {
         Image(
@@ -311,21 +346,5 @@ fun InfoChip(text: String, modifier: Modifier = Modifier) {
             style = AppType.chip,
             color = ControlWhite
         )
-    }
-}
-
-/** Contenedor con disposición horizontal de controles. */
-@Composable
-fun ControlRow(
-    modifier: Modifier = Modifier,
-    horizontalArrangement: Arrangement.Horizontal = Arrangement.spacedBy(12.dp),
-    content: @Composable () -> Unit
-) {
-    Row(
-        modifier = modifier,
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = horizontalArrangement
-    ) {
-        content()
     }
 }

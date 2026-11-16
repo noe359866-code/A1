@@ -94,11 +94,11 @@ object AppType {
         fontSize = 21.sp
     )
 
-    /** Pestañas de la barra superior: 20 sp. */
+    /** Pestañas de la barra superior: 16 sp para mostrar todas las etiquetas sin saltos ni desborde. */
     val tab = TextStyle(
         fontFamily = FontFamily.SansSerif,
         fontWeight = FontWeight.SemiBold,
-        fontSize = 20.sp
+        fontSize = 16.sp
     )
 
     /**
@@ -149,5 +149,14 @@ object AppType {
         fontWeight = FontWeight.Bold,
         fontSize = 22.sp,
         letterSpacing = 1.5.sp
+    )
+
+    /** Numerales editoriales del bloque «Top 10 hoy» (estilo Cinejoy / NovaHD). */
+    val rankDisplay = TextStyle(
+        fontFamily = FontFamily.SansSerif,
+        fontWeight = FontWeight.Black,
+        fontSize = 68.sp,
+        lineHeight = 68.sp,
+        letterSpacing = (-2.0).sp
     )
 }

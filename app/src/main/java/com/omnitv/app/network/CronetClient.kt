@@ -48,26 +48,20 @@ object CronetClient {
             .build()
     }
 
-    fun isAvailable(): Boolean = engine != null
-
     data class CronetResponse(
         val statusCode: Int,
-        val bodyBytes: ByteArray,
-        val headers: Map<String, List<String>>,
-        val finalUrl: String
-    ) {
-        /** Vista de texto para páginas HTML; las imágenes usan [bodyBytes]. */
-        val body: String get() = bodyBytes.toString(Charsets.UTF_8)
-    }
+        val bodyBytes: ByteArray
+    )
 
     suspend fun get(
         url: String,
-        headers: Map<String, String> = ArtworkHeaders.forPage(url),
-        useCache: Boolean = true
+        headers: Map<String, String>
     ): CronetResponse? = withContext(Dispatchers.IO) {
         val eng = engine ?: return@withContext null
         if (!NetPolicy.isAllowed(url)) return@withContext null
-        val cookieHeader = CookieManager.getInstance().getCookie(url)?.takeIf { it.isNotBlank() }
+        val cookieHeader = runCatching { CookieManager.getInstance().getCookie(url) }
+            .getOrNull()
+            ?.takeIf { it.isNotBlank() }
         val allHeaders = headers.toMutableMap().apply {
             if (cookieHeader != null) put("Cookie", cookieHeader)
         }
@@ -82,7 +76,6 @@ object CronetClient {
                 val chunks = mutableListOf<ByteArray>()
                 var total = 0
                 var status = 0
-                var respHeaders: Map<String, List<String>> = emptyMap()
 
                 override fun onRedirectReceived(request: UrlRequest, info: UrlResponseInfo, newLocationUrl: String) {
                     // Cronet reenvía las cabeceras al seguir el redirect: no
@@ -100,8 +93,9 @@ object CronetClient {
 
                 override fun onResponseStarted(request: UrlRequest, info: UrlResponseInfo) {
                     status = info.httpStatusCode
-                    respHeaders = info.allHeaders
-                    info.allHeaders["set-cookie"]?.forEach { CookieManager.getInstance().setCookie(info.url, it) }
+                    runCatching { CookieManager.getInstance() }.getOrNull()?.let { cm ->
+                        info.allHeaders["set-cookie"]?.forEach { cm.setCookie(info.url, it) }
+                    }
                     request.read(buffer)
                 }
 
@@ -123,7 +117,7 @@ object CronetClient {
                 override fun onSucceeded(request: UrlRequest, info: UrlResponseInfo) {
                     val out = ByteArrayOutputStream()
                     chunks.forEach { out.write(it, 0, it.size) }
-                    finish(CronetResponse(status, out.toByteArray(), respHeaders, info.url))
+                    finish(CronetResponse(status, out.toByteArray()))
                 }
 
                 override fun onFailed(request: UrlRequest, info: UrlResponseInfo?, error: CronetException) {
@@ -134,7 +128,6 @@ object CronetClient {
             val request = eng.newUrlRequestBuilder(url, callback, executor).apply {
                 setHttpMethod("GET")
                 allHeaders.forEach { (k, v) -> addHeader(k, v) }
-                if (!useCache) addHeader("Cache-Control", "no-cache")
             }.build()
             cont.invokeOnCancellation { runCatching { request.cancel() } }
             request.start()

@@ -16,6 +16,7 @@ import org.json.JSONObject
  */
 object CloudstreamBridge {
     val status = mutableStateOf("Puente Cloudstream no configurado")
+    val extensions = mutableStateOf<List<String>>(emptyList())
 
     fun normalize(url: String): String? {
         val value = url.trim().trimEnd('/')
@@ -27,13 +28,32 @@ object CloudstreamBridge {
 
     suspend fun check(base: String = SettingsStore.cloudstreamBridge): String {
         val normalized = normalize(base)
-        if (normalized == null) return if (base.isBlank()) "Puente Cloudstream no configurado" else "URL del puente no permitida"
+        if (normalized == null) {
+            extensions.value = emptyList()
+            return (if (base.isBlank()) "Puente Cloudstream no configurado" else "URL del puente no permitida")
+                .also { status.value = it }
+        }
         val json = withContext(Dispatchers.IO) { AddonHttp.getJson("$normalized/health") as? JSONObject }
         return when {
-            json == null -> "El puente Cloudstream no respondió a /health"
-            !json.optBoolean("ok", false) -> "El puente Cloudstream no está listo"
+            json == null -> {
+                extensions.value = emptyList()
+                "El puente Cloudstream no respondió a /health"
+            }
+            !json.optBoolean("ok", false) -> {
+                extensions.value = emptyList()
+                "El puente Cloudstream no está listo"
+            }
             else -> {
-                val count = json.optJSONArray("extensions")?.length() ?: json.optInt("extensions", 0)
+                val arr = json.optJSONArray("extensions")
+                val list = buildList {
+                    if (arr != null) {
+                        for (i in 0 until arr.length()) {
+                            arr.optString(i).trim().takeIf { it.isNotBlank() }?.let { add(it) }
+                        }
+                    }
+                }
+                extensions.value = list
+                val count = if (arr != null) list.size else json.optInt("extensions", 0)
                 "Puente Cloudstream conectado · $count extension(es) informadas"
             }
         }.also { status.value = it }
@@ -67,23 +87,26 @@ object CloudstreamBridge {
         val tmdb = id.startsWith("tmdb:")
         val anime = AnimeIds.isAnime(id)
         val animeEpisode = AnimeIds.episodeParts(id)
+        val target = SkipTarget.from(video)
         val season = when {
             anime -> animeEpisode?.first
             tmdb -> parts.getOrNull(2)?.toIntOrNull()
             else -> parts.getOrNull(1)?.toIntOrNull()
-        }
+        } ?: target?.season
         val episode = when {
             anime -> animeEpisode?.second
             tmdb -> parts.getOrNull(3)?.toIntOrNull()
             else -> parts.getOrNull(2)?.toIntOrNull()
-        }
+        } ?: target?.episode
+        val imdbId = id.substringBefore(':').takeIf { it.startsWith("tt") } ?: target?.imdbId
+        val tmdbId = (if (tmdb) parts.getOrNull(1) else null) ?: target?.tmdbId
         return JSONObject().apply {
             put("title", if ('~' in video.id) video.title.substringBefore(" · ") else video.title)
             put("type", type)
             put("id", id)
             put("year", video.year.takeIf { it > 0 })
-            put("imdbId", id.substringBefore(':').takeIf { it.startsWith("tt") })
-            put("tmdbId", if (tmdb) parts.getOrNull(1) else null)
+            put("imdbId", imdbId)
+            put("tmdbId", tmdbId)
             put("season", season)
             put("episode", episode)
         }.toString()

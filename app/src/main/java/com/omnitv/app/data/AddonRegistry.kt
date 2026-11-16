@@ -19,11 +19,17 @@ data class AddonStatus(
     val summary: String get() = when {
         checking -> "Comprobando manifest…"
         manifest == null -> error.ifBlank { "Pendiente de comprobar" }
-        else -> listOfNotNull(
-            "catálogo".takeIf { manifest.isCatalogAddon() },
-            "fichas".takeIf { manifest.isMetaAddon() },
-            "streams HTTP".takeIf { manifest.isStreamAddon() }
-        ).joinToString(" · ").ifBlank { "Sin recursos de catálogo, fichas o streams" }
+        else -> {
+            val caps = listOfNotNull(
+                "catálogo".takeIf { manifest.isCatalogAddon() }?.let {
+                    val count = manifest.catalogs.size
+                    if (count > 0) "$it ($count)" else it
+                },
+                "fichas".takeIf { manifest.isMetaAddon() },
+                "streams HTTP".takeIf { manifest.isStreamAddon() }
+            ).joinToString(" · ").ifBlank { "Sin recursos de catálogo, fichas o streams" }
+            if (manifest.version.isNotBlank() && manifest.version != "0.0.0") "v${manifest.version} · $caps" else caps
+        }
     }
 }
 

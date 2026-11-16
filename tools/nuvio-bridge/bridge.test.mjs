@@ -34,7 +34,7 @@ test('health, allowlist de repo, episodio y streams del worker', async () => {
     });
     const base = `http://127.0.0.1:${port}`;
     const health = await fetch(base + '/health').then(r => r.json());
-    assert.equal(health.ok, true); assert.equal(health.scrapers, 1);
+    assert.equal(health.ok, true); assert.equal(health.scrapers, 1); assert.deepEqual(health.scraperIds, ['fixture']); assert.equal(health.repos, 1);
     const body = { repoUrl, filename: 'providers/fixture.js', type: 'series', id: 'tmdb:123:2:3', extra: { tmdbId: '123', season: 2, episode: 3 } };
     const result = await fetch(base + '/scrape/fixture', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }).then(r => r.json());
     assert.equal(result.streams.length, 1);

@@ -18,8 +18,15 @@ test('parsers del CLI Cloudstream y seleccion exacta de episodio', () => {
   const items = parseInfo('  1. S01E01 Piloto\n  2. S02E03 Capítulo\n');
   assert.equal(choosePlayable(items, { type: 'series', season: 2, episode: 3 }).index, 2);
   assert.equal(choosePlayable(items, { type: 'series', season: 9, episode: 9 }), null);
-  const links = parseLinks('1. [1080p] Servidor (hls)\n   https://cdn.example/v.m3u8\nsub: es\thttps://subs/vtt');
-  assert.deepEqual(links, [{ quality: '1080p', name: 'Servidor', kind: 'hls', url: 'https://cdn.example/v.m3u8' }]);
+  const links = parseLinks('1. [1080p] Servidor (hls)\n   https://cdn.example/v.m3u8\n2. [720p] Backup (mp4)\n   https://cdn.example/b.mp4');
+  assert.deepEqual(links, [
+    { quality: '1080p', name: 'Servidor', kind: 'hls', url: 'https://cdn.example/v.m3u8' },
+    { quality: '720p', name: 'Backup', kind: 'mp4', url: 'https://cdn.example/b.mp4' }
+  ]);
+  const withSubs = parseLinks('1. [1080p] Servidor (hls)\n   https://cdn.example/v.m3u8\nsub: es\thttps://cdn.example/es.vtt');
+  assert.deepEqual(withSubs[0].subtitles, ['https://cdn.example/es.vtt']);
+  const yearResults = parseSearch('[A] Dune (1984) (Movie)\thttps://example.test/1984\n[B] Dune (2021) (Movie)\thttps://example.test/2021');
+  assert.equal(chooseResult(yearResults, { title: 'Dune', type: 'movie', year: 2021 }).provider, 'B');
 });
 
 test('puente HTTP delega en runtime externo y devuelve streams', async () => {

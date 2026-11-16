@@ -6,6 +6,7 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.sync.Semaphore
@@ -29,6 +30,11 @@ data class NuvioScraper(
     val contentLanguage: List<String> = emptyList(),
     val limited: Boolean = false
 ) {
+    val formatsLabel: String get() = buildString {
+        append(supportedTypes.joinToString("/"))
+        if (formats.isNotEmpty()) append(" · ${formats.joinToString(", ")}")
+    }
+
     fun supports(type: String): Boolean {
         val aliases = if (type == "series") setOf("series", "tv", "show") else setOf(type)
         return supportedTypes.any { it.lowercase() in aliases }
@@ -65,12 +71,6 @@ object NuvioPluginManager {
     val repositories = mutableStateOf<List<NuvioRepoStatus>>(emptyList())
     val refreshing = mutableStateOf(false)
     val lastError = mutableStateOf("")
-
-    val totalScrapers: Int get() = repositories.value.sumOf { it.manifest?.scrapers?.size ?: 0 }
-    val allScrapers: List<NuvioScraper> get() = repositories.value.flatMap { it.manifest?.scrapers.orEmpty() }
-
-    suspend fun fetchRepo(url: String, force: Boolean = false): NuvioPluginManifest? =
-        refresh(listOf(url), force).firstOrNull()?.manifest
 
     suspend fun refreshAll(force: Boolean = false): List<NuvioPluginManifest> =
         refresh(SettingsStore.nuvioPlugins, force).mapNotNull { it.manifest }
@@ -153,25 +153,40 @@ object NuvioPluginManager {
 
 /** Petición de ejecución al puente; `tv` y `series` representan lo mismo. */
 internal object NuvioBridgeRequest {
-    fun body(repo: NuvioPluginManifest, scraper: NuvioScraper, type: String, videoId: String): String {
+    fun body(
+        repo: NuvioPluginManifest,
+        scraper: NuvioScraper,
+        type: String,
+        videoId: String,
+        video: Video? = null
+    ): String {
         val parts = videoId.split(':')
         val tmdb = videoId.startsWith("tmdb:")
-        val canonical = if (tmdb) "tmdb:${parts.getOrNull(1).orEmpty()}" else parts.first()
+        val tmdbSubtyped = tmdb && parts.getOrNull(1)?.let { !it.all(Char::isDigit) } == true
+        val tmdbValue = when {
+            tmdbSubtyped -> parts.getOrNull(2)?.takeIf { it.isNotBlank() && it.all(Char::isDigit) }
+            tmdb -> parts.getOrNull(1)?.takeIf { it.isNotBlank() && it.all(Char::isDigit) }
+            else -> null
+        }
         val anime = AnimeIds.isAnime(videoId)
         val animeEpisode = AnimeIds.episodeParts(videoId)
+        val combinedTarget = video?.let { SkipTarget.from(it) }
         val season = when {
             anime -> animeEpisode?.first
+            tmdbSubtyped -> parts.getOrNull(3)?.toIntOrNull()
             tmdb -> parts.getOrNull(2)?.toIntOrNull()
             else -> parts.getOrNull(1)?.toIntOrNull()
-        }
+        } ?: combinedTarget?.season
         val episode = when {
             anime -> animeEpisode?.second
+            tmdbSubtyped -> parts.getOrNull(4)?.toIntOrNull()
             tmdb -> parts.getOrNull(3)?.toIntOrNull()
             else -> parts.getOrNull(2)?.toIntOrNull()
-        }
+        } ?: combinedTarget?.episode
+        val imdbValue = parts.first().takeIf { it.startsWith("tt") } ?: combinedTarget?.imdbId
         val extra = JSONObject().apply {
-            put("tmdbId", canonical.takeIf { it.startsWith("tmdb:") }?.removePrefix("tmdb:"))
-            put("imdbId", canonical.takeIf { it.startsWith("tt") })
+            put("tmdbId", tmdbValue ?: combinedTarget?.tmdbId)
+            put("imdbId", imdbValue)
             put("season", season)
             put("episode", episode)
         }
@@ -193,9 +208,9 @@ internal object NuvioBridgeRequest {
  */
 object NuvioScraperResolver {
     val lastStatus = mutableStateOf("")
-    private val limiter = Semaphore(6)
+    private val limiter = Semaphore(4)
 
-    suspend fun resolve(type: String, videoId: String): List<StreamLink> {
+    suspend fun resolve(type: String, videoId: String, video: Video? = null): List<StreamLink> {
         val base = SettingsStore.nuvioBridge.trim().trimEnd('/')
         if (base.isEmpty()) {
             lastStatus.value = "Plugins Nuvio guardados: configura el puente JS para ejecutarlos"
@@ -206,20 +221,29 @@ object NuvioScraperResolver {
             return emptyList()
         }
         val repos = NuvioPluginManager.refreshAll().filter { it.url.isNotEmpty() }
-        val jobs = repos.flatMap { repo -> repo.scrapers.filter { it.enabled && it.supports(type) }.map { repo to it } }
+        val disabled = SettingsStore.disabledNuvioScrapers
+        val jobs = repos.flatMap { repo ->
+            repo.scrapers.filter { it.enabled && it.id !in disabled && it.supports(type) }.map { repo to it }
+        }
         if (jobs.isEmpty()) {
-            lastStatus.value = "Nuvio no tiene scrapers activos para $type"
+            val anySupported = repos.any { repo -> repo.scrapers.any { it.enabled && it.supports(type) } }
+            lastStatus.value = if (anySupported) "Todos los scrapers Nuvio para $type están desactivados en Ajustes"
+            else "Nuvio no tiene scrapers activos para $type"
             return emptyList()
         }
         val links = coroutineScope {
             jobs.map { (repo, scraper) ->
                 async {
                     limiter.withPermit {
-                        val body = NuvioBridgeRequest.body(repo, scraper, type, videoId)
-                        val json = withContext(Dispatchers.IO) {
-                            AddonHttp.postJson("$base/scrape/${StremioUrl.encodeSegment(scraper.id)}", body)
-                        }
-                        StreamResponse.parse(json, scraper.name).map { it.copy(label = "${scraper.name} · ${it.label}".take(100)) }
+                        withTimeoutOrNull(8_000L) {
+                            val body = NuvioBridgeRequest.body(repo, scraper, type, videoId, video)
+                            val json = withContext(Dispatchers.IO) {
+                                AddonHttp.postJson("$base/scrape/${StremioUrl.encodeSegment(scraper.id)}", body)
+                            }
+                            StreamResponse.parse(json, scraper.name).map {
+                                it.copy(label = "${scraper.name} · ${it.label}".take(100))
+                            }
+                        }.orEmpty()
                     }
                 }
             }.awaitAll().flatten()
@@ -235,8 +259,13 @@ object NuvioScraperResolver {
         if (base.isEmpty()) return "Puente JS no configurado"
         if (!NetPolicy.isAllowed(base)) return "URL del puente no permitida"
         val json = withContext(Dispatchers.IO) { AddonHttp.getJson("$base/health") as? JSONObject }
-        return if (json != null && json.optBoolean("ok", false)) "Puente conectado · ejecución JS externa"
-        else "El puente no respondió correctamente a /health"
+        return if (json != null && json.optBoolean("ok", false)) {
+            val count = json.optInt("scrapers", -1)
+            if (count >= 0) "Puente conectado · $count scraper(s) · ejecución JS externa"
+            else "Puente conectado · ejecución JS externa"
+        } else {
+            "El puente no respondió correctamente a /health"
+        }
     }
 }
 
@@ -246,6 +275,6 @@ internal class NuvioStreamAddon : StreamAddon {
     override val name = "Plugins Nuvio"
     override suspend fun resolve(video: Video): List<StreamLink> {
         val (type, videoId) = StreamHub.stremioId(video) ?: return emptyList()
-        return NuvioScraperResolver.resolve(type, videoId)
+        return NuvioScraperResolver.resolve(type, videoId, video)
     }
 }

@@ -1,6 +1,7 @@
 package com.omnitv.app.ui.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -13,7 +14,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
@@ -25,7 +30,10 @@ import com.omnitv.app.data.ProfileStore
 import com.omnitv.app.ui.components.AddProfileTile
 import com.omnitv.app.ui.components.ManageProfileTile
 import com.omnitv.app.ui.components.PillButton
+import com.omnitv.app.ui.components.ProvideHorizontalTvBringIntoView
 import com.omnitv.app.ui.components.RequestTvFocus
+import com.omnitv.app.ui.components.dpadRepeatThrottle
+import com.omnitv.app.ui.theme.AppSpacing
 import com.omnitv.app.ui.theme.AppType
 import com.omnitv.app.ui.theme.Background
 import com.omnitv.app.ui.theme.TextPrimary
@@ -33,7 +41,7 @@ import com.omnitv.app.ui.theme.TextSecondary
 
 /**
  * Gestión de perfiles para Android TV:
- * cada avatar muestra un icono de edición; al pulsar con el D-pad se abre el editor.
+ * cada avatar cuadrado muestra un icono de edición; al pulsar con el D-pad se abre el editor.
  */
 @Composable
 fun ManageProfilesScreen(
@@ -43,13 +51,26 @@ fun ManageProfilesScreen(
 ) {
     val profiles = ProfileStore.profiles
     val firstFocus = remember { FocusRequester() }
-    RequestTvFocus(firstFocus)
+    val addFocus = remember { FocusRequester() }
+    val doneFocus = remember { FocusRequester() }
+    val restoreFocus = remember { FocusRequester() }
+    var lastFocusedKey by rememberSaveable { mutableStateOf<String?>(null) }
+
+    val target = when {
+        lastFocusedKey == "add" -> addFocus
+        lastFocusedKey == "done" -> doneFocus
+        lastFocusedKey != null && profiles.any { "profile:${it.id}" == lastFocusedKey } -> restoreFocus
+        profiles.isNotEmpty() -> firstFocus
+        else -> addFocus
+    }
+    RequestTvFocus(target, key = profiles.size)
 
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(Background)
-            .padding(horizontal = 48.dp, vertical = 32.dp),
+            .dpadRepeatThrottle()
+            .padding(horizontal = AppSpacing.screenMargin, vertical = 32.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
@@ -67,32 +88,52 @@ fun ManageProfilesScreen(
             textAlign = TextAlign.Center
         )
 
-        Spacer(Modifier.height(48.dp))
+        Spacer(Modifier.height(36.dp))
 
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(28.dp, Alignment.CenterHorizontally),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            profiles.forEachIndexed { index, profile ->
-                ManageProfileTile(
-                    profile = profile,
-                    onEdit = { onEdit(profile.id) },
-                    modifier = if (index == 0) Modifier.focusRequester(firstFocus) else Modifier
+        ProvideHorizontalTvBringIntoView(leadingPadding = AppSpacing.screenMargin) {
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .focusGroup()
+                    .horizontalScroll(rememberScrollState())
+                    .padding(horizontal = 24.dp, vertical = 22.dp),
+                horizontalArrangement = Arrangement.spacedBy(28.dp, Alignment.CenterHorizontally),
+                verticalAlignment = Alignment.Top
+            ) {
+                profiles.forEachIndexed { index, profile ->
+                    val key = "profile:${profile.id}"
+                    ManageProfileTile(
+                        profile = profile,
+                        onFocus = { lastFocusedKey = key },
+                        onEdit = {
+                            lastFocusedKey = key
+                            onEdit(profile.id)
+                        },
+                        modifier = Modifier
+                            .then(if (index == 0) Modifier.focusRequester(firstFocus) else Modifier)
+                            .then(if (lastFocusedKey == key) Modifier.focusRequester(restoreFocus) else Modifier)
+                    )
+                }
+                AddProfileTile(
+                    onFocus = { lastFocusedKey = "add" },
+                    onClick = {
+                        lastFocusedKey = "add"
+                        onAddProfile()
+                    },
+                    modifier = Modifier.focusRequester(addFocus)
                 )
             }
-            AddProfileTile(onClick = onAddProfile)
         }
 
-        Spacer(Modifier.height(48.dp))
+        Spacer(Modifier.height(36.dp))
 
         PillButton(
             text = "Listo",
             iconRes = R.drawable.ic_check,
             primary = true,
-            onClick = onDone
+            onFocus = { lastFocusedKey = "done" },
+            onClick = onDone,
+            modifier = Modifier.focusRequester(doneFocus)
         )
     }
 }

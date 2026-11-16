@@ -1,7 +1,10 @@
+@file:OptIn(ExperimentalComposeUiApi::class)
+
 package com.omnitv.app.ui.screens
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
+import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -27,9 +30,11 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.unit.dp
 import com.omnitv.app.R
 import com.omnitv.app.data.AVATAR_COUNT
@@ -41,12 +46,13 @@ import com.omnitv.app.ui.components.AvatarOption
 import com.omnitv.app.ui.components.AvatarView
 import com.omnitv.app.ui.components.KidsChip
 import com.omnitv.app.ui.components.PillButton
-import com.omnitv.app.ui.components.RequestTvFocus
 import com.omnitv.app.ui.components.SettingRow
 import com.omnitv.app.ui.components.TvConfirmDialog
 import com.omnitv.app.ui.components.TvKeyboard
 import com.omnitv.app.ui.components.TvTextField
 import com.omnitv.app.ui.components.TvToggle
+import com.omnitv.app.ui.components.dpadRepeatThrottle
+import com.omnitv.app.ui.theme.AppSpacing
 import com.omnitv.app.ui.theme.AppType
 import com.omnitv.app.ui.theme.Background
 import com.omnitv.app.ui.theme.TextPrimary
@@ -70,34 +76,68 @@ fun EditProfileScreen(
     var confirmDeleteOpen by remember { mutableStateOf(false) }
     var confirmClearHistoryOpen by remember { mutableStateOf(false) }
     var confirmClearMyListOpen by remember { mutableStateOf(false) }
+    var restoreAfterDialog by remember { mutableStateOf<FocusRequester?>(null) }
 
     val nameFocus = remember { FocusRequester() }
+    val clearHistoryFocus = remember { FocusRequester() }
+    val clearMyListFocus = remember { FocusRequester() }
+    val deleteFocus = remember { FocusRequester() }
     val firstKeyFocus = remember { FocusRequester() }
+
     var keyboardOpen by rememberSaveable { mutableStateOf(false) }
-    var keyboardJustClosed by remember { mutableStateOf(false) }
-    RequestTvFocus(nameFocus)
+    var wasKeyboardOpen by remember { mutableStateOf(false) }
+    var initialFocusDone by rememberSaveable { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        if (!initialFocusDone && !keyboardOpen) {
+            initialFocusDone = true
+            for (attempt in 0 until 6) {
+                withFrameNanos { }
+                if (runCatching { nameFocus.requestFocus() }.isSuccess) break
+            }
+        }
+    }
 
     LaunchedEffect(keyboardOpen) {
         if (keyboardOpen) {
-            withFrameNanos { }
-            runCatching { firstKeyFocus.requestFocus() }
+            wasKeyboardOpen = true
+            for (attempt in 0 until 6) {
+                withFrameNanos { }
+                if (runCatching { firstKeyFocus.requestFocus() }.isSuccess) break
+            }
+        } else if (wasKeyboardOpen) {
+            wasKeyboardOpen = false
+            for (attempt in 0 until 6) {
+                withFrameNanos { }
+                if (runCatching { nameFocus.requestFocus() }.isSuccess) break
+            }
         }
     }
-    fun closeKeyboard() {
-        keyboardJustClosed = true
-        keyboardOpen = false
-        runCatching { nameFocus.requestFocus() }
+
+    val anyDialogOpen = confirmDeleteOpen || confirmClearHistoryOpen || confirmClearMyListOpen
+    LaunchedEffect(anyDialogOpen) {
+        if (!anyDialogOpen) {
+            val target = restoreAfterDialog
+            if (target != null) {
+                restoreAfterDialog = null
+                for (attempt in 0 until 6) {
+                    withFrameNanos { }
+                    if (runCatching { target.requestFocus() }.isSuccess) break
+                }
+            }
+        }
     }
-    BackHandler(enabled = keyboardOpen) { closeKeyboard() }
+
+    BackHandler(enabled = keyboardOpen) { keyboardOpen = false }
 
     val keyboardWidth = 496.dp
-    Box(Modifier.fillMaxSize().background(Background)) {
+    Box(Modifier.fillMaxSize().background(Background).dpadRepeatThrottle()) {
         Column(
             Modifier
                 .fillMaxHeight()
                 .width(if (keyboardOpen) 400.dp else 740.dp)
                 .align(Alignment.TopStart)
-                .padding(start = 48.dp)
+                .padding(start = AppSpacing.screenMargin)
                 .verticalScroll(rememberScrollState())
                 .padding(vertical = 32.dp)
         ) {
@@ -124,7 +164,7 @@ fun EditProfileScreen(
 
             Spacer(Modifier.height(28.dp))
 
-            // Nombre del perfil
+            // Nombre del perfil (solo abre teclado al pulsar OK)
             Text("NOMBRE DEL PERFIL", style = AppType.chip, color = TextSecondary)
             Spacer(Modifier.height(10.dp))
             TvTextField(
@@ -133,11 +173,9 @@ fun EditProfileScreen(
                 placeholder = "Nombre del perfil",
                 focusRequester = nameFocus,
                 imeOnCenter = false,
-                focusable = !keyboardOpen,
-                onFocusChange = { focused ->
-                    if (focused && !keyboardJustClosed) keyboardOpen = true
-                    keyboardJustClosed = false
-                },
+                focusable = !keyboardOpen && !anyDialogOpen,
+                onActivate = { keyboardOpen = true },
+                actionHint = "OK para escribir",
                 modifier = Modifier.fillMaxWidth()
             )
 
@@ -145,11 +183,14 @@ fun EditProfileScreen(
 
             // Selector de avatar
             Text("AVATAR · Navega con las flechas", style = AppType.chip, color = TextSecondary)
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(8.dp))
             LazyRow(
                 horizontalArrangement = Arrangement.spacedBy(14.dp),
-                contentPadding = PaddingValues(horizontal = 4.dp, vertical = 6.dp),
-                modifier = Modifier.fillMaxWidth()
+                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 14.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .focusGroup()
+                    .focusRestorer()
             ) {
                 items(AVATAR_COUNT) { index ->
                     AvatarOption(
@@ -161,7 +202,7 @@ fun EditProfileScreen(
                 }
             }
 
-            Spacer(Modifier.height(28.dp))
+            Spacer(Modifier.height(24.dp))
 
             // Ajustes del perfil
             Text("PREFERENCIAS DEL PERFIL", style = AppType.chip, color = TextSecondary)
@@ -190,7 +231,11 @@ fun EditProfileScreen(
                             PillButton(
                                 text = "Limpiar",
                                 primary = false,
-                                onClick = { confirmClearHistoryOpen = true }
+                                onClick = {
+                                    restoreAfterDialog = clearHistoryFocus
+                                    confirmClearHistoryOpen = true
+                                },
+                                modifier = Modifier.focusRequester(clearHistoryFocus)
                             )
                         },
                         modifier = Modifier.fillMaxWidth()
@@ -205,7 +250,11 @@ fun EditProfileScreen(
                             PillButton(
                                 text = "Vaciar",
                                 primary = false,
-                                onClick = { confirmClearMyListOpen = true }
+                                onClick = {
+                                    restoreAfterDialog = clearMyListFocus
+                                    confirmClearMyListOpen = true
+                                },
+                                modifier = Modifier.focusRequester(clearMyListFocus)
                             )
                         },
                         modifier = Modifier.fillMaxWidth()
@@ -216,7 +265,10 @@ fun EditProfileScreen(
             Spacer(Modifier.height(32.dp))
 
             // Botones de acción
-            Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+            Row(
+                modifier = Modifier.focusGroup(),
+                horizontalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
                 PillButton(
                     text = "Guardar perfil",
                     iconRes = R.drawable.ic_check,
@@ -245,7 +297,11 @@ fun EditProfileScreen(
                         iconRes = R.drawable.ic_delete,
                         primary = false,
                         danger = true,
-                        onClick = { confirmDeleteOpen = true }
+                        onClick = {
+                            restoreAfterDialog = deleteFocus
+                            confirmDeleteOpen = true
+                        },
+                        modifier = Modifier.focusRequester(deleteFocus)
                     )
                 }
             }
@@ -259,12 +315,12 @@ fun EditProfileScreen(
                 Modifier
                     .width(keyboardWidth)
                     .align(Alignment.CenterEnd)
-                    .padding(end = 48.dp)
+                    .padding(end = AppSpacing.screenMargin)
             ) {
                 TvKeyboard(
                     compact = true,
                     onKey = { key -> name = TvKeypad.apply(name, key).take(32) },
-                    onDone = { closeKeyboard() },
+                    onDone = { keyboardOpen = false },
                     firstKeyFocus = firstKeyFocus
                 )
             }

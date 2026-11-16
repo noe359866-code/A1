@@ -13,10 +13,7 @@ data class ExtractedStream(
     val quality: String = "HD",
     val headers: Map<String, String> = emptyMap(),
     val subtitles: List<String> = emptyList()
-) {
-    val isHls: Boolean get() = url.contains(".m3u8", true)
-    val isMp4: Boolean get() = url.endsWith(".mp4", true)
-}
+)
 
 /**
  * Extractor — resuelve un embed (mixdrop, streamtape, dood…) a URL directo.

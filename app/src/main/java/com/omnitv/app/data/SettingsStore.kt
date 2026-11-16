@@ -70,7 +70,12 @@ object SettingsStore {
 
     /** Bases de datos consultadas (nombres de [SkipSegmentParser]). */
     var skipSources by mutableStateOf(
-        setOf(SkipSegmentParser.SOURCE_SKIPDB, SkipSegmentParser.SOURCE_THEINTRODB, SkipSegmentParser.SOURCE_INTRODB)
+        setOf(
+            SkipSegmentParser.SOURCE_SKIPDB,
+            SkipSegmentParser.SOURCE_THEINTRODB,
+            SkipSegmentParser.SOURCE_INTRODB,
+            SkipSegmentParser.SOURCE_ANISKIP
+        )
     )
         private set
 
@@ -105,6 +110,10 @@ object SettingsStore {
 
     /** Índices de plugins Nuvio (`scrapers[]`), NO addons Stremio. */
     var nuvioPlugins by mutableStateOf<List<String>>(emptyList())
+        private set
+
+    /** Ids de scrapers Nuvio desactivados manualmente desde Ajustes. */
+    var disabledNuvioScrapers by mutableStateOf<Set<String>>(emptySet())
         private set
 
     /** Puente HTTP opcional que ejecuta los JS de Nuvio en otro equipo. */
@@ -158,8 +167,19 @@ object SettingsStore {
         preferredQuality = p.getString("preferredQuality", "Auto") ?: "Auto"
         skipSegmentsEnabled = p.getBoolean("skipSegmentsEnabled", true)
         autoSkipKinds = parseStringList(p.getString("autoSkipKinds", "[]")).toSet()
-        skipSources = parseStringList(p.getString("skipSources", null)).toSet().filter { it in SKIP_SOURCE_NAMES }.toSet()
-            .ifEmpty { setOf(SkipSegmentParser.SOURCE_SKIPDB, SkipSegmentParser.SOURCE_THEINTRODB, SkipSegmentParser.SOURCE_INTRODB) }
+        val parsedSkipSources = parseStringList(p.getString("skipSources", null))
+            .filter { it in SKIP_SOURCE_NAMES }
+            .toMutableSet()
+        if (parsedSkipSources.isEmpty()) {
+            parsedSkipSources.addAll(SKIP_SOURCE_NAMES)
+        } else if (!p.getBoolean("skipSourcesAniskipAdded", false)) {
+            parsedSkipSources.add(SkipSegmentParser.SOURCE_ANISKIP)
+            p.edit()
+                .putString("skipSources", org.json.JSONArray(parsedSkipSources.toList()).toString())
+                .putBoolean("skipSourcesAniskipAdded", true)
+                .apply()
+        }
+        skipSources = parsedSkipSources
         cloudflareDns = p.getBoolean("cloudflareDns", true)
         Doh.enabled = cloudflareDns
         pairingCode = p.getString("pairingCode", null) ?: generatePairingCode().also { code ->
@@ -173,6 +193,7 @@ object SettingsStore {
         customAddons = parseStringList(p.getString("customAddons", "[]")).filter { NetPolicy.isAllowed(it) }
         streamAddons = parseStringList(p.getString("streamAddons", "[]")).filter { NetPolicy.isAllowed(it) }
         nuvioPlugins = parseStringList(p.getString("nuvioPlugins", "[]")).filter { NetPolicy.isAllowed(it) }
+        disabledNuvioScrapers = parseStringList(p.getString("disabledNuvioScrapers", "[]")).toSet()
         nuvioBridge = (p.getString("nuvioBridge", "") ?: "").takeIf { NetPolicy.isAllowed(it) }.orEmpty()
         cloudstreamBridge = CloudstreamBridge.normalize(p.getString("cloudstreamBridge", "") ?: "").orEmpty()
         ffmpegBridge = MediaBridge.normalize(p.getString("ffmpegBridge", "") ?: "").orEmpty()
@@ -286,6 +307,8 @@ object SettingsStore {
         val cleaned = urls.mapNotNull(StremioUrl::normalize).distinct()
         update { putString("customAddons", org.json.JSONArray(cleaned).toString()) }.also {
             customAddons = cleaned
+            AddonRegistry.clearCache()
+            RemoteCatalog.invalidateCache()
             revision++
         }
     }
@@ -307,6 +330,17 @@ object SettingsStore {
         val cleaned = urls.map { it.trim() }.filter { NetPolicy.isAllowed(it) }.distinct()
         update { putString("nuvioPlugins", org.json.JSONArray(cleaned).toString()) }
         nuvioPlugins = cleaned
+        NuvioPluginManager.clearCache()
+        revision++
+    }
+
+    fun setNuvioScraperEnabled(scraperId: String, enabled: Boolean) {
+        if (scraperId.isBlank()) return
+        val next = disabledNuvioScrapers.toMutableSet().apply {
+            if (enabled) remove(scraperId) else add(scraperId)
+        }
+        update { putString("disabledNuvioScrapers", org.json.JSONArray(next.toList()).toString()) }
+        disabledNuvioScrapers = next
         revision++
     }
 
@@ -352,7 +386,10 @@ object SettingsStore {
     }
 
     val SKIP_SOURCE_NAMES = listOf(
-        SkipSegmentParser.SOURCE_SKIPDB, SkipSegmentParser.SOURCE_THEINTRODB, SkipSegmentParser.SOURCE_INTRODB
+        SkipSegmentParser.SOURCE_SKIPDB,
+        SkipSegmentParser.SOURCE_THEINTRODB,
+        SkipSegmentParser.SOURCE_INTRODB,
+        SkipSegmentParser.SOURCE_ANISKIP
     )
 
     fun saveSkipSegmentsEnabled(enabled: Boolean) {

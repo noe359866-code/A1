@@ -28,6 +28,7 @@ object SkipSegmentService {
     const val THEINTRODB_BASE = "https://api.theintrodb.org/v4/media"
     const val SKIPDB_BASE = "https://api.skipdb.tv/api/segments"
     const val INTRODB_BASE = "https://api.introdb.app/segments"
+    const val ANISKIP_BASE = "https://api.aniskip.com/v2/skip-times"
 
     private const val HIT_TTL_MS = 6 * 60 * 60_000L
     private const val MISS_TTL_MS = 10 * 60_000L
@@ -54,13 +55,17 @@ object SkipSegmentService {
         sources: Set<String> = SettingsStore.skipSources,
         force: Boolean = false
     ): SkipTimeline {
-        if (!SettingsStore.skipSegmentsEnabled || sources.isEmpty()) return SkipTimeline.EMPTY
+        if (!SettingsStore.skipSegmentsEnabled || sources.isEmpty()) {
+            lastStatus.value = "Desactivado en Ajustes"
+            return SkipTimeline.EMPTY
+        }
         val target = SkipTarget.from(video) ?: run {
-            lastStatus.value = "Este título no tiene id IMDb/TMDB: sin tramos que consultar"
+            lastStatus.value = "Este título no tiene id IMDb/TMDB/MAL: sin tramos que consultar"
             return SkipTimeline.EMPTY
         }
         // Un episodio necesita temporada y número; sin ellos no se consulta TV.
-        val isSeries = video.remoteType == "series" || video.type == VideoType.SERIES || video.type == VideoType.ANIME
+        val isSeries = video.remoteType == "series" ||
+            (video.remoteType != "movie" && (video.type == VideoType.SERIES || video.type == VideoType.ANIME))
         if (isSeries && !target.isEpisode) {
             lastStatus.value = "Falta temporada/episodio para buscar tramos"
             return SkipTimeline.EMPTY
@@ -70,7 +75,10 @@ object SkipSegmentService {
         if (!force) {
             synchronized(cache) { cache[key] }?.let { (storedAt, timeline) ->
                 val ttl = if (timeline.segments.isEmpty()) MISS_TTL_MS else HIT_TTL_MS
-                if (System.currentTimeMillis() - storedAt < ttl) return timeline
+                if (System.currentTimeMillis() - storedAt < ttl) {
+                    lastStatus.value = formatStatus(timeline, responded = true)
+                    return timeline
+                }
             }
         }
 
@@ -86,13 +94,15 @@ object SkipSegmentService {
             val estimate = results.firstNotNullOfOrNull { it?.second }
             val timeline = SkipSegmentParser.merge(segments, estimate)
             synchronized(cache) { cache[key] = System.currentTimeMillis() to timeline }
-            lastStatus.value = when {
-                segments.isEmpty() -> "Sin respuesta de las bases de tramos (revisa la red)"
-                timeline.segments.isEmpty() -> "Nadie ha marcado todavía tramos para este título"
-                else -> "${timeline.segments.size} tramos · ${timeline.sources.joinToString(" + ")}"
-            }
+            lastStatus.value = formatStatus(timeline, responded = segments.isNotEmpty())
             timeline
         }
+    }
+
+    private fun formatStatus(timeline: SkipTimeline, responded: Boolean): String = when {
+        !responded -> "Sin respuesta de las bases de tramos (revisa la red)"
+        timeline.segments.isEmpty() -> "Nadie ha marcado todavía tramos para este título"
+        else -> "${timeline.segments.size} tramos · ${timeline.sources.joinToString(" + ")}"
     }
 
     /** Devuelve (tramos, estimación de intro de temporada) o null si no respondió. */
@@ -116,6 +126,7 @@ object SkipSegmentService {
                 SkipSegmentParser.skipDb(json, durationMs) to SkipSegmentParser.skipDbIntroEstimate(json)
             SkipSegmentParser.SOURCE_THEINTRODB -> SkipSegmentParser.theIntroDb(json, durationMs) to null
             SkipSegmentParser.SOURCE_INTRODB -> SkipSegmentParser.introDb(json, durationMs) to null
+            SkipSegmentParser.SOURCE_ANISKIP -> SkipSegmentParser.aniSkip(json, durationMs) to null
             else -> null
         }
     }
@@ -127,6 +138,13 @@ object SkipSegmentService {
         isSeries: Boolean,
         seconds: Long
     ): Pair<String, Map<String, String>>? {
+        if (source == SkipSegmentParser.SOURCE_ANISKIP) {
+            val malId = target.malId ?: return null
+            val ep = target.episode ?: if (!isSeries) 1 else return null
+            val lenParam = if (seconds > 0) "&episodeLength=$seconds" else ""
+            val url = "$ANISKIP_BASE/${encode(malId)}/$ep?types[]=op&types[]=ed&types[]=recap&types[]=mixed-op&types[]=mixed-ed$lenParam"
+            return url to emptyMap()
+        }
         val params = mutableListOf<Pair<String, String>>()
         val headers = mutableMapOf<String, String>()
         when (source) {

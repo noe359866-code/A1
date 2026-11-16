@@ -58,12 +58,34 @@ class ProjectStreamAddon(
 
     override suspend fun resolve(video: Video): List<StreamLink> {
         val (type, videoId) = StreamHub.stremioId(video) ?: return emptyList()
-        val links = resolve(type, videoId)
-        if (links.isNotEmpty() || !AnimeIds.isAnime(videoId)) return links
-        // Algunos addons de anime anuncian `type: anime` en lugar de `series`.
-        // Se reintenta solo con ids nativos de Jikan/Kitsu y sin streams previos.
-        val alternate = AnimeIds.alternateType(type) ?: return links
-        return resolve(alternate, videoId)
+        var links = resolve(type, videoId)
+        val alternate = AnimeIds.alternateType(type)
+        if (links.isEmpty() && alternate != null &&
+            (AnimeIds.isAnime(videoId) || (video.type == VideoType.ANIME && manifest?.supports("stream", alternate, videoId) == true))
+        ) {
+            // Algunos addons de anime anuncian `type: anime` en lugar de `series`.
+            links = resolve(alternate, videoId)
+        }
+        if (links.isEmpty() && AnimeIds.isAnime(video.id)) {
+            val target = SkipTarget.from(video)
+            val nativeBase = video.id.substringBefore('~')
+            val nativeId = if (target?.isEpisode == true) {
+                "$nativeBase:${target.season}:${target.episode}"
+            } else {
+                nativeBase
+            }
+            if (nativeId != videoId) {
+                if (manifest == null || manifest.supports("stream", type, nativeId)) {
+                    links = resolve(type, nativeId)
+                }
+                if (links.isEmpty() && alternate != null &&
+                    (manifest == null || manifest.supports("stream", alternate, nativeId))
+                ) {
+                    links = resolve(alternate, nativeId)
+                }
+            }
+        }
+        return links
     }
 
     suspend fun resolve(type: String, videoId: String): List<StreamLink> = withContext(Dispatchers.IO) {
@@ -131,7 +153,8 @@ object StreamHub {
             val perAddon = coroutineScope {
                 addons.map { addon ->
                     async {
-                        withTimeoutOrNull(10_000L) {
+                        val timeoutMs = if (addon.id == "cloudstream-bridge" || addon.id == "nuvio-plugins") 25_000L else 12_000L
+                        withTimeoutOrNull(timeoutMs) {
                             runCatching { addon.resolve(video) }.getOrDefault(emptyList())
                         }.orEmpty()
                     }
