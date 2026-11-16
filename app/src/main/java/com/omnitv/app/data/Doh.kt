@@ -147,12 +147,57 @@ object Doh {
 
         // Resolución fresca (sin caché): este camino solo se pisa tras un fallo
         if (!NetPolicy.isAllowed(url)) return null
-        val addresses = resolve(host, fetch = fetch).take(3)
+        // Un addon no debe poder provocar que el fallback DoH conecte a
+        // loopback, la LAN, link-local ni rangos reservados mediante DNS rebinding.
+        val addresses = resolve(host, fetch = fetch)
+            .filter(::isPublicUnicast)
+            .take(3)
         for (address in addresses) {
             val body = runCatching { fetchWithHostOverride(target, host, address) }.getOrNull()
             if (body != null) return body
         }
         return null
+    }
+
+    /**
+     * Solo direcciones unicast públicas. DoH es una salida de emergencia y
+     * no debe convertirse en un camino para alcanzar routers, servicios LAN,
+     * metadata endpoints o rangos reservados mediante DNS rebinding.
+     *
+     * La resolución normal del sistema no se altera; esta validación protege
+     * específicamente la conexión directa por IP que hace [retry].
+     */
+    internal fun isPublicUnicast(address: InetAddress): Boolean {
+        if (address.isAnyLocalAddress || address.isLoopbackAddress ||
+            address.isLinkLocalAddress || address.isSiteLocalAddress ||
+            address.isMulticastAddress
+        ) return false
+
+        val bytes = address.address.map { it.toInt() and 0xFF }
+        return when (address) {
+            is Inet4Address -> {
+                val (a, b, c) = bytes
+                when {
+                    a == 0 || a >= 224 -> false
+                    a == 100 && b in 64..127 -> false // CGNAT
+                    a == 192 && (b == 0 || (b == 88 && c == 99)) -> false
+                    a == 198 && (b in 18..19 || (b == 51 && c == 100)) -> false
+                    a == 203 && b == 0 && c == 113 -> false
+                    else -> true
+                }
+            }
+            is Inet6Address -> {
+                val first = bytes[0]
+                val second = bytes[1]
+                val documentationRange =
+                    first == 0x20 && second == 0x01 &&
+                        bytes[2] == 0x0D && bytes[3] == 0xB8
+                val uniqueLocal = (first and 0xFE) == 0xFC
+                val linkLocal = first == 0xFE && (second and 0xC0) == 0x80
+                !documentationRange && !uniqueLocal && !linkLocal
+            }
+            else -> false
+        }
     }
 
     /**
