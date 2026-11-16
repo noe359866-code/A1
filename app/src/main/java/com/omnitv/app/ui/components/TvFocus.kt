@@ -40,7 +40,7 @@ import kotlin.math.abs
 
 /**
  * Permite que las pantallas hijas dirijan el foco hacia la pestaña activa
- * de [TopTabBar] cuando el usuario pulsa `Arriba` desde el borde superior.
+ * de [TopTabBar] cuando el usuario pulsa `Izquierda` desde el borde del contenido.
  */
 val LocalActiveTabFocus = staticCompositionLocalOf<FocusRequester?> { null }
 
@@ -55,7 +55,7 @@ class TabContentFocusTarget {
 val LocalTabContentFocus = staticCompositionLocalOf<TabContentFocusTarget?> { null }
 
 /**
- * Vale `true` mientras el usuario navega lateralmente dentro de [TopTabBar]
+ * Vale `true` mientras el usuario navega dentro de la barra lateral
  * sin haber pulsado `OK` ni `Abajo`, evitando que el contenido robe el foco
  * durante la vista previa de pestañas.
  */
