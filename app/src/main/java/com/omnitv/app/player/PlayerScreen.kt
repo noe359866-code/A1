@@ -1,4 +1,4 @@
-@file:OptIn(ExperimentalComposeUiApi::class)
+@file:kotlin.OptIn(ExperimentalComposeUiApi::class)
 
 package com.omnitv.app.player
 

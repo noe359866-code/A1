@@ -1330,7 +1330,7 @@ fun SeekBar(
 /* -------------------------------------------------------------------------- */
 
 @Composable
-fun LoadingSpinner(modifier: Modifier = Modifier) {
+fun LoadingSpinner(modifier: Modifier = Modifier, size: Dp = 48.dp) {
     val transition = rememberInfiniteTransition(label = "spinner")
     val angle by transition.animateFloat(
         initialValue = 0f,
@@ -1338,7 +1338,7 @@ fun LoadingSpinner(modifier: Modifier = Modifier) {
         animationSpec = infiniteRepeatable(tween(900, easing = LinearEasing), RepeatMode.Restart),
         label = "angle"
     )
-    Canvas(modifier.size(48.dp)) {
+    Canvas(modifier.size(size)) {
         drawArc(
             color = Accent,
             startAngle = angle,
