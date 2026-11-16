@@ -26,8 +26,8 @@ android {
         // versionCode debe subir con cada publicación: Android rechaza una
         // actualización con un código menor o igual que el instalado.
         // (v1.2.0 se publicó con el código 3.)
-        versionCode = 4
-        versionName = "1.3.0"
+        versionCode = 5
+        versionName = "1.3.1"
     }
 
     signingConfigs {
