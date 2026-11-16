@@ -49,6 +49,7 @@ object ProfileStore {
     }
 
     fun add(name: String, avatarIndex: Int, isKids: Boolean, autoPlayNext: Boolean = true) {
+        if (profiles.size >= ProfileCodec.MAX_PROFILES) return
         profiles = profiles + Profile(
             id = UUID.randomUUID().toString(),
             name = name.ifBlank { "Perfil" },
