@@ -62,6 +62,13 @@ class ProfileCodecTest {
     }
 
     @Test
+    fun `el limite de perfiles se aplica sin exceder el almacenamiento`() {
+        val profiles = (0..ProfileCodec.MAX_PROFILES).map { Profile(id = "p$it", name = "Perfil $it") }
+        val decoded = ProfileCodec.decode(ProfileCodec.encode(profiles))
+        assertEquals(ProfileCodec.MAX_PROFILES, decoded.size)
+    }
+
+    @Test
     fun `json raiz invalido no lanza excepcion`() {
         assertTrue(ProfileCodec.decode("no es json").isEmpty())
     }
