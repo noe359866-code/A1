@@ -250,6 +250,8 @@ if apk_workflow.exists():
             errors.append(f"apk.yml: falta protección de publicación ({label})")
     if 'GITHUB_REF_TYPE:-}" = "branch"' in text:
         errors.append("apk.yml: no debe publicar latest por el mero hecho de ejecutarse en una rama")
+    if 'versionName = "${{ github.event.inputs.version }}"' in text:
+        errors.append("apk.yml: no debe interpolar version directamente en un comando shell")
     else:
         ok.append("apk.yml: publicación restringida a push main y release firmada")
 
@@ -262,6 +264,8 @@ if release_workflow.exists():
         errors.append("release.yml: falta la protección de rama main para publicaciones manuales")
     if "keytool -list" not in text:
         errors.append("release.yml: no valida keystore y alias antes de compilar")
+    if 'TAG="${{ inputs.tag }}"' in text:
+        errors.append("release.yml: no debe interpolar el tag de usuario dentro del shell")
     if 'GITHUB_REF_TYPE:-}" = "tag"' not in text:
         errors.append("release.yml: debe distinguir un push de etiqueta de una ejecución manual")
     else:
