@@ -11,7 +11,7 @@ import org.json.JSONObject
  * imposibles se omiten.
  */
 internal object ProfileCodec {
-    private const val MAX_PROFILES = 50
+    internal const val MAX_PROFILES = 50
     private const val MAX_PROGRESS_ITEMS = 2_000
     private const val MAX_LIST_ITEMS = 2_000
     private const val MIN_PROGRESS = 0.02f
