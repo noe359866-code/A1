@@ -290,7 +290,7 @@ fun SettingsScreen(
                             .focusRequester(categoryRequesters.getValue(category))
                             .then(
                                 if (index == 0 && activeTabFocus != null) {
-                                    Modifier.focusProperties { up = activeTabFocus }
+                                    Modifier.focusProperties { left = activeTabFocus }
                                 } else {
                                     Modifier
                                 }
