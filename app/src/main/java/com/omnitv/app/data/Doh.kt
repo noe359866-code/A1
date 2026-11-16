@@ -180,7 +180,7 @@ object Doh {
                 when {
                     a == 0 || a >= 224 -> false
                     a == 100 && b in 64..127 -> false // CGNAT
-                    a == 192 && (b == 0 || (b == 88 && c == 99)) -> false
+                    a == 192 && ((b == 0 && (c == 0 || c == 2)) || (b == 88 && c == 99)) -> false
                     a == 198 && (b in 18..19 || (b == 51 && c == 100)) -> false
                     a == 203 && b == 0 && c == 113 -> false
                     else -> true
