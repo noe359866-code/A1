@@ -148,14 +148,10 @@ jobs:
           VERSION=$(sed -nE 's/.*versionName *= *"([^"]+)".*/\1/p' app/build.gradle.kts | head -n1)
           CODE=$(sed -nE 's/.*versionCode *= *([0-9]+).*/\1/p' app/build.gradle.kts | head -n1)
 
-          # Dos nombres del mismo binario:
-          #  - OmniTV.apk                → enlace permanente /releases/latest/download/OmniTV.apk
-          #                                (se sobrescribe en cada release, sin ZIP)
-          #  - OmniTV-<versión>.apk      → copia fechada para archivar y comparar
+          # La Release adjunta un único archivo con nombre fijo. Así el botón
+          # descarga el APK directamente, sin ZIP ni copias duplicadas.
           OUT="OmniTV.apk"
-          ARCHIVED="OmniTV-${VERSION}.apk"
           cp "$APK" "$OUT"
-          cp "$APK" "$ARCHIVED"
           SHA=$(sha256sum "$OUT" | cut -d' ' -f1)
           SIZE=$(du -h "$OUT" | cut -f1)
 
@@ -169,10 +165,9 @@ jobs:
           TAG="v${VERSION}"
           echo "BUILD_DATE=$(date -u +'%Y-%m-%d %H:%M UTC')" >> "$GITHUB_ENV"
 
-          ls -lh "$OUT" "$ARCHIVED"
+          ls -lh "$OUT"
           {
             echo "file=$OUT"
-            echo "archived=$ARCHIVED"
             echo "version=$VERSION"
             echo "code=$CODE"
             echo "sha=$SHA"
@@ -186,7 +181,6 @@ jobs:
             echo "| Dato | Valor |"
             echo "|---|---|"
             echo "| Descarga directa (sin ZIP) | [\`$OUT\`](https://github.com/${{ github.repository }}/releases/download/latest/$OUT) |"
-            echo "| Archivo versionado | \`$ARCHIVED\` |"
             echo "| Versión | $VERSION (versionCode $CODE) |"
             echo "| Tamaño | $SIZE |"
             echo "| Firma | $SIGNING_MODE |"
@@ -198,9 +192,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: OmniTV-apk-${{ steps.apk.outputs.version }}
-          path: |
-            ${{ steps.apk.outputs.file }}
-            ${{ steps.apk.outputs.archived }}
+          path: ${{ steps.apk.outputs.file }}
           if-no-files-found: error
           retention-days: 90
 
@@ -220,9 +212,7 @@ jobs:
           # dos enlaces permanentes funcionan gane quien gane.
           make_latest: true
           generate_release_notes: false
-          files: |
-            ${{ steps.apk.outputs.file }}
-            ${{ steps.apk.outputs.archived }}
+          files: ${{ steps.apk.outputs.file }}
           body: |
             ### ⬇️ Descarga directa
 
@@ -245,8 +235,8 @@ jobs:
             | Firma | ${{ env.SIGNING_MODE }} |
             | Commit | `${{ github.sha }}` |
 
-            También disponible la copia archivable
-            [`OmniTV-${{ steps.apk.outputs.version }}.apk`](https://github.com/${{ github.repository }}/releases/download/latest/${{ steps.apk.outputs.archived }}).
+            La Release adjunta **solamente `OmniTV.apk`**; no hay ZIP ni una
+            segunda copia del mismo binario.
 
             **Instalar en la TV:**
 
@@ -265,12 +255,8 @@ jobs:
           tag_name: ${{ steps.apk.outputs.tag }}
           name: OmniTV ${{ steps.apk.outputs.version }}
           generate_release_notes: true
-          # Se publican dos veces el mismo binario:
-          #  - OmniTV.apk            → enlace permanente que nunca cambia
-          #  - OmniTV-<versión>.apk  → copia archivable de esta versión
-          files: |
-            ${{ steps.apk.outputs.file }}
-            ${{ steps.apk.outputs.archived }}
+          # Un único adjunto: el APK instalable, sin ZIP ni copia duplicada.
+          files: ${{ steps.apk.outputs.file }}
           # Marca esta release como la más reciente del repositorio.
           make_latest: true
           body: |
@@ -282,8 +268,9 @@ jobs:
 
             Ese enlace es **permanente**: siempre apunta al último APK publicado y
             el archivo se descarga con el nombre `OmniTV.apk`, sin descomprimir nada.
-            Para esta versión concreta:
-            [`${{ steps.apk.outputs.archived }}`](https://github.com/${{ github.repository }}/releases/download/${{ steps.apk.outputs.tag }}/${{ steps.apk.outputs.archived }})
+            Esta versión también se descarga directamente desde
+            [`${{ steps.apk.outputs.tag }}/OmniTV.apk`](https://github.com/${{ github.repository }}/releases/download/${{ steps.apk.outputs.tag }}/OmniTV.apk).
+            La Release adjunta **solamente ese APK**.
 
             ## 📺 Instalación en la TV
 
