@@ -120,6 +120,8 @@ jobs:
         run: |
           if [ -n "${OMNITV_KEYSTORE_BASE64:-}" ] && [ -n "${OMNITV_KEYSTORE_PASSWORD:-}" ] && [ -n "${OMNITV_KEY_ALIAS:-}" ]; then
             echo "$OMNITV_KEYSTORE_BASE64" | base64 -d > "$RUNNER_TEMP/omnitv-release.jks"
+            test -s "$RUNNER_TEMP/omnitv-release.jks"
+            keytool -list -keystore "$RUNNER_TEMP/omnitv-release.jks" -storepass "$OMNITV_KEYSTORE_PASSWORD" -alias "$OMNITV_KEY_ALIAS" > /dev/null
             {
               echo "OMNITV_KEYSTORE_FILE=$RUNNER_TEMP/omnitv-release.jks"
               echo "OMNITV_KEYSTORE_PASSWORD=$OMNITV_KEYSTORE_PASSWORD"
