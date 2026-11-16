@@ -3,7 +3,6 @@
 package com.omnitv.app.ui.components
 
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -40,6 +39,8 @@ import androidx.compose.ui.zIndex
 import coil.compose.AsyncImage
 import com.omnitv.app.data.Studio
 import com.omnitv.app.data.Studios
+import com.omnitv.app.ui.theme.FocusScale
+import com.omnitv.app.ui.theme.LogoPlate
 import com.omnitv.app.ui.theme.AppRadius
 import com.omnitv.app.ui.theme.AppSpacing
 import com.omnitv.app.ui.theme.AppStroke
@@ -47,6 +48,7 @@ import com.omnitv.app.ui.theme.AppType
 import com.omnitv.app.ui.theme.GlassFill
 import com.omnitv.app.ui.theme.TextPrimary
 import com.omnitv.app.ui.theme.TextSecondary
+import com.omnitv.app.ui.theme.appTween
 
 /**
  * Sección «Por estudio» — como el «Browse by studio» de sweetfox.app:
@@ -106,8 +108,8 @@ fun StudioTile(
 ) {
     var focused by remember { mutableStateOf(false) }
     val scale by animateFloatAsState(
-        if (focused) 1.07f else 1f,
-        tween(150),
+        if (focused) FocusScale.card else 1f,
+        appTween(150),
         label = "studioScale"
     )
 
@@ -136,7 +138,7 @@ fun StudioTile(
         Box(
             modifier = Modifier
                 .clip(AppRadius.sm)
-                .background(Color(0xFFF3F5FA).copy(alpha = 0.94f))
+                .background(LogoPlate.copy(alpha = 0.94f))
                 .padding(horizontal = 14.dp, vertical = 8.dp),
             contentAlignment = Alignment.Center
         ) {

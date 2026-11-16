@@ -78,7 +78,7 @@ object RemoteCatalog {
 
     /** Carga (o recarga) el catálogo remoto. Un addon caído no bloquea los demás. */
     suspend fun refresh() = refreshMutex.withLock {
-        val revision = SettingsStore.revision
+        val stamp = SettingsStore.catalogStamp()
         loading.value = true
         lastError.value = ""
         try {
@@ -107,17 +107,17 @@ object RemoteCatalog {
             if (rows.isEmpty() && gridVideos.isEmpty()) {
                 lastError.value = "No se pudo cargar el catálogo. Revisa la conexión y tus addons en Ajustes."
             }
-            loadedRevision = revision
+            loadedStamp = stamp
             loaded.value = true
         } finally {
             loading.value = false
         }
     }
 
-    private var loadedRevision = -1
+    private var loadedStamp: String? = null
 
-    /** Hay que recargar (primera vez o cambio de configuración vía panel). */
-    fun needsReload(): Boolean = !loaded.value || loadedRevision != SettingsStore.revision
+    /** Hay que recargar (primera vez o cambio de addons instalados vía panel). */
+    fun needsReload(): Boolean = !loaded.value || loadedStamp != SettingsStore.catalogStamp()
 
     private data class LoadedCatalog(val key: String, val title: String, val videos: List<Video>, val state: CatalogPageState)
 
@@ -573,7 +573,7 @@ object RemoteCatalog {
         providerCache.clear()
         studioCache.clear()
         nuvioManifestCache = null
-        loadedRevision = -1
+        loadedStamp = null
         loaded.value = false
     }
 }

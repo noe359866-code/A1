@@ -62,6 +62,22 @@ class PairingRouterTest {
         client
     )
 
+    private fun getAuthed(target: String, session: String, client: String = "192.168.1.50") = router.route(
+        PanelRequest(
+            "GET",
+            target.substringBefore('?'),
+            parseForm(target.substringAfter('?', "")),
+            mapOf("Cookie" to "omnitv_session=$session"),
+            ""
+        ),
+        client
+    )
+
+    /** Token de la sesión emitida por una respuesta 303 (o 200 autenticada). */
+    private fun sessionOf(response: PanelResponse): String =
+        response.extraHeaders.first { it.startsWith("Set-Cookie:", true) }
+            .substringAfter("omnitv_session=").substringBefore(';')
+
     private fun post(
         path: String,
         body: String,
@@ -151,7 +167,10 @@ class PairingRouterTest {
 
     @Test
     fun `el codigo correcto abre el panel con los datos`() {
-        val response = get("/?code=$CODE")
+        val redirect = get("/?code=$CODE")
+        assertEquals(303, redirect.status)
+        assertTrue(redirect.extraHeaders.contains("Location: /"))
+        val response = getAuthed("/", sessionOf(redirect))
         assertEquals(200, response.status)
         for (expected in listOf(ACCOUNT, ADDON, STREAM_ADDON, NUVIO_REPO, NUVIO_BRIDGE, CS_BRIDGE, FF_BRIDGE, "TMDB=$API_KEY")) {
             assertTrue("falta «$expected» en el panel", response.body.contains(expected))
@@ -161,8 +180,8 @@ class PairingRouterTest {
 
     @Test
     fun `el codigo vale en minusculas y con espacios alrededor`() {
-        assertEquals(200, get("/?code=${CODE.lowercase()}").status)
-        assertEquals(200, get("/?code=+$CODE+").status)
+        assertEquals(303, get("/?code=${CODE.lowercase()}").status)
+        assertEquals(303, get("/?code=+$CODE+").status)
     }
 
     @Test
@@ -298,17 +317,17 @@ class PairingRouterTest {
         assertEquals(429, get("/?code=$CODE", client = "192.168.1.66").status)
 
         // Otro dispositivo no se ve afectado
-        assertEquals(200, get("/?code=$CODE", client = "192.168.1.50").status)
+        assertEquals(303, get("/?code=$CODE", client = "192.168.1.50").status)
 
         // Pasado el minuto, el bloqueado puede volver a intentarlo
         clock += 60_001L
-        assertEquals(200, get("/?code=$CODE", client = "192.168.1.66").status)
+        assertEquals(303, get("/?code=$CODE", client = "192.168.1.66").status)
     }
 
     @Test
     fun `abrir la pagina sin codigo no cuenta como intento`() {
         repeat(20) { assertEquals(200, get("/").status) }
-        assertEquals(200, get("/?code=$CODE").status)
+        assertEquals(303, get("/?code=$CODE").status)
     }
 
     // ------------------------- HTML -------------------------
@@ -317,7 +336,8 @@ class PairingRouterTest {
     fun `los valores guardados se escapan en el HTML`() {
         store.savedAccount = "\"><script>alert(1)</script>"
         store.savedAddons = listOf("https://a.ejemplo/</textarea><script>x()</script>")
-        val body = get("/?code=$CODE").body
+        val redirect = get("/?code=$CODE")
+        val body = getAuthed("/", sessionOf(redirect)).body
 
         assertFalse(body.contains("<script>"))
         assertTrue(body.contains("&lt;script&gt;alert(1)&lt;/script&gt;"))

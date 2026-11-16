@@ -20,6 +20,7 @@ import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -95,9 +96,13 @@ import com.omnitv.app.ui.theme.AppSpacing
 import com.omnitv.app.ui.theme.AppStroke
 import com.omnitv.app.ui.theme.AppType
 import com.omnitv.app.ui.theme.Background
+import com.omnitv.app.ui.theme.BadgeAccent
 import com.omnitv.app.ui.theme.Danger
+import com.omnitv.app.ui.theme.FocusScale
 import com.omnitv.app.ui.theme.GlassFill
 import com.omnitv.app.ui.theme.GlassFillStrong
+import com.omnitv.app.ui.theme.LiveAccentText
+import com.omnitv.app.ui.theme.MedalBronze
 import com.omnitv.app.ui.theme.OnLight
 import com.omnitv.app.ui.theme.RatingGold
 import com.omnitv.app.ui.theme.Surface
@@ -106,6 +111,7 @@ import com.omnitv.app.ui.theme.SurfaceElevated
 import com.omnitv.app.ui.theme.TextPrimary
 import com.omnitv.app.ui.theme.TextSecondary
 import com.omnitv.app.ui.theme.TextTertiary
+import com.omnitv.app.ui.theme.appTween
 import java.util.Locale
 
 /* -------------------------------------------------------------------------- */
@@ -172,7 +178,7 @@ fun TopTabBar(
                     if (!it.hasFocus) focusedRoute = null
                     onBarFocusChanged?.invoke(it.hasFocus)
                 }
-                .padding(start = AppSpacing.screenMargin, end = AppSpacing.screenMargin, top = 28.dp, bottom = 14.dp),
+                .padding(start = AppSpacing.screenMargin, end = AppSpacing.screenMargin, top = 32.dp, bottom = 14.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(if (compact) 4.dp else 10.dp)
         ) {
@@ -248,7 +254,16 @@ private fun TabPill(
     onEnterDown: (() -> Unit)? = null
 ) {
     var focused by remember { mutableStateOf(false) }
-    val scale by animateFloatAsState(if (focused) 1.06f else 1f, tween(150), label = "tabScale")
+    val interactionSource = remember { MutableInteractionSource() }
+    val pressed by interactionSource.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        when {
+            pressed -> FocusScale.tab * FocusScale.pressFactor
+            focused -> FocusScale.tab
+            else -> 1f
+        },
+        appTween(150), label = "tabScale"
+    )
 
     val background = when {
         focused -> Color.White
@@ -284,7 +299,7 @@ private fun TabPill(
                 }
             }
             .clickable(
-                interactionSource = remember { MutableInteractionSource() },
+                interactionSource = interactionSource,
                 indication = null,
                 onClick = onClick
             )
@@ -411,7 +426,16 @@ fun PillButton(
     onFocus: (() -> Unit)? = null
 ) {
     var focused by remember { mutableStateOf(false) }
-    val scale by animateFloatAsState(if (focused) 1.05f else 1f, tween(150), label = "pillScale")
+    val interactionSource = remember { MutableInteractionSource() }
+    val pressed by interactionSource.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        when {
+            pressed -> FocusScale.chip * FocusScale.pressFactor
+            focused -> FocusScale.chip
+            else -> 1f
+        },
+        appTween(150), label = "pillScale"
+    )
 
     val background = when {
         danger && focused -> Danger
@@ -422,7 +446,8 @@ fun PillButton(
         else -> GlassFill
     }
     val contentColor = when {
-        danger && !focused -> Danger
+        danger && !focused -> LiveAccentText // 5,1:1 sobre el relleno translúcido (AA)
+        danger -> OnLight                    // enfocado: oscuro sobre Danger (≈5,6:1, simétrico al primario)
         primary -> OnLight
         else -> TextPrimary
     }
@@ -444,7 +469,7 @@ fun PillButton(
                 if (it.isFocused) onFocus?.invoke()
             }
             .clickable(
-                interactionSource = remember { MutableInteractionSource() },
+                interactionSource = interactionSource,
                 indication = null,
                 onClick = onClick
             )
@@ -479,7 +504,16 @@ fun CircleIconButton(
     modifier: Modifier = Modifier
 ) {
     var focused by remember { mutableStateOf(false) }
-    val scale by animateFloatAsState(if (focused) 1.10f else 1f, tween(150), label = "circleScale")
+    val interactionSource = remember { MutableInteractionSource() }
+    val pressed by interactionSource.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        when {
+            pressed -> FocusScale.control * FocusScale.pressFactor
+            focused -> FocusScale.control
+            else -> 1f
+        },
+        appTween(150), label = "circleScale"
+    )
 
     Box(
         modifier = modifier
@@ -494,7 +528,7 @@ fun CircleIconButton(
             )
             .onFocusChanged { focused = it.isFocused }
             .clickable(
-                interactionSource = remember { MutableInteractionSource() },
+                interactionSource = interactionSource,
                 indication = null,
                 onClick = onClick
             ),
@@ -518,7 +552,8 @@ fun Badge(text: String, modifier: Modifier = Modifier) {
     Box(
         modifier = modifier
             .clip(AppRadius.xs)
-            .background(Accent)
+            // Badge sólido: 4,78:1 con blanco (AA); el acento de sistema se queda para foco/rellenos.
+            .background(BadgeAccent)
             .padding(horizontal = 10.dp, vertical = 6.dp)
     ) {
         Text(text, style = AppType.chip, color = Color.White)
@@ -585,8 +620,17 @@ fun PosterCard(
     onFocus: (() -> Unit)? = null
 ) {
     var focused by remember { mutableStateOf(false) }
-    val scale by animateFloatAsState(if (focused) 1.07f else 1f, tween(150), label = "cardScale")
-    val elevation by animateDpAsState(if (focused) 18.dp else 0.dp, label = "cardElevation")
+    val interactionSource = remember { MutableInteractionSource() }
+    val pressed by interactionSource.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        when {
+            pressed -> FocusScale.card * FocusScale.pressFactor
+            focused -> FocusScale.card
+            else -> 1f
+        },
+        appTween(150), label = "cardScale"
+    )
+    val elevation by animateDpAsState(if (focused) 18.dp else 0.dp, appTween(150), label = "cardElevation")
 
     Column(
         modifier = modifier
@@ -600,7 +644,7 @@ fun PosterCard(
                 if (it.isFocused) onFocus?.invoke()
             }
             .clickable(
-                interactionSource = remember { MutableInteractionSource() },
+                interactionSource = interactionSource,
                 indication = null,
                 onClick = onClick
             )
@@ -706,8 +750,17 @@ fun ContinueCard(
     onFocus: (() -> Unit)? = null
 ) {
     var focused by remember { mutableStateOf(false) }
-    val scale by animateFloatAsState(if (focused) 1.06f else 1f, tween(150), label = "continueScale")
-    val elevation by animateDpAsState(if (focused) 18.dp else 0.dp, label = "continueElevation")
+    val interactionSource = remember { MutableInteractionSource() }
+    val pressed by interactionSource.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        when {
+            pressed -> FocusScale.tab * FocusScale.pressFactor
+            focused -> FocusScale.tab
+            else -> 1f
+        },
+        appTween(150), label = "continueScale"
+    )
+    val elevation by animateDpAsState(if (focused) 18.dp else 0.dp, appTween(150), label = "continueElevation")
     val previewUrl = if (video.streamId != null && video.cardUrl.isNotBlank()) {
         video.cardUrl
     } else {
@@ -726,7 +779,7 @@ fun ContinueCard(
                 if (it.isFocused) onFocus?.invoke()
             }
             .clickable(
-                interactionSource = remember { MutableInteractionSource() },
+                interactionSource = interactionSource,
                 indication = null,
                 onClick = onClick
             )
@@ -925,12 +978,13 @@ fun Top10SectionRow(
                     .focusRestorer()
             ) {
                 itemsIndexed(items.take(10), key = { _, it -> it.id }) { index, video ->
+                    // Paleta de medallas «Top 10»: oro #1, plata #2, bronce #3 (tokens de theme/Color.kt).
                     val isFocusedItem = focusedRankIndex == index
                     val rankColor = when {
                         isFocusedItem -> Color.White
                         index == 0 -> RatingGold.copy(alpha = 0.88f)
                         index == 1 -> Color.White.copy(alpha = 0.52f)
-                        index == 2 -> Color(0xFFE08E45).copy(alpha = 0.82f)
+                        index == 2 -> MedalBronze.copy(alpha = 0.82f)
                         else -> Color.White.copy(alpha = 0.22f)
                     }
                     Row(
@@ -994,7 +1048,7 @@ fun HeroBanner(
     ) {
         Crossfade(
             targetState = video.backdropUrl.ifBlank { video.cardUrl },
-            animationSpec = tween(550),
+            animationSpec = appTween(550),
             label = "heroBackdrop"
         ) { url ->
             AsyncImage(
@@ -1174,7 +1228,16 @@ fun HeroBanner(
 @Composable
 fun TvToggle(checked: Boolean, onCheckedChange: (Boolean) -> Unit, modifier: Modifier = Modifier) {
     var focused by remember { mutableStateOf(false) }
-    val scale by animateFloatAsState(if (focused) 1.12f else 1f, tween(140), label = "toggleScale")
+    val interactionSource = remember { MutableInteractionSource() }
+    val pressed by interactionSource.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        when {
+            pressed -> FocusScale.hero * FocusScale.pressFactor
+            focused -> FocusScale.hero
+            else -> 1f
+        },
+        appTween(140), label = "toggleScale"
+    )
 
     Box(
         modifier = modifier
@@ -1190,7 +1253,7 @@ fun TvToggle(checked: Boolean, onCheckedChange: (Boolean) -> Unit, modifier: Mod
             )
             .onFocusChanged { focused = it.isFocused }
             .clickable(
-                interactionSource = remember { MutableInteractionSource() },
+                interactionSource = interactionSource,
                 indication = null
             ) { onCheckedChange(!checked) }
     ) {
@@ -1406,9 +1469,18 @@ fun SettingRow(
 }
 
 /* -------------------------------------------------------------------------- */
-/*  Chip de filtro / selección                                                */
+/*  Chip de filtro / selección                                                 */
 /* -------------------------------------------------------------------------- */
 
+/**
+ * Chip de filtro / selección.
+ *
+ * **Sobre el `style` por defecto**: [AppType.body] (21 sp) — deliberado. Los
+ * chips de filtro son los controles más frecuentes a 3 m y el tamaño versalitas
+ * de [AppType.chip] (15 sp) está pensado para etiquetas cortas («HD», «KIDS»),
+ * no para filtros con varias palabras. Si se quiere un chip de etiqueta, pásese
+ * `style = AppType.chip`.
+ */
 @Composable
 fun TvChip(
     text: String,
@@ -1419,6 +1491,16 @@ fun TvChip(
     onFocus: (() -> Unit)? = null
 ) {
     var focused by remember { mutableStateOf(false) }
+    val interactionSource = remember { MutableInteractionSource() }
+    val pressed by interactionSource.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        when {
+            pressed -> FocusScale.chip * FocusScale.pressFactor
+            focused -> FocusScale.chip
+            else -> 1f
+        },
+        appTween(150), label = "chipScale"
+    )
     val background = when {
         focused -> Color.White
         selected -> GlassFillStrong
@@ -1434,6 +1516,7 @@ fun TvChip(
     Box(
         modifier = modifier
             .zIndex(if (focused) 1f else 0f)
+            .graphicsLayer { scaleX = scale; scaleY = scale }
             .clip(AppRadius.pill)
             .background(background)
             .then(if (focused) Modifier.border(AppStroke.focus, ring, AppRadius.pill) else Modifier)
@@ -1442,7 +1525,7 @@ fun TvChip(
                 if (it.isFocused) onFocus?.invoke()
             }
             .clickable(
-                interactionSource = remember { MutableInteractionSource() },
+                interactionSource = interactionSource,
                 indication = null,
                 onClick = onClick
             )

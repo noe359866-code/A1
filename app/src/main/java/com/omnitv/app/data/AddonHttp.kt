@@ -1,5 +1,6 @@
 package com.omnitv.app.data
 
+import com.omnitv.app.BuildConfig
 import org.json.JSONTokener
 import java.io.ByteArrayOutputStream
 import java.net.HttpURLConnection
@@ -90,7 +91,7 @@ internal object AddonHttp {
                     connectTimeout = 6_000
                     readTimeout = readTimeoutMs.coerceIn(1_000, 120_000)
                     instanceFollowRedirects = false
-                    setRequestProperty("User-Agent", "OmniTV/1.2 (Android TV)")
+                    setRequestProperty("User-Agent", "OmniTV/${BuildConfig.VERSION_NAME} (Android TV)")
                     setRequestProperty("Accept", "application/json")
                     val sameOrigin = runCatching {
                         val a = URI(current); val b = URI(initialUrl)

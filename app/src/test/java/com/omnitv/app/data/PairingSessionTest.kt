@@ -7,8 +7,9 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * El código del QR ya no viaja en la URL: se canjea por una sesión con cookie
- * `HttpOnly` + `SameSite=Strict`, ligada a la IP y al código vigente.
+ * El QR lleva el código (`/?code=…`) y el router responde 303 → `/` con una
+ * sesión con cookie `HttpOnly` + `SameSite=Strict`, ligada a la IP y al código
+ * vigente: el código no sobrevive en la URL del móvil.
  */
 class PairingSessionTest {
 
@@ -75,9 +76,11 @@ class PairingSessionTest {
     }
 
     @Test
-    fun `unlock canjea el codigo por una cookie de sesion`() {
+    fun `unlock canjea el codigo por una cookie de sesion y un 303 limpio`() {
         val response = post("/unlock", "code=$CODE")
-        assertEquals(200, response.status)
+        assertEquals(303, response.status)
+        // El navegador aterriza en `/`: el código no queda en la URL
+        assertTrue(response.extraHeaders.contains("Location: /"))
         val header = issued(response)
         assertNotNull(header)
         assertTrue(header!!.contains("HttpOnly"))
@@ -85,7 +88,10 @@ class PairingSessionTest {
         assertTrue(header.contains("Path=/"))
         assertFalse(header.contains(CODE))
         assertFalse(response.body.contains(CODE))
-        assertTrue(response.body.contains("action=\"/save\""))
+        // La cookie abre la sesión completa en `/`
+        val opened = get("/", headers = cookie(token(response)))
+        assertEquals(200, opened.status)
+        assertTrue(opened.body.contains("action=\"/save\""))
     }
 
     @Test
@@ -158,7 +164,7 @@ class PairingSessionTest {
         assertEquals(403, post("/save", "account=x%40y.z", headers = cookie(session)).status)
         assertEquals(0, store.writes)
         // Con el código nuevo se puede volver a desbloquear.
-        assertEquals(200, post("/unlock", "code=NUEVO9").status)
+        assertEquals(303, post("/unlock", "code=NUEVO9").status)
     }
 
     @Test
@@ -196,7 +202,8 @@ class PairingSessionTest {
     fun `el servidor escribe Set-Cookie y no filtra el codigo`() {
         val response = post("/unlock", "code=$CODE")
         val headers = panelResponseHeaders(response, response.body.toByteArray(Charsets.UTF_8).size)
-        assertTrue(headers.startsWith("HTTP/1.1 200 OK\r\n"))
+        assertTrue(headers.startsWith("HTTP/1.1 303 See Other\r\n"))
+        assertTrue(headers.contains("Location: /"))
         assertTrue(headers.contains(issued(response)!!))
         assertTrue(headers.contains("HttpOnly"))
         assertTrue(headers.contains("SameSite=Strict"))

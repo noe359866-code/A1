@@ -24,10 +24,11 @@ internal interface PanelStore {
  * Reglas del panel de vinculación: qué responde a cada petición.
  *
  * Invariante de seguridad: **sin el código correcto o una sesión vigente no
- * se lee ni se escribe ningún dato** de [store]. El código se introduce una
- * vez por `POST /unlock` (nunca en la URL del QR) y se canjea por una cookie
- * de sesión [SessionGuard] ligada a la IP y al código vigente; rotar el
- * código en Ajustes invalida todas las sesiones al instante.
+ * se lee ni se escribe ningún dato** de [store]. El QR lleva el código en
+ * `/?code=…`; la respuesta es un 303 a `/` con cookie de sesión [SessionGuard]
+ * ligada a la IP y al código vigente (el código no sobrevive en la URL);
+ * quien abre la URL a mano lo teclea una vez en el formulario (`POST /unlock`).
+ * Rotar el código en Ajustes invalida todas las sesiones al instante.
  *
  * @param onEvent aviso legible de lo ocurrido, para mostrarlo en Ajustes.
  */
@@ -106,6 +107,18 @@ internal class PairingRouter(
     }
 
     /**
+     * 303 a `/` con la cookie de sesión: el navegador aterriza en una URL
+     * limpia (el código del QR/formulario no queda en el historial) y la
+     * sesión HttpOnly hace el resto. Cuerpo vacío a propósito.
+     */
+    private fun redirectToPanel(client: String, currentCode: String): PanelResponse =
+        PanelResponse(
+            303,
+            "",
+            extraHeaders = listOf("Location: /") + sessionHeaders(client, currentCode)
+        )
+
+    /**
      * Renueva la sesión en cada respuesta autenticada: el móvil no tiene que
      * volver a escribir el código mientras siga usando el panel (TTL deslizante).
      */
@@ -120,7 +133,10 @@ internal class PairingRouter(
             Auth.LOCKED -> return denied(Auth.LOCKED)
             Auth.OK -> Unit
         }
-        if (code.isNotBlank()) onEvent("Panel web abierto desde $client")
+        if (code.isNotBlank()) {
+            onEvent("Panel web abierto desde $client")
+            return redirectToPanel(client, currentCode)
+        }
         return PanelResponse(
             200,
             PairingPortal.html(store.data()),
@@ -129,8 +145,10 @@ internal class PairingRouter(
     }
 
     /**
-     * Camino principal desde el QR: el formulario envía el código por POST,
-     * así no queda en la URL, en el historial ni en `Referer`.
+     * Camino manual: quien abre el panel a mano teclea el código en el
+     * formulario; el POST canjea el código por una sesión (PRG → 303 a `/`),
+     * así el secreto no queda en el historial ni se reenvía al refrescar.
+     * El camino principal desde el QR entra por `GET /?code=…`.
      */
     private fun unlock(
         form: Map<String, String>,
@@ -147,12 +165,8 @@ internal class PairingRouter(
         return when (authorize(code, token, client, currentCode, allowBlank = false)) {
             Auth.OK -> {
                 onEvent("Panel web desbloqueado desde $client")
-                PanelResponse(
-                    200,
-                    PairingPortal.html(store.data()),
-                    // Rotamos la sesión en cada desbloqueo con código.
-                    extraHeaders = listOf(setCookie(sessions.issue(client, currentCode)))
-                )
+                // 303 a `/`: el código no queda en la URL ni se reenvía al refrescar
+                redirectToPanel(client, currentCode)
             }
             Auth.LOCKED -> denied(Auth.LOCKED)
             else -> denied(Auth.WRONG)
@@ -197,9 +211,10 @@ internal class PairingRouter(
         var rejectedUrls = 0
         form["account"]?.trim()?.takeIf { it.isNotBlank() }?.let { store.setAccount(it) }
         form["addons"]?.let { text ->
-            val values = text.lines().map { it.trim() }.filter { it.isNotEmpty() }
+            val values = text.lines().map { it.trim() }.filter { it.isNotEmpty() }.distinct()
             val accepted = values.mapNotNull(StremioUrl::normalize).distinct()
             store.setAddons(accepted)
+            // Las duplicadas simplemente se omiten; solo cuentan las rechazadas de verdad
             rejectedUrls += values.size - accepted.size
         }
         form["streamAddons"]?.let { text ->
@@ -247,8 +262,8 @@ internal class PairingRouter(
         val message = buildString {
             append("✅ Guardado en el televisor. Los manifests y repositorios se comprobarán al abrir Inicio/Ajustes.")
             if (rejectedUrls > 0) {
-                append(" ⚠️ Se descartaron $rejectedUrls URL no válidas: usa https://, o http:// solo ")
-                append("con una IP de tu red local (192.168.x.x, 10.x.x.x…).")
+                append(" ⚠️ Se descartaron $rejectedUrls URL no válidas. Recuerda: https:// siempre; http:// solo en tu red local; ")
+                append("y en los addons Stremio, la configuración va en la ruta (…/clave/manifest.json), no en «?parámetros» ni «#fragmento».")
             }
         }
         return PanelResponse(

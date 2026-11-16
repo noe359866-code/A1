@@ -80,11 +80,12 @@ data class SkipTarget(
     val tmdbId: String?,
     val season: Int?,
     val episode: Int?,
-    val malId: String? = null
+    val malId: String? = null,
+    val kitsuId: String? = null
 ) {
     val isEpisode: Boolean get() = season != null && episode != null
     val cacheKey: String
-        get() = "${imdbId ?: tmdbId?.let { "tmdb:$it" } ?: "mal:$malId"}:${season ?: 0}:${episode ?: 0}"
+        get() = "${imdbId ?: tmdbId?.let { "tmdb:$it" } ?: malId?.let { "mal:$it" } ?: "kitsu:$kitsuId"}:${season ?: 0}:${episode ?: 0}"
 
     companion object {
         /**
@@ -101,6 +102,7 @@ data class SkipTarget(
             var imdbId: String? = null
             var tmdbId: String? = null
             var malId: String? = null
+            var kitsuId: String? = null
             var season: Int? = null
             var episode: Int? = null
 
@@ -117,6 +119,12 @@ data class SkipTarget(
                     clean.startsWith("mal:") -> {
                         val id = parts.getOrNull(1)?.takeIf { it.isNotBlank() && it.all(Char::isDigit) }
                         if (id != null && malId == null) malId = id
+                        if (season == null) season = parts.getOrNull(2)?.toIntOrNull()
+                        if (episode == null) episode = parts.getOrNull(3)?.toIntOrNull()
+                    }
+                    clean.startsWith("kitsu:") -> {
+                        val id = parts.getOrNull(1)?.takeIf { it.isNotBlank() && it.all(Char::isDigit) }
+                        if (id != null && kitsuId == null) kitsuId = id
                         if (season == null) season = parts.getOrNull(2)?.toIntOrNull()
                         if (episode == null) episode = parts.getOrNull(3)?.toIntOrNull()
                     }
@@ -137,8 +145,8 @@ data class SkipTarget(
                 }
             }
 
-            if (imdbId == null && tmdbId == null && malId == null) return null
-            return SkipTarget(imdbId, tmdbId, season, episode, malId)
+            if (imdbId == null && tmdbId == null && malId == null && kitsuId == null) return null
+            return SkipTarget(imdbId, tmdbId, season, episode, malId, kitsuId)
         }
     }
 }

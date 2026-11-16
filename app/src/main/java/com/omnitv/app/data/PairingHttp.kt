@@ -162,9 +162,9 @@ internal class AttemptGuard(
 /**
  * Sesiones temporales del panel de vinculación.
  *
- * El código de 6 caracteres ya no viaja en la URL del QR: el móvil lo envía
- * una vez por `POST /unlock` y recibe una cookie `HttpOnly` ligada a su IP y
- * al código vigente. Si el código se regenera en Ajustes, la huella cambia y
+ * El QR lleva el código (`/?code=…`); el móvil aterriza en una sesión con
+ * cookie `HttpOnly` ligada a su IP y al código vigente, y un 303 a `/` borra
+ * el código de la URL. Si el código se regenera en Ajustes, la huella cambia y
  * **todas** las sesiones abiertas dejan de valer sin necesidad de avisos.
  */
 internal class SessionGuard(

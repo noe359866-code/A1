@@ -25,6 +25,9 @@ object SettingsStore {
 
     /** Claves de API sin cifrar: formato antiguo y dispositivos sin Keystore (API 22). */
     private const val KEY_API_PLAIN = "apiKeys"
+
+    /** Tokens de Trakt cifrados con [SecretBox] (Android Keystore). */
+    private const val KEY_TRAKT_SEALED = "traktEnc"
     private var prefs: SharedPreferences? = null
 
     // Los `var` publican un setter privado con la misma firma JVM que un
@@ -145,6 +148,20 @@ object SettingsStore {
         private set
 
     /**
+     * Trakt: la vinculación está completa. Las credenciales de la app son
+     * `TRAKT` / `TRAKT_SECRET` en el panel (cifradas como el resto de claves);
+     * los tokens viven en su propio blob sellado y nunca salen del televisor.
+     */
+    var traktLinked by mutableStateOf(false)
+        private set
+    internal var traktAccessToken: String? = null
+        private set
+    internal var traktRefreshToken: String? = null
+        private set
+    internal var traktExpiresAtMs: Long = 0L
+        private set
+
+    /**
      * Resolver los nombres con el **DNS de Cloudflare** (DoH) cuando el DNS
      * del sistema falla. Apagado = comportamiento clásico.
      */
@@ -153,7 +170,13 @@ object SettingsStore {
 
     /** Se incrementa con cada cambio para refrescar listas observables. */
     var revision by mutableStateOf(0)
-        private set
+
+    /**
+     * Huella de lo que afecta al catálogo: los addons instalados. Solo esta
+     * lista la hace cambiar, así un ajuste cualquiera (p. ej. autoplay) ya no
+     * fuerza la recarga de toda la portada en la próxima pantalla.
+     */
+    fun catalogStamp(): String = customAddons.joinToString(",")
 
     fun init(context: Context) {
         if (prefs != null) return
@@ -199,6 +222,7 @@ object SettingsStore {
         ffmpegBridge = MediaBridge.normalize(p.getString("ffmpegBridge", "") ?: "").orEmpty()
         lastPlaybackDiagnostic = p.getString("lastPlaybackDiagnostic", "") ?: ""
         loadApiKeys(p)
+        loadTraktTokens(p)
     }
 
     /**
@@ -332,6 +356,7 @@ object SettingsStore {
         nuvioPlugins = cleaned
         NuvioPluginManager.clearCache()
         revision++
+        NuvioScraperResolver.clearResultCache()
     }
 
     fun setNuvioScraperEnabled(scraperId: String, enabled: Boolean) {
@@ -380,9 +405,71 @@ object SettingsStore {
     /** Guarda las APIs añadidas desde el panel (nombre → clave). */
     fun saveApiKeys(keys: Map<String, String>) {
         val cleaned = keys.filterKeys { it.isNotBlank() }.filterValues { it.isNotBlank() }
+        val traktAntes = traktCredentials()
         persistApiKeys(cleaned)
         apiKeys = cleaned
+        // Los tokens pertenecen a una app Trakt concreta: si sus claves
+        // cambian o desaparecen, la vinculación anterior ya no sirve.
+        if (traktCredentials() != traktAntes) clearTraktTokens()
         revision++
+    }
+
+    /** Claves de la app Trakt del usuario (`TRAKT` + `TRAKT_SECRET`), o null si falta alguna. */
+    fun traktCredentials(): Pair<String, String>? {
+        val id = apiKeys.entries.firstOrNull { it.key.equals("TRAKT", true) }?.value?.trim().orEmpty()
+        val secret = apiKeys.entries.firstOrNull { it.key.equals("TRAKT_SECRET", true) }?.value?.trim().orEmpty()
+        return if (id.isNotEmpty() && secret.isNotEmpty()) id to secret else null
+    }
+
+    /** Guarda los tokens tras el flujo de dispositivo (cifrados si es posible). */
+    fun saveTraktTokens(accessToken: String, refreshToken: String, expiresAtMs: Long) {
+        val json = org.json.JSONObject()
+            .put("access_token", accessToken)
+            .put("refresh_token", refreshToken)
+            .put("expires_at", expiresAtMs)
+            .toString()
+        val sealed = SecretBox.encrypt(json)
+        update {
+            if (sealed != null) putString(KEY_TRAKT_SEALED, sealed) else putString(KEY_TRAKT_SEALED + "_plain", json)
+        }
+        traktAccessToken = accessToken
+        traktRefreshToken = refreshToken
+        traktExpiresAtMs = expiresAtMs
+        traktLinked = true
+        revision++
+    }
+
+    /** Borra los tokens; conserva las credenciales de la app. */
+    fun clearTraktTokens() {
+        update {
+            remove(KEY_TRAKT_SEALED)
+            remove(KEY_TRAKT_SEALED + "_plain")
+        }
+        traktAccessToken = null
+        traktRefreshToken = null
+        traktExpiresAtMs = 0L
+        traktLinked = false
+        revision++
+    }
+
+    /** Carga los tokens sellados al arrancar; sin blob válido, «sin vincular». */
+    private fun loadTraktTokens(p: SharedPreferences) {
+        val sealed = p.getString(KEY_TRAKT_SEALED, null)
+        val plain = p.getString(KEY_TRAKT_SEALED + "_plain", null)
+        val json = when {
+            sealed != null -> SecretBox.decrypt(sealed)
+            else -> plain
+        }?.let { runCatching { org.json.JSONObject(it) }.getOrNull() }
+        val access = json?.optString("access_token")?.takeIf { it.isNotBlank() }
+        val refresh = json?.optString("refresh_token")?.takeIf { it.isNotBlank() }
+        if (access != null && refresh != null) {
+            traktAccessToken = access
+            traktRefreshToken = refresh
+            traktExpiresAtMs = json.optLong("expires_at", 0L)
+            traktLinked = true
+        } else {
+            traktLinked = false
+        }
     }
 
     val SKIP_SOURCE_NAMES = listOf(

@@ -32,7 +32,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
@@ -47,6 +46,7 @@ import com.omnitv.app.ui.components.PillButton
 import com.omnitv.app.ui.components.PosterCard
 import com.omnitv.app.ui.components.TvChip
 import com.omnitv.app.ui.components.dpadRepeatThrottle
+import com.omnitv.app.ui.theme.LogoPlate
 import com.omnitv.app.ui.theme.AppRadius
 import com.omnitv.app.ui.theme.AppSpacing
 import com.omnitv.app.ui.theme.AppType
@@ -153,7 +153,7 @@ fun StudioCatalogScreen(
                     Box(
                         modifier = Modifier
                             .clip(AppRadius.sm)
-                            .background(Color(0xFFF3F5FA).copy(alpha = 0.94f))
+                            .background(LogoPlate.copy(alpha = 0.94f))
                             .padding(horizontal = 14.dp, vertical = 8.dp),
                         contentAlignment = Alignment.Center
                     ) {

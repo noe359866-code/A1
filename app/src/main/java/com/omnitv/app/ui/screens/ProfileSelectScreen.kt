@@ -94,8 +94,23 @@ fun ProfileSelectScreen(
         PendingAction.Add -> onAddProfile()
     }
 
+    /**
+     * Solo hace falta el PIN para acciones que **escalan** desde el perfil infantil
+     * a contenido o gestión de adultos:
+     *  - Select a un perfil estándar (o al mismo estándar) desde un perfil infantil.
+     *  - Gestionar o crear perfiles (editar/eliminar/crear perfiles estándar).
+     *
+     * Moverse lateralmente entre perfiles infantiles, o re-elegir el perfil ya
+     * activo, no eleva privilegios y no debe pedir PIN.
+     */
+    fun needsPin(action: PendingAction): Boolean = when (action) {
+        is PendingAction.Select ->
+            action.profile.id != ProfileStore.currentProfileId && !action.profile.isKids
+        PendingAction.Manage, PendingAction.Add -> true
+    }
+
     fun request(action: PendingAction) {
-        if (pinRequired) pending = action else runAction(action)
+        if (pinRequired && needsPin(action)) pending = action else runAction(action)
     }
 
     Box(Modifier.fillMaxSize().background(Background).dpadRepeatThrottle()) {

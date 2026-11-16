@@ -84,6 +84,7 @@ import com.omnitv.app.data.SkipSegmentService
 import com.omnitv.app.data.SkipTimeline
 import com.omnitv.app.data.StreamFormat
 import com.omnitv.app.data.TrackFacts
+import com.omnitv.app.data.TraktService
 import com.omnitv.app.data.TvKeyCodes
 import com.omnitv.app.data.Video
 import com.omnitv.app.ui.components.LoadingSpinner
@@ -97,10 +98,12 @@ import com.omnitv.app.ui.theme.AppRadius
 import com.omnitv.app.ui.theme.AppSpacing
 import com.omnitv.app.ui.theme.AppType
 import com.omnitv.app.ui.theme.LiveAccent
+import com.omnitv.app.ui.theme.LiveAccentText
 import com.omnitv.app.ui.theme.TextMuted
 import com.omnitv.app.ui.theme.TextPrimary
 import com.omnitv.app.ui.theme.TextSecondary
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
@@ -111,6 +114,11 @@ import kotlin.math.abs
 /* -------------------------------------------------------------------------- */
 /*  Estados del reproductor                                                   */
 /* -------------------------------------------------------------------------- */
+
+/** Umbral mínimo de reproducción para el `scrobble/start` de Trakt: por debajo,
+ * un «siguiente»/salir accidental dejaría un marcado espurio. El STOP (fin o
+ * salida) conserva `pos` real; Trakt decide "visto" con ≥80 %. */
+private const val SCROBBLE_START_MIN_MS = 10_000L
 
 private enum class MenuKind { NONE, SERVER, QUALITY, AUDIO, SUBTITLES, ASPECT, SPEED, SLEEP }
 
@@ -267,6 +275,8 @@ fun PlayerScreen(
 
     // ---------------- Saltar intro / resumen / créditos ----------------
     var skipTimeline by remember(video.id) { mutableStateOf(SkipTimeline.EMPTY) }
+    // Trakt: un scrobble START por reproducción; STOP al salir o terminar.
+    var traktScrobbleStarted by remember(video.id) { mutableStateOf(false) }
     val autoSkipped = remember(video.id) { mutableSetOf<String>() }
     val durationSeconds = (durationMs / 1000L).toInt()
     val activeSkip: SkipSegment? = remember(skipTimeline, positionMs) { skipTimeline.activeAt(positionMs) }
@@ -363,6 +373,12 @@ fun PlayerScreen(
                             player.seekTo((player.duration * fraction).toLong())
                         }
                     }
+                }
+                if (playbackState == Player.STATE_ENDED && traktScrobbleStarted) {
+                    traktScrobbleStarted = false
+                    val target = video
+                    val dur = player.duration.coerceAtLeast(0L)
+                    scope.launch(Dispatchers.IO) { TraktService.scrobble(TraktService.ScrobbleEvent.STOP, target, dur, dur) }
                 }
                 if (playbackState == Player.STATE_ENDED) {
                     if (nextVideo != null && showNextPanel == null && hasError == null) {
@@ -480,6 +496,16 @@ fun PlayerScreen(
         player.addListener(listener)
         onDispose {
             saveProgressSafe()
+            if (traktScrobbleStarted) {
+                val target = video
+                val pos = player.currentPosition
+                val dur = player.duration.coerceAtLeast(0L)
+                // El scope de Compose ya no está activo aquí: llamada directa
+                // bloqueante pero acotada por el timeout de red de AddonHttp.
+                Thread {
+                    TraktService.scrobble(TraktService.ScrobbleEvent.STOP, target, pos, dur)
+                }.start()
+            }
             playerReleased = true
             player.removeListener(listener)
             player.playWhenReady = false
@@ -502,6 +528,12 @@ fun PlayerScreen(
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_PAUSE) {
                 saveProgress()
+                if (traktScrobbleStarted) {
+                    val target = video
+                    val pos = player.currentPosition
+                    val dur = player.duration.coerceAtLeast(0L)
+                    scope.launch(Dispatchers.IO) { TraktService.scrobble(TraktService.ScrobbleEvent.PAUSE, target, pos, dur) }
+                }
                 player.pause()
             }
         }
@@ -520,6 +552,13 @@ fun PlayerScreen(
             bufferedMs = player.bufferedPosition.coerceAtLeast(0)
             if (player.duration > 0) durationMs = player.duration
             clock = nowClock()
+            if (player.isPlaying && !traktScrobbleStarted && player.currentPosition >= SCROBBLE_START_MIN_MS) {
+                traktScrobbleStarted = true
+                val target = video
+                val pos = player.currentPosition
+                val dur = player.duration.coerceAtLeast(0L)
+                scope.launch(Dispatchers.IO) { TraktService.scrobble(TraktService.ScrobbleEvent.START, target, pos, dur) }
+            }
             if (++ticks % 20 == 0 && player.isPlaying) saveProgress()
             delay(500)
         }
@@ -1026,7 +1065,7 @@ fun PlayerScreen(
                         Spacer(Modifier.height(8.dp))
                         Text(
                             if (bridgeBusy) "Convirtiendo en el puente externo…" else bridgeMessage.orEmpty(),
-                            style = AppType.metadata, color = LiveAccent
+                            style = AppType.metadata, color = LiveAccentText
                         )
                     }
                     Spacer(Modifier.height(22.dp))

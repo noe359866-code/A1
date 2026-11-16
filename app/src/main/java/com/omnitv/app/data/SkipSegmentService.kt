@@ -29,6 +29,7 @@ object SkipSegmentService {
     const val SKIPDB_BASE = "https://api.skipdb.tv/api/segments"
     const val INTRODB_BASE = "https://api.introdb.app/segments"
     const val ANISKIP_BASE = "https://api.aniskip.com/v2/skip-times"
+    const val KITSU_MAPPINGS_BASE = "https://kitsu.io/api/edge/mappings"
 
     private const val HIT_TTL_MS = 6 * 60 * 60_000L
     private const val MISS_TTL_MS = 10 * 60_000L
@@ -37,6 +38,12 @@ object SkipSegmentService {
 
     /** Estado legible para Ajustes; nunca promete datos que no llegaron. */
     val lastStatus = mutableStateOf("")
+
+    /** Mappings Kitsu → MAL (los MAL ids son estables; TTL 7 días, acotado). */
+    private val malMappingCache = object : LinkedHashMap<String, Pair<Long, String?>>(16, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Pair<Long, String?>>?): Boolean = size > 32
+    }
+    private const val MAL_MAPPING_TTL_MS = 7L * 24 * 60 * 60 * 1000
 
     private val mutex = Mutex()
     private val cache = object : LinkedHashMap<String, Pair<Long, SkipTimeline>>(32, 0.75f, true) {
@@ -113,7 +120,14 @@ object SkipSegmentService {
         seconds: Long
     ): Pair<List<SkipSegment>, Long?>? {
         if (System.currentTimeMillis() < (cooldownUntil[source] ?: 0L)) return null
-        val request = buildRequest(source, target, isSeries, seconds) ?: return null
+        // AniSkip se indexa por id de MyAnimeList: una ficha de Kitsu necesita
+        // la correspondencia, vía el endpoint público de mappings de Kitsu.
+        val effective = if (source == SkipSegmentParser.SOURCE_ANISKIP && target.malId == null && target.kitsuId != null) {
+            resolveMalId(target.kitsuId)?.let { target.copy(malId = it) } ?: return null
+        } else {
+            target
+        }
+        val request = buildRequest(source, effective, isSeries, seconds) ?: return null
         val result = withContext(Dispatchers.IO) { AddonHttp.getJsonWithStatus(request.first, request.second) }
         if (result.status == 429) {
             cooldownUntil[source] = System.currentTimeMillis() + RATE_LIMIT_COOLDOWN_MS
@@ -129,6 +143,44 @@ object SkipSegmentService {
             SkipSegmentParser.SOURCE_ANISKIP -> SkipSegmentParser.aniSkip(json, durationMs) to null
             else -> null
         }
+    }
+
+    /**
+     * Kitsu id → MAL id vía `mappings` de la API pública de Kitsu
+     * (`filter[itemId]` + `filter[externalSite]=myanimelist/anime`).
+     * Una respuesta HTTP 2xx es definitiva y se cachea (también el «no hay
+     * correspondencia»); un fallo de red/429/5xx NO se cachea: el siguiente
+     * intento debe poder recuperarse.
+     */
+    internal suspend fun resolveMalId(kitsuId: String): String? {
+        val now = System.currentTimeMillis()
+        synchronized(malMappingCache) { malMappingCache[kitsuId] }?.let { (at, mal) ->
+            if (now - at < MAL_MAPPING_TTL_MS) return mal
+        }
+        var definitive = false
+        val resolved: String? = withContext(Dispatchers.IO) {
+            val url = "$KITSU_MAPPINGS_BASE?filter%5BitemId%5D=${encode(kitsuId)}&filter%5BexternalSite%5D=${encode("myanimelist/anime")}"
+            val result = AddonHttp.getJsonWithStatus(url)
+            val payload = result.value as? JSONObject
+            if (payload != null && result.status in 200..299) {
+                definitive = true
+                parseKitsuMalMapping(payload)
+            } else null
+        }
+        if (definitive) synchronized(malMappingCache) { malMappingCache[kitsuId] = System.currentTimeMillis() to resolved }
+        return resolved
+    }
+
+    /** Primer `externalId` numérico del array `data[].attributes`, o null. */
+    internal fun parseKitsuMalMapping(json: JSONObject): String? {
+        val array = json.optJSONArray("data") ?: return null
+        for (i in 0 until array.length()) {
+            val attributes = array.optJSONObject(i)?.optJSONObject("attributes") ?: continue
+            if (!attributes.optString("externalSite").equals("myanimelist/anime", true)) continue
+            val externalId = attributes.optString("externalId").trim()
+            if (externalId.isNotBlank() && externalId.all(Char::isDigit)) return externalId
+        }
+        return null
     }
 
     /** URL + cabeceras; null cuando la fuente no puede direccionar este título. */

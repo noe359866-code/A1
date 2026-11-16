@@ -210,7 +210,21 @@ object NuvioScraperResolver {
     val lastStatus = mutableStateOf("")
     private val limiter = Semaphore(4)
 
-    suspend fun resolve(type: String, videoId: String, video: Video? = null): List<StreamLink> {
+    // Caché acotada (inspirada en SkyStream, lib/features/skip y nuvio_result_cache):
+    // volver a un episodio ya resuelto no vuelve a lanzar todos los scrapers.
+    // La clave incluye la revisión de ajustes, así que cambiar repos, puente o
+    // scrapers desactivados invalida todo; TTL corto porque las URLs de los
+    // plugins suelen caducar.
+    private const val RESULT_TTL_MS = 3 * 60_000L
+    private const val RESULT_CACHE_MAX = 24
+    private val resultCache = object : LinkedHashMap<String, Pair<Long, List<StreamLink>>>(32, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Pair<Long, List<StreamLink>>>?): Boolean = size > RESULT_CACHE_MAX
+    }
+
+    /** Vacía la caché de resultados (Ajustes la usan al comprobar). */
+    fun clearResultCache() = synchronized(resultCache) { resultCache.clear() }
+
+    suspend fun resolve(type: String, videoId: String, video: Video? = null, forceRefresh: Boolean = false): List<StreamLink> {
         val base = SettingsStore.nuvioBridge.trim().trimEnd('/')
         if (base.isEmpty()) {
             lastStatus.value = "Plugins Nuvio guardados: configura el puente JS para ejecutarlos"
@@ -231,6 +245,14 @@ object NuvioScraperResolver {
             else "Nuvio no tiene scrapers activos para $type"
             return emptyList()
         }
+        val cacheKey = "$type|$videoId|${SettingsStore.revision}"
+        if (!forceRefresh) {
+            val cached = synchronized(resultCache) { resultCache[cacheKey] }
+            if (cached != null && System.currentTimeMillis() - cached.first < RESULT_TTL_MS) {
+                lastStatus.value = "${cached.second.size} enlaces del puente Nuvio (caché)"
+                return cached.second
+            }
+        }
         val links = coroutineScope {
             jobs.map { (repo, scraper) ->
                 async {
@@ -248,6 +270,9 @@ object NuvioScraperResolver {
                 }
             }.awaitAll().flatten()
         }.distinctBy { it.url }
+        // Un vacío puede ser un fallo transitorio del puente: no se cachea,
+        // así el siguiente intento vuelve a probar de verdad.
+        if (links.isNotEmpty()) synchronized(resultCache) { resultCache[cacheKey] = System.currentTimeMillis() to links }
         lastStatus.value = if (links.isEmpty()) "El puente Nuvio no entregó enlaces para este título"
         else "${links.size} enlaces del puente Nuvio"
         return links

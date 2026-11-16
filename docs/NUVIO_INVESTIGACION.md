@@ -76,7 +76,7 @@ Respuesta: `{ "streams": [{ "name", "title", "url", "quality", "headers" }] }`. 
 ## Seguridad y límites honestos
 
 - Ejecuta el puente en un equipo/contenedor aislado y solo con repositorios de confianza. Un worker de Node no impide acceso al sistema como lo haría un sandbox real.
-- El panel del QR sigue exigiendo código; guardar una URL no significa que el servidor haya respondido. Ajustes muestra el error real.
+- El panel del QR abre directo con la sesión del código (303 a `/`); si alguien entra a mano, el formulario sigue exigiendo el código; guardar una URL no significa que el servidor haya respondido. Ajustes muestra el error real.
 - No hay soporte P2P/torrent ni ejecución JS offline en el TV.
 - La disponibilidad de cada scraper externo no está garantizada. El repositorio All-in-One consultado el 2026-11-14 declaraba 66 scrapers, no un número fijo prometido por la app.
 - Las cabeceras de reproducción ya llegan a Media3 por fuente. Los subtítulos externos devueltos por scrapers aún no se incorporan como pistas laterales de Media3.
@@ -87,3 +87,14 @@ Respuesta: `{ "streams": [{ "name", "title", "url", "quality", "headers" }] }`. 
 - JVM: parsers/capacidades, URLs configuradas, panel QR, política de red, HTTP real en loopback, redirecciones, límite de cuerpo, paginación y normalización de streams.
 - Node: `node --test tools/nuvio-bridge/bridge.test.mjs` levanta un repo fixture y un puente reales, ejecuta `getStreams` en un worker y comprueba health, episodio, streams y denegación de repos no autorizados.
 - CI ejecuta ambas suites, contrato TV, `assembleDebug` y `lintDebug`.
+
+## Caché de resultados del puente (2026-11-16)
+
+`NuvioScraperResolver` guarda en memoria los enlaces resueltos por título: clave
+`tipo|id|revisión de ajustes`, TTL 3 minutos, LRU acotado a 24 entradas. Cambiar
+repositorios, puente o scrapers desactivados incrementa la revisión (y Ajustes llama
+a `clearResultCache()` al guardar repositorios), así que la configuración nueva
+nunca sirve datos viejos. Inspirado en el caché acotado de SkyStream
+(`lib/features/skip`, `nuvio_stream_service.dart`). Volver a un episodio ya resuelto
+no vuelve a lanzar todos los scrapers; el TTL corto compensa la caducidad
+habitual de las URLs de plugins.

@@ -10,6 +10,7 @@ import androidx.media3.datasource.DefaultDataSource
 import androidx.media3.datasource.DefaultHttpDataSource
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
 import androidx.media3.exoplayer.source.MediaSource
+import com.omnitv.app.BuildConfig
 import com.omnitv.app.data.NetPolicy
 import com.omnitv.app.data.StreamFormat
 import com.omnitv.app.data.StreamSource
@@ -26,7 +27,7 @@ import java.net.URI
 @OptIn(UnstableApi::class)
 internal fun streamMediaSource(context: Context, source: StreamSource): MediaSource {
     val http = DefaultHttpDataSource.Factory()
-        .setUserAgent("OmniTV/1.2 (Android TV)")
+        .setUserAgent("OmniTV/${BuildConfig.VERSION_NAME} (Android TV)")
         .setDefaultRequestProperties(source.headers)
         .setConnectTimeoutMs(10_000)
         .setReadTimeoutMs(15_000)
