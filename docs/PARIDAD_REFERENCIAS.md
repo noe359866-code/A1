@@ -50,7 +50,12 @@ proyectos se ha copiado; las funciones se reimplementan desde las APIs públicas
   cifradas como el resto de claves (Keystore AES-GCM).
 - En Ajustes → Integraciones → **Vincular Trakt** aparece el código de dispositivo
   (`trakt.tv/activate`); al confirmarlo, el televisor queda vinculado y los tokens
-  se guardan cifrados en `omni_tv_settings`.
+  se guardan cifrados en `omni_tv_settings` mediante Android Keystore (AES-GCM).
+- **Requisito de seguridad:** Trakt solo se vincula si el Keystore logra cifrar los
+  tokens. En Android 5.1/API 22 o si el Keystore falla, no se persisten tokens
+  en texto plano y la interfaz informa del problema. Los tokens plaintext de
+  versiones anteriores solo se migran si pueden cifrarse inmediatamente; en
+  caso contrario se eliminan y habrá que volver a vincular.
 - El reproductor envía `scrobble/start` al empezar, `scrobble/pause` al pausar por
   ciclo de vida y `scrobble/stop` al salir o al terminar (≥80 % = visto en Trakt).
 - Cambiar o borrar `TRAKT`/`TRAKT_SECRET` invalida los tokens (pertenecen a esa app).

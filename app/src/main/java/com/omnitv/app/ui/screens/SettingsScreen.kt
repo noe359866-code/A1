@@ -1325,6 +1325,7 @@ private fun TraktLinkDialog(onDismiss: () -> Unit) {
                 TraktService.PollResult.Linked -> linked = true
                 TraktService.PollResult.Expired -> error = "El código caducó antes de vincular."
                 TraktService.PollResult.Denied -> error = "Has denegado el acceso en Trakt."
+                TraktService.PollResult.SecureStorageUnavailable -> error = "Este televisor no pudo cifrar el token con Android Keystore. No se guardó ninguna credencial; actualiza el sistema o vuelve a vincular en un dispositivo compatible."
                 TraktService.PollResult.Failed -> error = "Trakt no respondió. Inténtalo de nuevo."
                 TraktService.PollResult.Pending -> Unit
             }

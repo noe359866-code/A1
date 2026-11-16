@@ -20,7 +20,7 @@ import org.json.JSONObject
  */
 object TraktService {
 
-    enum class PollResult { Linked, Pending, Expired, Denied, Failed }
+    enum class PollResult { Linked, Pending, Expired, Denied, SecureStorageUnavailable, Failed }
 
     /** ¿Hay credenciales de la app Trakt del usuario en el panel? */
     fun isConfigured(): Boolean = SettingsStore.traktCredentials() != null
@@ -67,7 +67,9 @@ object TraktService {
                 val json = result.value as? JSONObject ?: return PollResult.Failed
                 val tokens = TraktProtocol.parseToken(json, System.currentTimeMillis())
                     ?: return PollResult.Failed
-                SettingsStore.saveTraktTokens(tokens.accessToken, tokens.refreshToken, tokens.expiresAtMs)
+                if (!SettingsStore.saveTraktTokens(tokens.accessToken, tokens.refreshToken, tokens.expiresAtMs)) {
+                    return PollResult.SecureStorageUnavailable
+                }
                 PollResult.Linked
             }
             400 -> when (val error = (result.value as? JSONObject)?.optString("error").orEmpty()) {
@@ -109,7 +111,6 @@ object TraktService {
             val tokens = json?.let { TraktProtocol.parseToken(it, System.currentTimeMillis()) }
             if (result.status == 200 && tokens != null) {
                 SettingsStore.saveTraktTokens(tokens.accessToken, tokens.refreshToken, tokens.expiresAtMs)
-                true
             } else if (result.status in listOf(400, 401)) {
                 // Refresh rechazado de forma definitiva: la vinculación murió.
                 // Se limpia para que la interfaz diga «sin vincular» en vez de
