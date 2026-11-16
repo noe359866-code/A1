@@ -382,7 +382,7 @@ object RemoteCatalog {
                 withTimeoutOrNull(12_000L) {
                     runCatching {
                         if (AnimeCatalog.needsReload()) AnimeCatalog.refresh()
-                        AnimeCatalog.catalogFor(null)
+                        AnimeCatalog.catalogFor(null, "Todos")
                     }.getOrDefault(emptyList())
                 }.orEmpty()
             } else emptyList()
@@ -426,7 +426,7 @@ object RemoteCatalog {
     private suspend fun getNuvioManifest(): StremioManifest? = manifestMutex.withLock {
         nuvioManifestCache ?: withTimeoutOrNull(8_000L) {
             runCatching {
-                StremioClient.fetchManifest(StremioClient.NUVIO)?.let { StremioManifest.parse(it) }
+                StremioClient.fetchManifest(StremioClient.NUVIO)?.let { StremioManifestParser.parse(it) }
             }.getOrNull()
         }?.also { nuvioManifestCache = it }
     }
