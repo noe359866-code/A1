@@ -81,6 +81,8 @@ jobs:
           python3 tools/check_android_tv.py
 
       - name: Variante y publicación
+        env:
+          VERSION_OVERRIDE: ${{ github.event.inputs.version }}
         run: |
           VARIANT="${{ github.event.inputs.variant }}"
           if [ -z "$VARIANT" ]; then VARIANT="release"; fi
@@ -99,7 +101,7 @@ jobs:
               echo "::error::Las releases versionadas solo se pueden publicar desde main."
               exit 1
             fi
-            if [ -n "${{ github.event.inputs.version }}" ]; then
+            if [ -n "$VERSION_OVERRIDE" ]; then
               echo "::error::No sobrescribas versionName al publicar. Actualiza versionName y versionCode en app/build.gradle.kts."
               exit 1
             fi
@@ -148,9 +150,16 @@ jobs:
 
       - name: Versión para esta compilación
         if: github.event.inputs.version != ''
+        env:
+          VERSION_OVERRIDE: ${{ github.event.inputs.version }}
         run: |
+          # El input viaja por env, no interpolado dentro del shell.
+          if ! [[ "$VERSION_OVERRIDE" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::version debe tener formato X.Y.Z."
+            exit 1
+          fi
           # Reescribe sólo el versionName; el versionCode se mantiene.
-          sed -i -E "s/versionName *= *\"[^\"]*\"/versionName = \"${{ github.event.inputs.version }}\"/" app/build.gradle.kts
+          sed -i -E "s/versionName *= *\"[^\"]*\"/versionName = \"$VERSION_OVERRIDE\"/" app/build.gradle.kts
           grep -nE "versionCode|versionName" app/build.gradle.kts
 
       - name: Tests y compilación
