@@ -1295,7 +1295,6 @@ fun SeekBar(
                 focused = it.isFocused
                 onFocusChanged?.invoke(it.isFocused)
             }
-            .focusable()
             .onPreviewKeyEvent { event ->
                 if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                 val native = event.nativeKeyEvent
@@ -1312,12 +1311,13 @@ fun SeekBar(
                         true
                     }
                     TvKeyCodes.isConfirm(code) && onConfirm != null -> {
-                        onConfirm()
+                        if (native.repeatCount == 0) onConfirm()
                         true
                     }
                     else -> false
                 }
             }
+            .focusable()
     } else {
         Modifier
     }
