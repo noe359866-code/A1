@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -80,6 +81,7 @@ import com.omnitv.app.data.SkipSegmentService
 import com.omnitv.app.data.TraktProtocol
 import com.omnitv.app.data.TraktService
 import com.omnitv.app.data.TvKeyCodes
+import com.omnitv.app.data.TvKeypad
 import com.omnitv.app.ui.components.AvatarView
 import com.omnitv.app.ui.components.KidsChip
 import com.omnitv.app.ui.components.LocalActiveTabFocus
@@ -89,6 +91,8 @@ import com.omnitv.app.ui.components.PillButton
 import com.omnitv.app.ui.components.PinDialog
 import com.omnitv.app.ui.components.RequestTvFocus
 import com.omnitv.app.ui.components.SettingRow
+import com.omnitv.app.ui.components.TvConfirmDialog
+import com.omnitv.app.ui.components.TvKeyboard
 import com.omnitv.app.ui.components.TvToggle
 import com.omnitv.app.ui.components.consumeStrayConfirmKeyUp
 import com.omnitv.app.ui.theme.FocusScale
@@ -100,6 +104,7 @@ import com.omnitv.app.ui.theme.AppSpacing
 import com.omnitv.app.ui.theme.AppStroke
 import com.omnitv.app.ui.theme.AppType
 import com.omnitv.app.ui.theme.Background
+import com.omnitv.app.ui.theme.GlassFill
 import com.omnitv.app.ui.theme.SurfaceCard
 import com.omnitv.app.ui.theme.SurfaceElevated
 import com.omnitv.app.ui.theme.TextPrimary
@@ -124,8 +129,101 @@ enum class SettingsCategory(
     SKIP("Saltar Intro", R.drawable.ic_skip_next, "Salto automático de intro, resumen y créditos"),
     PAIRING("Vincular y Addons", R.drawable.ic_link, "Código QR, panel web en red local y APIs"),
     INTEGRATIONS("Puentes y Plugins", R.drawable.ic_server, "Addons Stremio, Nuvio y FFmpeg externo"),
-    NETWORK("Red y Privacidad", R.drawable.ic_server, "DNS sobre HTTPS de Cloudflare y seguridad local"),
+    NETWORK("Red y Privacidad", R.drawable.ic_network, "DNS sobre HTTPS de Cloudflare y seguridad local"),
     SYSTEM("Sistema", R.drawable.ic_info, "Versión de Omni TV, motor Media3 y soporte")
+}
+
+/**
+ * Entrada del buscador de Ajustes.
+ *
+ * [terms] son las palabras que el índice guarda **normalizadas** (minúsculas y
+ * sin tildes). Buscar «velocidad» tenía que encontrar «Velocidad de
+ * reproducción» y «subtitulos» tenía que encontrar «Subtítulos», así que la
+ * comparación se hace sobre texto plegado, no sobre el literal.
+ */
+private data class SettingSearchEntry(
+    val category: SettingsCategory,
+    val title: String,
+    val detail: String,
+    val terms: List<String>
+)
+
+/** Minúsculas y sin diacríticos: «Subtítulos» → «subtitulos». */
+private fun foldForSearch(text: String): String {
+    val lowered = text.lowercase()
+    val out = StringBuilder(lowered.length)
+    for (ch in lowered) {
+        when (ch) {
+            'á', 'à', 'ä', 'â' -> out.append('a')
+            'é', 'è', 'ë', 'ê' -> out.append('e')
+            'í', 'ì', 'ï', 'î' -> out.append('i')
+            'ó', 'ò', 'ö', 'ô' -> out.append('o')
+            'ú', 'ù', 'ü', 'û' -> out.append('u')
+            'ñ' -> out.append('n')
+            'ç' -> out.append('c')
+            else -> out.append(ch)
+        }
+    }
+    return out.toString()
+}
+
+/**
+ * Índice de lo que se puede buscar en Ajustes.
+ *
+ * No duplica el texto de la interfaz: es un mapa «palabra → dónde vive», y por
+ * eso incluye sinónimos que la pantalla no usa («oscurecer», «tema»,
+ * «contraseña», «idioma»). El usuario busca con sus palabras, no con las
+ * nuestras. Cada entrada lleva su categoría, que es la acción real del
+ * resultado: pulsar lleva a esa categoría.
+ *
+ * Se mantiene a mano: cuando se añada un ajuste hay que añadir su línea aquí.
+ * Es el precio de no tener un catálogo de ajustes declarativo; el comentario
+ * queda como recordatorio.
+ */
+private val SETTINGS_SEARCH_INDEX: List<SettingSearchEntry> = buildList {
+    fun entry(category: SettingsCategory, title: String, detail: String, vararg extra: String) {
+        add(
+            SettingSearchEntry(
+                category = category,
+                title = title,
+                detail = detail,
+                terms = (listOf(title, detail) + extra).map(::foldForSearch)
+            )
+        )
+    }
+
+    entry(SettingsCategory.PROFILE, "Cambiar de perfil", "Perfil activo, lista personal e infantil", "usuario", "cuenta", "avatar", "nino")
+    entry(SettingsCategory.PROFILE, "Control parental", "PIN de 4 cifras para perfiles infantiles", "pin", "contrasena", "clave", "bloqueo", "menores")
+    entry(SettingsCategory.PLAYBACK, "Autoplay", "Reproducción automática al abrir un título", "automatico", "play")
+    entry(SettingsCategory.PLAYBACK, "Siguiente episodio automático", "Cuenta atrás de 10 s al terminar", "autoplay", "serie", "episodios")
+    entry(SettingsCategory.PLAYBACK, "Iniciar silenciado", "Empieza sin audio", "mudo", "silencio", "volumen")
+    entry(SettingsCategory.PLAYBACK, "Subtítulos por defecto", "Activa los subtítulos si hay pistas", "cc", "subtitulos", "closed captions")
+    entry(SettingsCategory.QUALITY, "Calidad de vídeo", "Auto, 4K, 1080p, 720p o 480p", "resolucion", "hd", "uhd", "2160p")
+    entry(SettingsCategory.QUALITY, "Velocidad de reproducción", "0,75× a 2×", "ritmo", "acelerar", "camara lenta")
+    entry(SettingsCategory.SKIP, "Tramos saltables", "Botón «Saltar» y marcas en la barra", "intro", "creditos", "resumen", "avance")
+    entry(SettingsCategory.SKIP, "Salto automático", "Salta intro, resumen, créditos o escena final sin pulsar OK", "auto", "skip", "opening", "ending")
+    entry(SettingsCategory.SKIP, "Fuentes de tramos", "SkipDB, TheIntroDB, IntroDB y AniSkip", "basedatos", "api", "anime")
+    entry(SettingsCategory.PAIRING, "Vincular con el móvil", "Código QR y panel web en la red local", "qr", "emparejar", "telefono", "panel")
+    entry(SettingsCategory.PAIRING, "Código de emparejamiento", "Seis caracteres para el panel web", "pin", "codigo", "acceso")
+    entry(SettingsCategory.PAIRING, "Addons de Stremio", "Se instalan desde el panel web", "addons", "manifest", "extensiones")
+    entry(SettingsCategory.PAIRING, "Claves de API", "Cifradas con Android Keystore", "apikey", "token", "secretos", "credenciales")
+    entry(SettingsCategory.INTEGRATIONS, "Addons y Omni Streams", "Estado de cada addon instalado", "stremio", "addons", "streams")
+    entry(SettingsCategory.INTEGRATIONS, "Plugins de Nuvio", "Repositorios y scrapers activos", "nuvio", "scrapers", "plugins")
+    entry(SettingsCategory.INTEGRATIONS, "Trakt", "Sincroniza inicio, pausa y fin de reproducción", "progreso", "scrobble", "cuenta")
+    entry(SettingsCategory.INTEGRATIONS, "Cloudstream y FFmpeg", "Puentes externos opcionales", "extensiones", "codecs", "transcodificar")
+    entry(SettingsCategory.NETWORK, "DNS sobre HTTPS", "Resuelve nombres con Cloudflare 1.1.1.1", "doh", "dns", "cloudflare", "privacidad")
+    entry(SettingsCategory.NETWORK, "Seguridad de red", "HTTPS obligatorio; HTTP solo en red local", "http", "cifrado", "tls")
+    entry(SettingsCategory.SYSTEM, "Versión de Omni TV", "Número de versión instalada", "version", "actualizacion", "build")
+    entry(SettingsCategory.SYSTEM, "Diagnóstico de reproducción", "Último estado de Media3", "error", "soporte", "log")
+    entry(SettingsCategory.SYSTEM, "Limpiar caché de catálogos", "Portadas, fichas y enlaces resueltos", "cache", "espacio", "almacenamiento", "borrar")
+    entry(SettingsCategory.SYSTEM, "Restablecer preferencias", "Valores de fábrica sin borrar la cuenta", "reset", "reiniciar", "defecto", "fabrica")
+}
+
+/** Entradas cuyo título o detalle contienen **todas** las palabras de [query]. */
+private fun searchSettings(query: String): List<SettingSearchEntry> {
+    val words = foldForSearch(query).split(' ').filter { it.isNotBlank() }
+    if (words.isEmpty()) return emptyList()
+    return SETTINGS_SEARCH_INDEX.filter { e -> words.all { w -> e.terms.any { it.contains(w) } } }
 }
 
 /** Motivo por el que se pide el PIN en esta pantalla. */
@@ -165,6 +263,25 @@ fun SettingsScreen(
     var restoreAfterModal by remember { mutableStateOf<FocusRequester?>(null) }
     var initialFocusDone by rememberSaveable { mutableStateOf(false) }
 
+    // Buscador de ajustes: es un modo, no un campo permanente. Abre con el
+    // teclado propio de TV, filtra el índice y, al elegir un resultado, se
+    // cierra solo y deja seleccionada la categoría del ajuste.
+    var searchOpen by remember { mutableStateOf(false) }
+    var searchQuery by rememberSaveable { mutableStateOf("") }
+    val searchKeyboardFocus = remember { FocusRequester() }
+    val searchCloseFocus = remember { FocusRequester() }
+    val searchResults = if (searchOpen) searchSettings(searchQuery) else emptyList()
+
+    // Confirmaciones de las acciones destructivas de Sistema: viven en la raíz
+    // para que el diálogo no quede recortado por el panel de 426 dp.
+    var clearCacheOpen by remember { mutableStateOf(false) }
+    var resetPreferencesOpen by remember { mutableStateOf(false) }
+    // `rememberSaveable`: sobrevive a recomposiciones y a la recreación de la
+    // actividad (cambio de modo del televisor), para que «Caché limpiada» no
+    // vuelva a aparecer como pendiente.
+    var cacheCleared by rememberSaveable { mutableStateOf(false) }
+    var resetResult by rememberSaveable { mutableStateOf<String?>(null) }
+
     val scope = rememberCoroutineScope()
     var bridgeStatus by remember { mutableStateOf("Comprobando puente…") }
     var cloudstreamStatus by remember { mutableStateOf("Comprobando Cloudstream…") }
@@ -176,7 +293,8 @@ fun SettingsScreen(
     var traktDialogVisible by remember { mutableStateOf(false) }
     val traktLinkFocus = remember { FocusRequester() }
 
-    val anyModalOpen = qualityDialogVisible || speedDialogVisible || traktDialogVisible || pinTask != null
+    val anyModalOpen = qualityDialogVisible || speedDialogVisible || traktDialogVisible ||
+        pinTask != null || searchOpen || clearCacheOpen || resetPreferencesOpen
     val suppressAutoFocus = LocalSuppressContentAutoFocus.current
     val tabContentFocus = LocalTabContentFocus.current
     SideEffect {
@@ -193,6 +311,17 @@ fun SettingsScreen(
                 withFrameNanos { }
                 if (runCatching { target.requestFocus() }.isSuccess) return@LaunchedEffect
             }
+        }
+    }
+
+    // Al cerrar el buscador, el foco vuelve a la categoría activa en vez de
+    // quedarse huérfano en un nodo que acaba de desaparecer.
+    LaunchedEffect(searchOpen) {
+        if (!searchOpen) {
+            withFrameNanos { }
+            val target = categoryRequesters[selectedCategory]
+                ?: categoryRequesters.getValue(SettingsCategory.PROFILE)
+            runCatching { target.requestFocus() }
         }
     }
 
@@ -240,11 +369,40 @@ fun SettingsScreen(
         }
     }
 
-    Box(Modifier.fillMaxSize().background(Background)) {
+    Box(
+        Modifier
+            .fillMaxSize()
+            .background(Background)
+            // Atajo de mando para el buscador. Va en la raíz y no en la lista
+            // porque los eventos de tecla solo pasan por los ancestros del nodo
+            // enfocado; además se registra en la cadena de preview, así que no
+            // le quita el OK a ninguna fila.
+            .onPreviewKeyEvent { event ->
+                // Tecla de color azul del mando (KEYCODE_PROG_BLUE): la app no
+                // la usaba y es el sitio natural para un atajo de búsqueda.
+                // `!gated`: con el PIN parental pendiente no se abre ni el
+                // buscador, que también revela qué ajustes existen.
+                if (event.type == KeyEventType.KeyDown &&
+                    !searchOpen &&
+                    !gated &&
+                    TvKeyCodes.isSearchShortcut(event.nativeKeyEvent.keyCode)
+                ) {
+                    searchOpen = true
+                    true
+                } else {
+                    false
+                }
+            }
+    ) {
         if (!gated) Row(
             Modifier
                 .fillMaxSize()
-                .padding(horizontal = AppSpacing.screenMargin, vertical = 24.dp)
+                .padding(
+                    start = AppSpacing.screenMargin + AppSpacing.navRail,
+                    end = AppSpacing.screenMargin,
+                    top = AppSpacing.safeTop,
+                    bottom = AppSpacing.safeBottom
+                )
         ) {
             /* ------------------------------------------------------------------ */
             /*  Panel Izquierdo: Categorías de Ajustes                            */
@@ -257,10 +415,51 @@ fun SettingsScreen(
                     .verticalScroll(rememberScrollState())
                     .padding(end = 24.dp)
             ) {
-                Text("Ajustes", style = AppType.hero, color = TextPrimary)
+                /**
+                 * Entrada al buscador. Se dibuja como una fila más del panel para
+                 * que el D-pad la alcance sin trucos, pero **no** es una
+                 * categoría: al pulsarla abre el teclado en lugar de cambiar de
+                 * panel. Es la función que más falta hacía: con 8 categorías y
+                 * 27 ajustes, encontrar «velocidad» obligaba a recordar en cuál
+                 * de las ocho vivía.
+                 */
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .clip(AppRadius.md)
+                        .background(GlassFill)
+                        .border(1.dp, Color.White.copy(alpha = 0.12f), AppRadius.md)
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null
+                        ) { searchOpen = true }
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Image(
+                        painter = painterResource(R.drawable.ic_search),
+                        contentDescription = null,
+                        modifier = Modifier.size(20.dp),
+                        colorFilter = ColorFilter.tint(TextSecondary)
+                    )
+                    Spacer(Modifier.width(12.dp))
+                    Text(
+                        if (searchQuery.isBlank()) "Buscar en Ajustes" else "Buscar: $searchQuery",
+                        style = AppType.controlLabel,
+                        color = if (searchQuery.isBlank()) TextSecondary else TextPrimary,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+                Spacer(Modifier.height(14.dp))
+
+                // 40 sp, como el resto de pestañas (Películas, Anime, Plataformas,
+                // Buscar). A 54 sp este título era el único de la navegación que
+                // rompía la escala y se comía 20 dp de alto en una columna de 492.
+                Text("Ajustes", style = AppType.screenTitle, color = TextPrimary)
                 Spacer(Modifier.height(6.dp))
                 Text("Configuración de Omni TV", style = AppType.metadata, color = TextSecondary)
-                Spacer(Modifier.height(24.dp))
+                Spacer(Modifier.height(18.dp))
 
                 SettingsCategory.entries.forEachIndexed { index, category ->
                     val integrationsTotal = SettingsStore.customAddons.size +
@@ -296,7 +495,7 @@ fun SettingsScreen(
                                 }
                             )
                     )
-                    Spacer(Modifier.height(8.dp))
+                    Spacer(Modifier.height(4.dp))
                 }
             }
 
@@ -388,7 +587,12 @@ fun SettingsScreen(
                     }
 
                     SettingsCategory.SYSTEM -> {
-                        SystemSettingsContent()
+                        SystemSettingsContent(
+                            cacheCleared = cacheCleared,
+                            resetResult = resetResult,
+                            onRequestClearCache = { clearCacheOpen = true },
+                            onRequestReset = { resetPreferencesOpen = true }
+                        )
                     }
                 }
             }
@@ -397,6 +601,65 @@ fun SettingsScreen(
         /* ------------------------------------------------------------------ */
         /*  Diálogos Modales                                                  */
         /* ------------------------------------------------------------------ */
+
+        if (clearCacheOpen) {
+            TvConfirmDialog(
+                title = "¿Limpiar la caché de catálogos?",
+                message = "Se vaciarán las portadas y fichas ya descargadas. La próxima vez que abras " +
+                    "un catálogo tardará algo más en cargar. No se borra nada de tu cuenta.",
+                confirmText = "Limpiar",
+                cancelText = "Cancelar",
+                isDanger = false,
+                onConfirm = {
+                    clearCacheOpen = false
+                    RemoteCatalog.invalidateCache()
+                    AnimeCatalog.invalidateCache()
+                    NuvioPluginManager.clearCache()
+                    NuvioScraperResolver.clearResultCache()
+                    cacheCleared = true
+                },
+                onDismiss = { clearCacheOpen = false }
+            )
+        }
+
+        if (resetPreferencesOpen) {
+            TvConfirmDialog(
+                title = "¿Restablecer las preferencias?",
+                message = "Autoplay, siguiente episodio, sonido inicial, subtítulos, calidad, velocidad, " +
+                    "saltos de intro y plugins desactivados vuelven a como venían de fábrica.",
+                confirmText = "Restablecer",
+                cancelText = "Cancelar",
+                isDanger = true,
+                onConfirm = {
+                    resetPreferencesOpen = false
+                    val changed = SettingsStore.resetPreferences()
+                    resetResult = if (changed == 0) {
+                        "Ya estaba todo en los valores de fábrica"
+                    } else {
+                        "$changed ${if (changed == 1) "ajuste restablecido" else "ajustes restablecidos"}"
+                    }
+                },
+                onDismiss = { resetPreferencesOpen = false }
+            )
+        }
+
+        if (searchOpen) {
+            SettingsSearchPanel(
+                query = searchQuery,
+                results = searchResults,
+                onQueryChange = { searchQuery = it },
+                onSelect = { category ->
+                    selectedCategory = category
+                    searchOpen = false
+                    // El resultado deja seleccionada su categoría; el panel
+                    // derecho se queda en la cabecera, que es lo que el usuario
+                    // necesita ver para decidir el siguiente paso.
+                },
+                onDismiss = { searchOpen = false },
+                keyboardFocus = searchKeyboardFocus,
+                closeFocus = searchCloseFocus
+            )
+        }
 
         if (traktDialogVisible) {
             TraktLinkDialog(onDismiss = { traktDialogVisible = false })
@@ -566,7 +829,10 @@ private fun CategoryItem(
                 indication = null,
                 onClick = onClick
             )
-            .padding(horizontal = 16.dp, vertical = 14.dp),
+            // 48 dp de alto exactos: el mínimo táctil/de mando de la guía de TV.
+            // Antes eran 64 dp (14 dp de relleno) y solo cabían 5 de las 8
+            // categorías; con 6 dp de relleno caben 6 sin bajar del mínimo.
+            .padding(horizontal = 16.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Box(
@@ -784,25 +1050,25 @@ private fun PlaybackSettingsContent() {
             title = "Autoplay",
             subtitle = "Los vídeos empiezan a reproducirse automáticamente al abrirlos",
             onClick = { SettingsStore.setAutoplayEnabled(!SettingsStore.autoplay) },
-            trailing = { TvToggle(SettingsStore.autoplay, onCheckedChange = { SettingsStore.setAutoplayEnabled(it) }) }
+            trailing = { TvToggle(SettingsStore.autoplay, onCheckedChange = { SettingsStore.setAutoplayEnabled(it) }, focusable = false) }
         )
         SettingRow(
             title = "Siguiente automático",
             subtitle = "Al terminar un episodio, reproduce el siguiente con cuenta atrás de 10 s",
             onClick = { SettingsStore.setAutoNextEnabled(!SettingsStore.autoNext) },
-            trailing = { TvToggle(SettingsStore.autoNext, onCheckedChange = { SettingsStore.setAutoNextEnabled(it) }) }
+            trailing = { TvToggle(SettingsStore.autoNext, onCheckedChange = { SettingsStore.setAutoNextEnabled(it) }, focusable = false) }
         )
         SettingRow(
             title = "Iniciar silenciado",
             subtitle = "Los vídeos comienzan con el volumen silenciado",
             onClick = { SettingsStore.setMutedStartEnabled(!SettingsStore.mutedStart) },
-            trailing = { TvToggle(SettingsStore.mutedStart, onCheckedChange = { SettingsStore.setMutedStartEnabled(it) }) }
+            trailing = { TvToggle(SettingsStore.mutedStart, onCheckedChange = { SettingsStore.setMutedStartEnabled(it) }, focusable = false) }
         )
         SettingRow(
             title = "Subtítulos por defecto",
             subtitle = "Activa los subtítulos automáticamente si hay pistas disponibles",
             onClick = { SettingsStore.setSubtitlesByDefault(!SettingsStore.subtitlesDefault) },
-            trailing = { TvToggle(SettingsStore.subtitlesDefault, onCheckedChange = { SettingsStore.setSubtitlesByDefault(it) }) }
+            trailing = { TvToggle(SettingsStore.subtitlesDefault, onCheckedChange = { SettingsStore.setSubtitlesByDefault(it) }, focusable = false) }
         )
     }
 }
@@ -841,9 +1107,12 @@ private fun SkipSettingsContent() {
             title = "Tramos saltables",
             subtitle = "Muestra el botón «Saltar» y marca los tramos en la barra con marcas de la comunidad",
             onClick = { SettingsStore.saveSkipSegmentsEnabled(!enabled) },
-            trailing = { TvToggle(enabled, onCheckedChange = { SettingsStore.saveSkipSegmentsEnabled(it) }) }
+            trailing = { TvToggle(enabled, onCheckedChange = { SettingsStore.saveSkipSegmentsEnabled(it) }, focusable = false) }
         )
-        listOf(SkipKind.INTRO, SkipKind.RECAP, SkipKind.CREDITS, SkipKind.PREVIEW).forEach { kind ->
+        // `SkipKind.entries` y no una lista literal: POST_CREDITS existía en el
+        // reproductor (color propio en la barra) pero se quedó fuera de Ajustes,
+        // así que no había forma de activar su salto automático.
+        SkipKind.entries.forEach { kind ->
             SettingRow(
                 title = "Saltar ${kind.label} automáticamente",
                 subtitle = if (enabled) {
@@ -853,7 +1122,7 @@ private fun SkipSettingsContent() {
                         "Salto instantáneo sin requerir pulsar el botón del mando"
                     }
                 } else {
-                    "Activa «Tramos saltables» arriba para habilitar el salto automático"
+                    "Al activarlo se activan también los «Tramos saltables»"
                 },
                 onClick = {
                     val next = !(kind.name in SettingsStore.autoSkipKinds && enabled)
@@ -863,6 +1132,7 @@ private fun SkipSettingsContent() {
                 trailing = {
                     TvToggle(
                         kind.name in SettingsStore.autoSkipKinds && enabled,
+                        focusable = false,
                         onCheckedChange = {
                             if (!enabled) SettingsStore.saveSkipSegmentsEnabled(true)
                             SettingsStore.setAutoSkip(kind, it)
@@ -877,9 +1147,9 @@ private fun SkipSettingsContent() {
                 title = "Fuente $source",
                 subtitle = when (source) {
                     SkipSegmentParser.SOURCE_SKIPDB -> "Ajusta marcas a la duración del stream · Requiere id IMDb"
-                    SkipSegmentParser.SOURCE_THEINTRODB -> "Intro, resumen, créditos y avance · Admite id TMDB o IMDb"
+                    SkipSegmentParser.SOURCE_THEINTRODB -> "Intro, resumen y créditos · Admite id TMDB o IMDb"
                     SkipSegmentParser.SOURCE_ANISKIP -> "Opening, ending y resumen de anime · Usa id MyAnimeList (los ids de Kitsu se traducen automáticamente)"
-                    else -> "Intro, resumen, créditos y escena final · Requiere id IMDb"
+                    else -> "Intro, resumen, créditos, avance y escena final · Requiere id IMDb"
                 },
                 onClick = {
                     val checked = !active
@@ -893,6 +1163,7 @@ private fun SkipSettingsContent() {
                 trailing = {
                     TvToggle(
                         active,
+                        focusable = false,
                         onCheckedChange = { checked ->
                             if (!checked && active && SettingsStore.skipSources.size <= 1) {
                                 sourceHint = "Debe quedar al menos una fuente activa"
@@ -909,6 +1180,24 @@ private fun SkipSettingsContent() {
             if (sourceHint != null) {
                 Text(sourceHint!!, style = AppType.metadata, color = Accent)
                 Spacer(Modifier.height(6.dp))
+            }
+            if (SettingsStore.skipSources.size < SettingsStore.SKIP_SOURCE_NAMES.size) {
+                Text(
+                    "Hay ${SettingsStore.skipSources.size} de ${SettingsStore.SKIP_SOURCE_NAMES.size} fuentes activas.",
+                    style = AppType.metadata,
+                    color = TextSecondary
+                )
+                Spacer(Modifier.height(8.dp))
+                PillButton(
+                    text = "Activar todas las fuentes",
+                    iconRes = R.drawable.ic_refresh,
+                    primary = false,
+                    onClick = {
+                        SettingsStore.SKIP_SOURCE_NAMES.forEach { SettingsStore.setSkipSource(it, true) }
+                        sourceHint = null
+                    }
+                )
+                Spacer(Modifier.height(12.dp))
             }
             StatusLine("Última consulta", SkipSegmentService.lastStatus.value.ifBlank { "Sin consultas todavía" })
             Text(
@@ -1156,6 +1445,7 @@ private fun IntegrationsSettingsContent(
                         trailing = {
                             TvToggle(
                                 checked = repoEnabled && userEnabled,
+                                focusable = false,
                                 onCheckedChange = { enabled ->
                                     if (repoEnabled) {
                                         SettingsStore.setNuvioScraperEnabled(scraper.id, enabled)
@@ -1414,12 +1704,12 @@ private fun TraktLinkDialog(onDismiss: () -> Unit) {
 
 @Composable
 private fun NetworkSettingsContent() {
-    SettingsCard(iconRes = R.drawable.ic_server, title = "Red y Privacidad") {
+    SettingsCard(iconRes = R.drawable.ic_network, title = "Privacidad de la red") {
         SettingRow(
             title = "DNS sobre HTTPS de Cloudflare (1.1.1.1)",
             subtitle = "Resuelve nombres mediante DoH seguro (cloudflare-dns.com). El certificado se valida estrictamente contra el dominio original.",
             onClick = { SettingsStore.saveCloudflareDns(!SettingsStore.cloudflareDns) },
-            trailing = { TvToggle(SettingsStore.cloudflareDns, onCheckedChange = { SettingsStore.saveCloudflareDns(it) }) }
+            trailing = { TvToggle(SettingsStore.cloudflareDns, onCheckedChange = { SettingsStore.saveCloudflareDns(it) }, focusable = false) }
         )
         Column(Modifier.fillMaxWidth().padding(horizontal = 22.dp, vertical = 16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -1435,9 +1725,12 @@ private fun NetworkSettingsContent() {
 }
 
 @Composable
-private fun SystemSettingsContent() {
-    var cacheCleared by remember { mutableStateOf(false) }
-
+private fun SystemSettingsContent(
+    cacheCleared: Boolean,
+    resetResult: String?,
+    onRequestClearCache: () -> Unit,
+    onRequestReset: () -> Unit
+) {
     SettingsCard(iconRes = R.drawable.ic_info, title = "Información del sistema") {
         SettingRow(
             title = "Versión de Omni TV",
@@ -1460,25 +1753,60 @@ private fun SystemSettingsContent() {
                 )
             }
         )
+    }
+
+    Spacer(Modifier.height(20.dp))
+
+    /*
+     * Dos acciones destructivas en su propia tarjeta, y ninguna se ejecuta al
+     * primer OK: antes «Limpiar caché» vaciaba cuatro cachés sin preguntar.
+     * Los avisos viven en SettingsScreen (no aquí) porque un diálogo de 540 dp
+     * dentro de un panel de 426 dp se recorta: se dibujan en la raíz.
+     */
+    SettingsCard(iconRes = R.drawable.ic_delete, title = "Mantenimiento") {
         Column(Modifier.fillMaxWidth().padding(horizontal = 22.dp, vertical = 16.dp)) {
-            StatusLine(
-                "Caché de catálogos",
-                if (cacheCleared) "Caché limpiada · se actualizará al abrir el catálogo"
-                else "Incluye portada, plataformas, estudios, anime, plugins Nuvio y sus enlaces resueltos"
+            Text("Caché de catálogos", style = AppType.body, color = TextPrimary)
+            Spacer(Modifier.height(4.dp))
+            Text(
+                "Portadas, plataformas, estudios, anime, plugins Nuvio y enlaces ya resueltos. " +
+                    "Se vuelve a descargar al abrir cada catálogo.",
+                style = AppType.metadata,
+                color = TextSecondary
             )
-            Spacer(Modifier.height(10.dp))
+            Spacer(Modifier.height(12.dp))
             PillButton(
                 text = if (cacheCleared) "Caché limpiada" else "Limpiar caché de catálogos",
                 iconRes = R.drawable.ic_delete,
                 primary = false,
-                onClick = {
-                    RemoteCatalog.invalidateCache()
-                    AnimeCatalog.invalidateCache()
-                    NuvioPluginManager.clearCache()
-                    NuvioScraperResolver.clearResultCache()
-                    cacheCleared = true
-                }
+                enabled = !cacheCleared,
+                onClick = onRequestClearCache
             )
+            if (cacheCleared) {
+                Spacer(Modifier.height(8.dp))
+                StatusLine("Última limpieza", "Hecha en esta sesión")
+            }
+        }
+
+        Column(Modifier.fillMaxWidth().padding(horizontal = 22.dp, vertical = 16.dp)) {
+            Text("Preferencias", style = AppType.body, color = TextPrimary)
+            Spacer(Modifier.height(4.dp))
+            Text(
+                "Devuelve reproducción, saltos de intro y plugins desactivados a sus valores de fábrica. " +
+                    "No borra perfiles, PIN parental, addons, claves de API ni la vinculación de Trakt.",
+                style = AppType.metadata,
+                color = TextSecondary
+            )
+            Spacer(Modifier.height(12.dp))
+            PillButton(
+                text = "Restablecer preferencias",
+                iconRes = R.drawable.ic_refresh,
+                primary = false,
+                onClick = onRequestReset
+            )
+            if (resetResult != null) {
+                Spacer(Modifier.height(8.dp))
+                StatusLine("Resultado", resetResult)
+            }
         }
     }
 }
@@ -1691,6 +2019,193 @@ private fun <T> OptionSelectDialog(
                         }
                 )
             }
+        }
+    }
+}
+
+/* -------------------------------------------------------------------------- */
+/*  Buscador de Ajustes                                                       */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Panel de búsqueda de Ajustes.
+ *
+ * Por qué una pantalla completa y no un campo de texto en la lista:
+ * - En TV no hay cursor ni teclado físico garantizado, así que escribir exige
+ *   el teclado propio (el del sistema no se puede conducir con el mando).
+ * - El panel derecho mide 426 dp: un campo, una lista de resultados y un
+ *   teclado no caben a la vez sin letra de 12 sp, que en un salón no se lee.
+ *
+ * Disposición: resultados arriba (lo que el usuario mira) y teclado abajo (lo
+ * que el usuario pulsa), con el foco entrando por el teclado y saliendo hacia
+ * arriba en la primera fila de teclas ([TvKeyboard] en modo `embedded`), que es
+ * el único modo del teclado con ganchos de salida.
+ *
+ * La búsqueda **no ejecuta** el ajuste: lleva a la categoría donde vive, que es
+ * lo honesto en un ajuste que puede necesitar contexto (por ejemplo, activar el
+ * salto automático de un tipo concreto). El texto del resultado lo dice.
+ */
+@Composable
+private fun SettingsSearchPanel(
+    query: String,
+    results: List<SettingSearchEntry>,
+    onQueryChange: (String) -> Unit,
+    onSelect: (SettingsCategory) -> Unit,
+    onDismiss: () -> Unit,
+    keyboardFocus: FocusRequester,
+    closeFocus: FocusRequester
+) {
+    val keyUpGuard = remember { ConfirmKeyUpGuard(initialSuppressUntilDown = true) }
+    val resultRequesters = remember(results.size) { List(results.size) { FocusRequester() } }
+    val lastResultFocus = resultRequesters.lastOrNull()
+
+    RequestTvFocus(keyboardFocus, key = "settingsSearch")
+    BackHandler(onBack = onDismiss)
+
+    Box(
+        Modifier
+            .fillMaxSize()
+            .background(Background.copy(alpha = 0.98f))
+            .consumeStrayConfirmKeyUp(keyUpGuard)
+            .onPreviewKeyEvent { event ->
+                if (event.type == KeyEventType.KeyDown && TvKeyCodes.isBack(event.nativeKeyEvent.keyCode)) {
+                    onDismiss()
+                    true
+                } else {
+                    false
+                }
+            }
+            .padding(
+                start = AppSpacing.screenMargin,
+                end = AppSpacing.screenMargin,
+                top = AppSpacing.safeTop,
+                bottom = AppSpacing.safeBottom
+            )
+    ) {
+        Column(
+            Modifier
+                .fillMaxSize()
+                .focusGroup()
+        ) {
+            Row(
+                Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Image(
+                    painter = painterResource(R.drawable.ic_search),
+                    contentDescription = null,
+                    modifier = Modifier.size(28.dp),
+                    colorFilter = ColorFilter.tint(Accent)
+                )
+                Spacer(Modifier.width(14.dp))
+                Text("Buscar en Ajustes", style = AppType.screenTitle, color = TextPrimary)
+                Spacer(Modifier.weight(1f))
+                PillButton(
+                    text = "Cerrar",
+                    primary = false,
+                    onClick = onDismiss,
+                    modifier = Modifier.focusRequester(closeFocus)
+                )
+            }
+
+            Spacer(Modifier.height(10.dp))
+
+            Text(
+                if (query.isBlank()) {
+                    "Escribe con el mando: ${SETTINGS_SEARCH_INDEX.size} ajustes indexados. " +
+                        "Los resultados llevan a la categoría del ajuste."
+                } else {
+                    "«$query» · ${results.size} de ${SETTINGS_SEARCH_INDEX.size} ajustes"
+                },
+                style = AppType.metadata,
+                color = TextSecondary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+
+            Spacer(Modifier.height(12.dp))
+
+            if (results.isEmpty()) {
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 190.dp)
+                        .clip(AppRadius.md)
+                        .background(SurfaceCard)
+                        .border(1.dp, Color.White.copy(alpha = 0.08f), AppRadius.md)
+                        .padding(20.dp)
+                ) {
+                    Text(
+                        if (query.isBlank()) {
+                            "Empieza a escribir: «calidad», «pin», «trakt», «cache»…"
+                        } else {
+                            "Ningún ajuste coincide con «$query». Prueba con una palabra más corta " +
+                                "o con el nombre de la categoría."
+                        },
+                        style = AppType.body,
+                        color = TextSecondary
+                    )
+                }
+            } else {
+                Column(
+                    Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 190.dp)
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    results.forEachIndexed { index, result ->
+                        var focused by remember { mutableStateOf(false) }
+                        Row(
+                            Modifier
+                                .fillMaxWidth()
+                                .clip(AppRadius.md)
+                                .background(if (focused) SurfaceElevated else SurfaceCard)
+                                .then(
+                                    if (focused) Modifier.border(AppStroke.focus, Color.White, AppRadius.md)
+                                    else Modifier.border(1.dp, Color.White.copy(alpha = 0.08f), AppRadius.md)
+                                )
+                                .focusRequester(resultRequesters[index])
+                                .focusProperties {
+                                    up = if (index > 0) resultRequesters[index - 1] else FocusRequester.Cancel
+                                    down = when {
+                                        index < resultRequesters.lastIndex -> resultRequesters[index + 1]
+                                        else -> keyboardFocus
+                                    }
+                                }
+                                .onFocusChanged { focused = it.isFocused }
+                                .clickable(
+                                    interactionSource = remember { MutableInteractionSource() },
+                                    indication = null
+                                ) { onSelect(result.category) }
+                                .padding(horizontal = 18.dp, vertical = 10.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(Modifier.weight(1f)) {
+                                Text(result.title, style = AppType.body, color = TextPrimary, maxLines = 1)
+                                Text(result.detail, style = AppType.metadata, color = TextSecondary, maxLines = 1)
+                            }
+                            Spacer(Modifier.width(12.dp))
+                            Text(result.category.title, style = AppType.chip, color = Accent, maxLines = 1)
+                        }
+                    }
+                }
+            }
+
+            Spacer(Modifier.weight(1f))
+
+            TvKeyboard(
+                embedded = true,
+                onKey = { key -> onQueryChange(TvKeypad.apply(query, key)) },
+                onDone = {},
+                onClear = { onQueryChange("") },
+                firstKeyFocus = keyboardFocus,
+                onExitUp = {
+                    // La primera fila de teclas sube al último resultado visible.
+                    val target = lastResultFocus ?: closeFocus
+                    runCatching { target.requestFocus() }.isSuccess
+                }
+            )
         }
     }
 }

@@ -48,7 +48,6 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
@@ -149,8 +148,10 @@ fun SearchScreen(onOpenDetail: (Video) -> Unit) {
         }
     }
 
-    val screenWidthDp = LocalConfiguration.current.screenWidthDp
-    val gridColumns = if (screenWidthDp >= 1120) 4 else 3
+    // `Adaptive` calcula las columnas con el ancho REAL de la celda, en vez de un
+    // umbral fijo sobre `screenWidthDp` que jamás se cumplía en un canvas de TV
+    // (960 dp) y que además no descuenta la barra lateral ni el margen.
+    val gridColumns = GridCells.Adaptive(minSize = 150.dp)
 
     val activeTabFocus = LocalActiveTabFocus.current
     val gridState = rememberLazyGridState()
@@ -199,9 +200,9 @@ fun SearchScreen(onOpenDetail: (Video) -> Unit) {
         Modifier
             .fillMaxSize()
             .background(Background)
-            .padding(horizontal = AppSpacing.screenMargin)
+            .padding(start = AppSpacing.screenMargin + AppSpacing.navRail, end = AppSpacing.screenMargin)
     ) {
-        Spacer(Modifier.height(10.dp))
+        Spacer(Modifier.height(AppSpacing.safeTop))
 
         // Fila superior: caja de consulta visible encima del teclado + chips rápidos a la derecha
         Row(
@@ -369,7 +370,7 @@ fun SearchScreen(onOpenDetail: (Video) -> Unit) {
                             .weight(1f)
                             .fillMaxWidth()
                             .focusGroup(),
-                        columns = GridCells.Fixed(gridColumns),
+                        columns = gridColumns,
                         contentPadding = PaddingValues(start = 6.dp, end = 6.dp, top = 8.dp, bottom = 40.dp),
                         horizontalArrangement = Arrangement.spacedBy(16.dp),
                         verticalArrangement = Arrangement.spacedBy(20.dp)

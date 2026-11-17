@@ -36,7 +36,7 @@ Omni TV es una aplicación **exclusiva para Android TV / Google TV** con estánd
 |------|---------|
 | **Solo Android TV** | `leanback` requerido, `touchscreen` opcional, `LEANBACK_LAUNCHER` + banner 320×180 |
 | **Diseño inspirado en tvOS** | Superficies #16161C, foco con escala por jerarquía (`FocusScale` 1.02–1.12), borde blanco, botones píldora, velos degradados |
-| **Navegación D-pad** | Pestañas tvOS, `focusRestorer`, foco inicial inteligente en cada pantalla |
+| **Navegación D-pad** | Barra lateral flotante, `focusRestorer`, foco inicial inteligente en cada pantalla |
 | **Perfiles Netflix** | Selector con avatares ilustrados, modo infantil con PIN parental opcional, Mi Lista y Continuar viendo por perfil |
 | **Reproductor Xuper TV** | Información del título/siguiente, multi-servidor, ABR HLS, audio/subs/calidad, zoom, ±10s, temporizador de pausa |
 | **Catálogo real** | Cinemeta + Nuvio + addons del usuario + cinejoy (plataformas) + sweetfox (estudios) |
@@ -52,14 +52,14 @@ Omni TV es una aplicación **exclusiva para Android TV / Google TV** con estánd
 | # | Pantalla | Descripción |
 |---|----------|-------------|
 | 0 | **Perfiles** | "¿Quién está viendo?" con avatares, KIDS chip, Gestionar/Añadir |
-| 1 | **Inicio** | Héroe cinematográfico + filas dinámicas (Mi Lista, Continuar viendo, catálogo real, Solo en..., Por estudio) |
+| 1 | **Inicio** | Héroe cinematográfico + filas dinámicas (Mi Lista, Continuar viendo, catálogo real, Solo en..., Por estudio); esqueleto con brillo mientras carga |
 | 2 | **Películas** | Rejilla 5 columnas del catálogo real, contador y estados vacíos profesionales |
 | 3 | **Anime** | Filas Jikan/Kitsu, filtro Todos/Jikan/Kitsu, rejilla exclusiva de anime, episodios reales y «Cargar más» |
 | 4 | **Plataformas** | 17 proveedores (Netflix, Disney+, HBO...) + 24 estudios (Marvel, Pixar, Ghibli...) con catálogos reales |
 | 5 | **Buscar** | Campo + chips de género + teclado D-pad + resultados combinados local/remoto/anime |
 | 6 | **Detalle** | Fondo con backdrop + velos, match %, metadatos completos, episodios, reparto, Más como esto |
 | 7 | **Reproductor** | Media3 con todos los controles tvOS: EPG, servidores, calidad, audio, subtítulos, aspecto, velocidad, timer |
-| 8 | **Ajustes** | Tarjetas: Perfil, Control parental, Vinculación (QR + sesión), Reproducción, Calidad, Red (DoH), Sistema |
+| 8 | **Ajustes** | Dos paneles con **buscador** (tecla azul del mando): Perfil, Control parental, Vinculación (QR + sesión), Reproducción, Calidad, Saltos de intro, Red (DoH), Sistema (mantenimiento y restablecer preferencias) |
 
 ---
 
@@ -83,6 +83,7 @@ Basado en Media3 ExoPlayer con investigación de Xuper TV:
 - **Adaptativo:** HLS/DASH ABR + selector manual (Auto / 1080p / 720p...)
 - **Pistas:** Audio, subtítulos, calidad vía `DefaultTrackSelector`
 - **Saltar intro/resumen/créditos:** tiempos de SkipDB, TheIntroDB e IntroDB; lectura anónima activa para todos, sin clave en la app ([detalle](docs/SKIP_SEGMENTS.md))
+- **Buscador de ajustes:** 25 ajustes indexados con sinónimos y sin tildes; se abre con la tecla azul del mando o desde el panel izquierdo y lleva a la categoría del ajuste ([detalle](docs/REVISION_AJUSTES.md))
 - **Compatibilidad multimedia:** diagnóstico de códecs en Ajustes y puente FFmpeg externo opcional (remux HLS / audio AAC), sin FFmpeg dentro del APK ([detalle](docs/FFMPEG_BRIDGE.md))
 - **Aspecto:** Ajustar / Llenar / Zoom / 16:9 / 4:3 / 21:9
 - **Transporte:** ⏪10s / 10s⏩, barra con buffer, D-pad directo
@@ -180,14 +181,14 @@ Solución: teclado propio superpuesto:
 
 - **Paleta:** Background #0B0B0F · Surface #16161C · Elevated #1F1F26 · Accent #0A84FF · AccentGreen #30D158
 - **Tipografía 10 pies:** hero 54sp · title 40sp · section 27sp · body 21sp · metadata 18sp · chip 15sp (mínimo legible a 3m)
-- **Geometría:** radios 4/8/14/22dp + cápsula (tokens `AppRadius`), espaciado interno 4–48dp (escala informal con literales; `AppSpacing.screenMargin = 48dp` es el único token obligatorio, overscan), 5 columnas
+- **Geometría:** radios 4/8/14/22dp + cápsula (tokens `AppRadius`), espaciado interno 4–48dp (escala informal con literales). Overscan con tokens: `AppSpacing.screenMargin = 48dp` lateral, `safeTop`/`safeBottom = 27dp` vertical (guía de layouts de Android TV) y `navRail = 84dp` de hueco para la barra flotante; 5 columnas fijas en catálogos y `GridCells.Adaptive` en la búsqueda
 - **Chips de filtro:** `TvChip` por defecto a `AppType.body` 21sp (lectura a distancia); `AppType.chip` 15sp versalitas queda para badges y etiquetas cortas
-- **Foco:** anillo 3dp blanco siempre visible + escala por jerarquía con nombre (`FocusScale` en `Dimens.kt`): filas de episodio 1.02 · chips/píldoras/categorías 1.05 · pestañas/Continuar viendo/tiles de plataforma 1.06 · pósters/tarjetas 1.07 · controles medios (teclas, logo chips, «+»/más, píldoras del reproductor) 1.08 · controles grandes (botones circulares, gestión de perfiles) 1.10 · tiles de perfil/toggle 1.12; al pulsar, los controles principales se contraen a ×0.94 (**pressed state**) + sombra; regla: foco=blanco, seleccionado=azul
+- **Foco:** anillo 3dp blanco siempre visible + escala en los **tres factores de la guía de foco de Android TV** (1.025 / 1.05 / 1.10, en `FocusScale` con alias por componente); al pulsar, los controles se contraen a ×0.94 (**pressed state**) + sombra; el estado `disabled` atenúa fondo y texto y desactiva el clic (matriz default/focused/pressed × enabled/disabled); regla: foco=blanco, seleccionado=azul
 - **Pulsación:** los componentes principales responden a OK/Enter (contracción ×0.94 vía `collectIsPressedAsState`) aunque `indication = null`; el estado `disabled` sigue sin variante visual propia (ver «Limitaciones»)
 - **Contraste (WCAG 2.x, medido):** TextPrimary 18:1 · TextSecondary 6,0:1 · TextMuted 8,9:1 · LiveAccentText 6,6:1 (blanco-sobre-acento badges/botones: ≥4,5:1 vía `BadgeAccent` 4,78:1) · TextTertiary 2,15:1 solo para adornos
 - **Badges:** fondo sólido `BadgeAccent` (#0070E0) con blanco — 4,78:1 AA (el acento #0A84FF se reserva para foco/rellenos/iconos, no para texto de 15 sp)
 - **Componentes unificados:** PosterCard, PillButton, TvChip, TvToggle, HeroBanner, SectionRow — un patrón, una implementación
-- **Barra de 6 pestañas:** la activa/enfocada muestra etiqueta; el resto se compacta a icono con `contentDescription`, sin recortes ni desbordamiento
+- **Barra lateral de 6 pestañas:** compacta (76 dp) y se expande a 224 dp al recibir el foco; flota sobre el contenido para que expandirse no recomponga las rejillas. La activa muestra etiqueta; el resto se compacta a icono con `contentDescription`
 
 ---
 

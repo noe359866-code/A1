@@ -4,25 +4,50 @@
  * Ejecuta proveedores JS de confianza en un worker desechable con tiempo límite.
  * NO es un sandbox de seguridad: ejecutar solo en una máquina/contenedor aislado.
  *
- * node bridge.mjs --repo https://.../manifest.json --host 0.0.0.0 --port 8788
- * En TV: Plugins Nuvio = esa URL; Puente JS = http://IP-DE-ESTE-EQUIPO:8788
+ * node bridge.mjs --repo https://.../manifest.json --host 0.0.0.0 --port 8788 --token SECRETO
+ * En TV: Plugins Nuvio = esa URL; Puente JS = http://IP-DE-ESTE-EQUIPO:8788 (+ token)
  *
  * Contrato: GET /health; POST /scrape/{id} con repoUrl, filename, type, id, extra.
  * Los JS deben estar compilados para Nuvio y exportar getStreams(tmdbId,type,season,episode).
  * Para ids IMDb se necesita TMDB_API_KEY (consulta find de TMDB); no se inventa el id.
+ *
+ * Seguridad: fuera de loopback exige token. El puente ejecuta JS de proveedores
+ * en un worker, así que un puerto abierto en la LAN no puede quedar sin credencial.
  */
 import http from 'node:http';
 import { Worker } from 'node:worker_threads';
 import { fileURLToPath } from 'node:url';
+import { createHash, timingSafeEqual } from 'node:crypto';
 import path from 'node:path';
 
 const args = process.argv.slice(2);
 function option(name, fallback) { const i = args.indexOf(name); return i >= 0 && args[i + 1] ? args[i + 1] : fallback; }
 const repos = args.flatMap((v, i) => v === '--repo' && args[i + 1] ? [args[i + 1]] : []);
-const host = option('--host', '0.0.0.0');
+const host = option('--host', '127.0.0.1');
 const port = Number(option('--port', '8788'));
+const token = option('--token', process.env.OMNI_NUVIO_TOKEN || '');
 const timeoutMs = Math.min(60000, Math.max(1000, Number(option('--timeout', '20000'))));
-if (!repos.length) { console.error('Falta --repo URL (se puede repetir). No se ejecutan URLs arbitrarias enviadas por clientes.'); process.exit(2); }
+/** Un puerto abierto en la red sin credencial es un fallo de configuración fatal. */
+export function configError(host, token) {
+  const loopback = ['127.0.0.1', '::1', 'localhost'].includes(host);
+  if (!loopback && !token) return 'Al escuchar fuera de loopback exige --token o OMNI_NUVIO_TOKEN.';
+  return null;
+}
+
+/** Comparación en tiempo constante: el token es la única credencial del puente. */
+export function authorized(req, expected) {
+  if (!expected) return true;
+  // Una cabecera duplicada puede llegar como array: sin este typeof,
+  // startsWith lanzaría TypeError y la respuesta sería 502 en vez de 401.
+  const raw = req.headers.authorization;
+  const header = typeof raw === 'string' ? raw : '';
+  const bearer = header.startsWith('Bearer ') ? header.slice(7) : '';
+  const candidate = bearer || req.headers['x-bridge-token'] || '';
+  if (typeof candidate !== 'string' || !candidate) return false;
+  const a = createHash('sha256').update(candidate).digest();
+  const b = createHash('sha256').update(expected).digest();
+  return timingSafeEqual(a, b);
+}
 const index = new Map();
 async function jsonGet(url) {
   const r = await fetch(url, { signal: AbortSignal.timeout(12000), headers: { Accept: 'application/json' } });
@@ -43,7 +68,6 @@ async function refreshRepos() {
     }
   }
 }
-await refreshRepos();
 let active = 0;
 const workerFile = fileURLToPath(new URL('./worker.cjs', import.meta.url));
 const moduleRoot = option('--modules', process.cwd());
@@ -69,6 +93,7 @@ async function scrape(scraper, body) {
 function send(res, status, obj) { res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(obj)); }
 const server = http.createServer(async (req, res) => {
   try {
+    if (!authorized(req, token)) return send(res, 401, { error: 'token requerido', streams: [] });
     const path = new URL(req.url, 'http://localhost').pathname;
     if (req.method === 'GET' && path === '/health') {
       const scraperIds = [...new Set([...index.values()].map(s => s.id))];
@@ -87,4 +112,14 @@ const server = http.createServer(async (req, res) => {
     try { const result = await scrape(scraper, body); send(res, result.error ? 502 : 200, result); } finally { active--; }
   } catch (e) { if (!res.headersSent) send(res, 502, { error: String(e.message || e).slice(0, 300), streams: [] }); }
 });
-server.listen(port, host, () => console.log(`Omni Nuvio bridge: http://${host}:${port} · ${index.size} scrapers permitidos. Ejecuta solo JS de confianza en un entorno aislado.`));
+async function main() {
+  const problem = configError(host, token)
+  if (problem) { console.error(problem); process.exit(2); }
+  await refreshRepos();
+  server.listen(port, host, () => console.log(`Omni Nuvio bridge: http://${host}:${port} · ${index.size} scrapers permitidos · token=${token ? 'obligatorio' : 'no (loopback)'}. Ejecuta solo JS de confianza en un entorno aislado.`));
+}
+
+if (process.argv[1] && import.meta.url === new URL(process.argv[1], 'file://').href) {
+  if (!repos.length) { console.error('Falta --repo URL (se puede repetir). No se ejecutan URLs arbitrarias enviadas por clientes.'); process.exit(2); }
+  main().catch(e => { console.error(e.message || e); process.exit(1); });
+}

@@ -67,8 +67,16 @@ jobs:
       - name: Puente Nuvio (HTTP y worker JS)
         run: node --test tools/nuvio-bridge/bridge.test.mjs
 
+      # El puente se niega a escuchar fuera de loopback sin token y protege
+      # /health y /scrape: es lo que impide dejar un puerto abierto en la LAN.
+      - name: Puente Nuvio (token obligatorio fuera de loopback)
+        run: node --test tools/nuvio-bridge/auth.test.mjs
+
       - name: Puente Cloudstream (runtime externo)
         run: node --test tools/cloudstream-bridge/bridge.test.mjs
+
+      - name: Puente Cloudstream (token obligatorio fuera de loopback)
+        run: node --test tools/cloudstream-bridge/auth.test.mjs
 
       - name: Puente FFmpeg (remux/transcode externo)
         run: node --test tools/ffmpeg-bridge/bridge.test.mjs

@@ -11,7 +11,7 @@ en pantalla.
 |---|---|---|
 | `TvKeyCodes`, `DpadRepeatGate`, `PlayerScrubRates`, `ConfirmKeyUpGuard` | `data/TvDpadLogic.kt` | Lógica pura JVM-testeable: mapeo de mandos Android TV, límite de repetición (75 ms horizontal / 105 ms vertical), aceleración de seeks, protección contra `ACTION_UP` huérfano |
 | `RequestTvFocus`, `dpadRepeatThrottle`, `consumeStrayConfirmKeyUp`, `ProvideHorizontalTvBringIntoView`, `bringIntoViewIfChildrenAreFocused`, `LocalActiveTabFocus`, `LocalTabContentFocus`, `LocalSuppressContentAutoFocus` | `ui/components/TvFocus.kt` | Primitivas de foco: petición con reintentos por fotograma, throttle de flechas mantenidas, anti-focus-fantasma, saltos de scroll con margen seguro |
-| `TvScaffold` + `TopTabBar` + `TabPill` | `ui/components/Components.kt` | Barra de pestañas tvOS: preview con retardo de 150 ms, `OK`/`Abajo` en la pestaña seleccionada → contenido, `↑` desde el contenido → pestaña activa |
+| `TvScaffold` + `TopTabBar` (sidebar) + `SidebarItem` | `ui/components/Components.kt` | **Barra lateral flotante**: compacta de 76 dp, expande a 224 dp al recibir el foco. No empuja el contenido (se superpone con `zIndex`), así que expandirse no recompone las rejillas. `OK` sobre la pestaña activa → contenido; `◀` desde el borde del contenido → barra (`focusProperties { left = activeTabFocus }`) |
 | `SeekBar` interactivo | `ui/components/Components.kt` | `◀/▶` sin bloqueo: pasos 10/20/30/60 s con repetición; `OK` confirma |
 | Teclado en pantalla (`TvKeyboard`, `TvTextField`, `TvKeypad`) | `ui/components/` | Foco atrapado en modo panel; en buscador, salidas explícitas `↑` (chips/pestañas), `↓` (sugerencias), `→` (rejilla) vía callbacks de borde |
 
@@ -99,3 +99,48 @@ Corrección (en `DetailScreen.kt`):
   (no cambian APIs ni llamadas de Compose), pero siguen sin validación en pantalla.
 - Tests JVM existentes (`TraktServiceTest`/`StreamRankerTest`/`SkipKitsuMappingTest`/
   `PairingRouterTest`) no cubren UI; no se han ejecutado aquí.
+
+## Estado tras la revisión de diseño (2026-11-17)
+
+- **Barra lateral flotante.** `TvScaffold` ya no usa `Row` con peso: el contenido
+  ocupa el ancho completo y la barra se dibuja encima (`Box` + `align(CenterStart)`
+  + `zIndex(2f)`). Motivo: al expandirse de 76 a 224 dp dentro de un `Row`, el póster
+  de Películas pasaba de **141,6 dp a 112,0 dp (−21 %)** y la rejilla se recalculaba
+  en plena navegación.
+- **El contenido reserva `AppSpacing.navRail` (84 dp)** al inicio: 8 dp de aire +
+  76 dp de barra compacta. Cuando la barra crece, se superpone al contenido en lugar
+  de desplazarlo. Aplicado en Inicio (filas), Películas, Anime, Plataformas, Buscar,
+  Ajustes y las secciones `SectionRow` / `Top10SectionRow` / `OnlyOnSection` /
+  `StudioStripSection`.
+- **`FocusScale` consolidado** en los tres factores de la guía de foco de Android TV
+  (1.025 / 1.05 / 1.10). Los nombres anteriores (`row`, `chip`, `tab`, `card`, `key`,
+  `control`, `hero`) se conservan como alias, así que las 32 llamadas no cambian.
+- **Pendiente de dispositivo:** el salto de foco barra → contenido se apoya en
+  `LocalTabContentFocus`; cada pantalla registra su primer `FocusRequester` con
+  `SideEffect`. Si una pantalla nueva no lo hace, `OK` en la barra no movería el foco
+  y el CI no lo detectaría (no hay tests de UI).
+
+## Estado tras la revisión de Ajustes (2026-11-17)
+
+- **`TvToggle(focusable = ...)`.** Nuevo parámetro (`true` por defecto). Con `false`
+  se anula `canFocus` **y** el `clickable`, y el interruptor pasa a ser solo el
+  indicador del valor de su fila. Se usa en las 9 filas de Ajustes, donde la fila
+  entera ya es el objetivo del mando: antes había **dos paradas de foco por fila** y
+  dos anillos blancos encendiéndose por separado. En `EditProfileScreen` (la fila no
+  es pulsable) sigue siendo `true`, que es su única parada.
+- **Atajo de búsqueda: tecla azul del mando.** `TvKeyCodes.KEYCODE_PROG_BLUE = 186` y
+  `isSearchShortcut(code)`, en `TvDpadLogic` (lógica pura, testeable en JVM). Se
+  escucha con `onPreviewKeyEvent` en la raíz de `SettingsScreen`, que es ancestro de
+  cualquier nodo enfocado, y no intercepta OK ni flechas. No se abre con el PIN
+  parental pendiente (`!gated`).
+- **Panel de búsqueda y foco.** Usa `TvKeyboard(embedded = true)`, el único modo del
+  teclado con ganchos de borde: la primera fila de teclas sube al **último resultado**
+  (o al botón «Cerrar» si no hay resultados) y la última fila baja al teclado. El foco
+  inicial entra por el teclado (`RequestTvFocus`), y al cerrar el panel vuelve a la
+  categoría activa.
+- **Categoría de Ajustes: 48 dp.** Es el mínimo de objetivo de mando de la guía de TV.
+  Con 6 dp de relleno vertical caben **6 de las 8** categorías sin desplazar (antes 5).
+  Queda por validar en pantalla que el icono de 36 dp y el texto de 19 sp no se
+  recorten a esa altura.
+- **Foco con el buscador abierto.** `searchOpen` entra en `anyModalOpen`, así que el
+  mecanismo de `restoreAfterModal` no compite con la vuelta de foco propia del panel.

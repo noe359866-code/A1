@@ -79,7 +79,7 @@ fun StudioStripSection(
         ProvideHorizontalTvBringIntoView {
             LazyRow(
                 horizontalArrangement = Arrangement.spacedBy(16.dp),
-                contentPadding = PaddingValues(horizontal = AppSpacing.screenMargin, vertical = 14.dp),
+                contentPadding = PaddingValues(start = AppSpacing.screenMargin + AppSpacing.navRail, end = AppSpacing.screenMargin, vertical = 14.dp),
                 modifier = Modifier
                     .fillMaxWidth()
                     .focusGroup()

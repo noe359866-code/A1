@@ -36,6 +36,8 @@ object TvKeyCodes {
     const val KEYCODE_NUMPAD_9 = 153
     const val KEYCODE_NUMPAD_ENTER = 160
     const val KEYCODE_INFO = 165
+    /** Tecla de color azul de los mandos de TV: atajo de búsqueda en Ajustes. */
+    const val KEYCODE_PROG_BLUE = 186
     const val KEYCODE_CAPTIONS = 175
     const val KEYCODE_MEDIA_AUDIO_TRACK = 222
     const val KEYCODE_MEDIA_STEP_FORWARD = 272
@@ -68,6 +70,15 @@ object TvKeyCodes {
         keyCode == KEYCODE_DPAD_CENTER ||
             keyCode == KEYCODE_ENTER ||
             keyCode == KEYCODE_NUMPAD_ENTER
+
+    /**
+     * Tecla de color azul: atajo del buscador de Ajustes.
+     *
+     * Se usa una tecla de color, y no OK ni una letra, porque los mandos de TV
+     * la traen dedicada y la app no la usaba: así el atajo no le quita el OK a
+     * ninguna fila ni depende de que haya teclado.
+     */
+    fun isSearchShortcut(keyCode: Int): Boolean = keyCode == KEYCODE_PROG_BLUE
 
     fun isBack(keyCode: Int): Boolean =
         keyCode == KEYCODE_BACK || keyCode == KEYCODE_ESCAPE

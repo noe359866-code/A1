@@ -4,24 +4,54 @@
  * Delega en un runtime Cloudstream externo (por defecto Stream Goat CLI),
  * que el operador instala y configura con sus repositorios/extensiones.
  *
- * node bridge.mjs --host 0.0.0.0 --port 8789 --runtime cloudstream-linux
- * TV: Extensiones Cloudstream = http://IP:8789
+ * node bridge.mjs --host 0.0.0.0 --port 8789 --runtime cloudstream-linux --token SECRETO
+ * TV: Extensiones Cloudstream = http://IP:8789  (+ token en «Añadir APIs»)
  *
  * Contrato: GET /health; POST /resolve {title,type,year,imdbId,tmdbId,season,episode}.
  * El runtime debe ofrecer search/info/links. Se parsea su salida CLI documentada;
  * no se ejecutan comandos recibidos desde la red.
+ *
+ * Seguridad: fuera de loopback exige token (cada /resolve lanza un proceso
+ * externo, así que un puerto abierto en la LAN no puede quedar sin credencial).
  */
 import http from 'node:http';
 import { spawn } from 'node:child_process';
+import { createHash, timingSafeEqual } from 'node:crypto';
 
 const args = process.argv.slice(2);
 const opt = (name, fallback) => { const i = args.indexOf(name); return i >= 0 && args[i + 1] ? args[i + 1] : fallback; };
-const host = opt('--host', '0.0.0.0');
+const host = opt('--host', '127.0.0.1');
 const port = Number(opt('--port', '8789'));
 const runtime = opt('--runtime', 'cloudstream-linux');
+const token = opt('--token', process.env.OMNI_CLOUDSTREAM_TOKEN || '');
 const providers = args.flatMap((v, i) => v === '--provider' && args[i + 1] ? [args[i + 1]] : []);
 const timeoutMs = Math.min(120000, Math.max(5000, Number(opt('--timeout', '45000'))));
+
+if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error('--port inválido');
+const loopback = ['127.0.0.1', '::1', 'localhost'].includes(host);
+if (!loopback && !token) {
+  throw new Error('al escuchar fuera de loopback exige --token o OMNI_CLOUDSTREAM_TOKEN');
+}
+
 let active = 0;
+
+/**
+ * Comparación en tiempo constante: el token es la única credencial del puente.
+ * Sin token configurado solo se acepta tráfico de loopback (ver arriba).
+ */
+export function authorized(req, expected) {
+  if (!expected) return true;
+  // Una cabecera duplicada puede llegar como array: sin este typeof,
+  // startsWith lanzaría TypeError y la respuesta sería 502 en vez de 401.
+  const raw = req.headers.authorization;
+  const header = typeof raw === 'string' ? raw : '';
+  const bearer = header.startsWith('Bearer ') ? header.slice(7) : '';
+  const candidate = bearer || req.headers['x-bridge-token'] || '';
+  if (typeof candidate !== 'string' || !candidate) return false;
+  const a = createHash('sha256').update(candidate).digest();
+  const b = createHash('sha256').update(expected).digest();
+  return timingSafeEqual(a, b);
+}
 
 function run(commandArgs) {
   return new Promise((resolve, reject) => {
@@ -110,6 +140,7 @@ function send(res, status, obj) { res.writeHead(status, { 'Content-Type': 'appli
 if (process.argv[1] && import.meta.url === new URL(process.argv[1], 'file://').href) {
   const server = http.createServer(async (req, res) => {
     try {
+      if (!authorized(req, token)) return send(res, 401, { error: 'token requerido', streams: [] });
       const path = new URL(req.url, 'http://localhost').pathname;
       if (req.method === 'GET' && path === '/health') {
         const out = await run(['providers']);
@@ -124,5 +155,5 @@ if (process.argv[1] && import.meta.url === new URL(process.argv[1], 'file://').h
       try { send(res, 200, await resolve(JSON.parse(Buffer.concat(chunks).toString('utf8')))); } finally { active--; }
     } catch (e) { if (!res.headersSent) send(res, e.status || 502, { error: String(e.message || e).slice(0, 500), streams: [] }); }
   });
-  server.listen(port, host, () => console.log(`Omni Cloudstream bridge: http://${host}:${port} · runtime=${runtime}. Instala/configura las extensiones en el runtime externo.`));
+  server.listen(port, host, () => console.log(`Omni Cloudstream bridge: http://${host}:${port} · runtime=${runtime} · token=${token ? 'obligatorio' : 'no (loopback)'}. Instala/configura las extensiones en el runtime externo.`));
 }

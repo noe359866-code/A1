@@ -39,7 +39,6 @@ import com.omnitv.app.data.PlaybackResolver
 import com.omnitv.app.data.ProfileStore
 import com.omnitv.app.data.Providers
 import com.omnitv.app.data.RemoteCatalog
-import com.omnitv.app.data.SettingsStore
 import com.omnitv.app.data.StremioClient
 import com.omnitv.app.data.Studios
 import com.omnitv.app.data.Video
@@ -146,19 +145,15 @@ fun OmniTvApp() {
             )
         }
 
+        // Un único punto de control de la navegación: la barra lateral solo
+        // pide el cambio de pestaña y es aquí donde se aplica. El PIN parental
+        // de Ajustes lo exige la propia SettingsScreen (ver el gate `gated`),
+        // así que no se duplica la comprobación en dos sitios.
         TvScaffold(
             tabs = appTabs,
             currentRoute = currentRoute,
             onTabSelected = navController::selectTab,
             showTopBar = showTopBar,
-            onPreviewTab = { tab ->
-                val kidsPinGate = tab.route == Routes.SETTINGS &&
-                    SettingsStore.parentalPinEnabled &&
-                    ProfileStore.currentProfile?.isKids == true
-                if (!kidsPinGate) {
-                    navController.selectTab(tab)
-                }
-            },
             trailing = profileBadge
         ) {
             NavHost(

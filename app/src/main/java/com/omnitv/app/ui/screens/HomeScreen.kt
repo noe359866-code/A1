@@ -45,6 +45,7 @@ import com.omnitv.app.ui.components.PillButton
 import com.omnitv.app.ui.components.SectionRow
 import com.omnitv.app.ui.components.StudioStripSection
 import com.omnitv.app.ui.components.Top10SectionRow
+import com.omnitv.app.ui.theme.AppSpacing
 import com.omnitv.app.ui.theme.AppType
 import com.omnitv.app.ui.theme.Background
 import com.omnitv.app.ui.theme.TextPrimary
@@ -173,7 +174,7 @@ fun HomeScreen(
             .background(Background)
             .then(if (activeTabFocus != null) Modifier.focusProperties { left = activeTabFocus } else Modifier),
         verticalArrangement = Arrangement.spacedBy(24.dp),
-        contentPadding = PaddingValues(bottom = 56.dp)
+        contentPadding = PaddingValues(start = AppSpacing.navRail, bottom = 56.dp)
     ) {
         item(key = "hero") {
             if (activeFeatured != null) {

@@ -10,11 +10,16 @@ Omni TV **no carga archivos `.cs3`/DEX ni ejecuta extensiones dentro del televis
 
 ```bash
 node tools/cloudstream-bridge/bridge.mjs --host 0.0.0.0 --port 8789 \
-  --runtime cloudstream-linux
+  --runtime cloudstream-linux --token UN_TOKEN_LARGO
 # Opcional: repetir --provider Nombre para limitar qué proveedores se consultan.
 ```
 
-4. En el panel QR del televisor, **Extensiones Cloudstream**, guarda `http://IP-DEL-EQUIPO:8789`.
+> **El token es obligatorio al escuchar fuera de loopback.** Cada `/resolve`
+> lanza un proceso externo, así que el puente se niega a arrancar en `0.0.0.0`
+> sin credencial (`--token` o `OMNI_CLOUDSTREAM_TOKEN`). En loopback
+> (`127.0.0.1`, valor por defecto) no hace falta.
+
+4. En el panel QR del televisor, **Extensiones Cloudstream**, guarda `http://IP-DEL-EQUIPO:8789` y, si el puente usa token, añádelo en **Añadir APIs** como `CLOUDSTREAM_BRIDGE=UN_TOKEN_LARGO`. La app lo envía como `Authorization: Bearer`.
 5. Abre Ajustes → **Comprobar manifests y puentes**. Al reproducir, StreamHub consulta este puente en paralelo con Stremio/Nuvio.
 
 ## Contrato

@@ -38,13 +38,20 @@ Se incluye un puente de referencia en `tools/nuvio-bridge/bridge.mjs` (Node 20+)
 # Solo repositorios de confianza. El worker NO es un sandbox de seguridad.
 node tools/nuvio-bridge/bridge.mjs \
   --repo https://raw.githubusercontent.com/D3adlyRocket/All-in-One-Nuvio/refs/heads/main/manifest.json \
-  --host 0.0.0.0 --port 8788
+  --host 0.0.0.0 --port 8788 --token UN_TOKEN_LARGO
 ```
+
+> **El token es obligatorio al escuchar fuera de loopback.** El puente ejecuta
+> JS de proveedores en un worker, así que se niega a arrancar en `0.0.0.0` sin
+> credencial (`--token` o `OMNI_NUVIO_TOKEN`). En loopback (`127.0.0.1`, valor
+> por defecto) no hace falta.
 
 En el panel QR del televisor:
 
 1. **Plugins Nuvio → URLs de manifest**: la misma URL del repo.
-2. **Puente JS**: `http://IP-DEL-EQUIPO:8788` (misma LAN).
+2. **Puente JS**: `http://IP-DEL-EQUIPO:8788` (misma LAN). Si el puente usa
+   token, añádelo en **Añadir APIs** como `NUVIO_BRIDGE=UN_TOKEN_LARGO`; la app
+   lo envía como `Authorization: Bearer`.
 3. Guardar y abrir Ajustes → **Comprobar manifests y puente**.
 
 El puente solo ejecuta repositorios autorizados con `--repo` al arrancar; no acepta que un cliente le mande ejecutar una URL arbitraria. Descarga el archivo `filename` declarado, lo ejecuta en un worker desechable con límite de tiempo/memoria y llama a:

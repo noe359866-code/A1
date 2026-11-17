@@ -18,7 +18,6 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.focusable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Arrangement
@@ -41,7 +40,6 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
@@ -64,7 +62,9 @@ import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.focusRestorer
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.StrokeCap
@@ -77,6 +77,8 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -100,6 +102,8 @@ import com.omnitv.app.ui.theme.Background
 import com.omnitv.app.ui.theme.BadgeAccent
 import com.omnitv.app.ui.theme.Danger
 import com.omnitv.app.ui.theme.FocusScale
+import com.omnitv.app.ui.theme.GlassBorder
+import com.omnitv.app.ui.theme.GlassDark
 import com.omnitv.app.ui.theme.GlassFill
 import com.omnitv.app.ui.theme.GlassFillStrong
 import com.omnitv.app.ui.theme.LiveAccentText
@@ -113,6 +117,7 @@ import com.omnitv.app.ui.theme.TextPrimary
 import com.omnitv.app.ui.theme.TextSecondary
 import com.omnitv.app.ui.theme.TextTertiary
 import com.omnitv.app.ui.theme.appTween
+import com.omnitv.app.ui.theme.rememberReducedMotion
 import java.util.Locale
 
 /* -------------------------------------------------------------------------- */
@@ -149,7 +154,6 @@ fun TopTabBar(
     onSelect: (TabItem) -> Unit,
     modifier: Modifier = Modifier,
     activeTabFocus: FocusRequester? = null,
-    onPreviewSelect: ((TabItem) -> Unit)? = null,
     onEnterContent: (() -> Unit)? = null,
     onBarFocusChanged: ((Boolean) -> Unit)? = null,
     trailing: @Composable () -> Unit = {}
@@ -162,57 +166,64 @@ fun TopTabBar(
     )
     val focusManager = LocalFocusManager.current
 
+    // La barra ya no se estira a toda la altura: es una superficie flotante con
+    // margen de overscan (27 dp arriba/abajo), para que el contenido se vea
+    // detrás y la expansión no recorte el layout de la pantalla.
     Column(
         modifier = modifier
             .width(width)
             .fillMaxHeight()
-            .background(Surface.copy(alpha = 0.98f))
-            .onFocusChanged {
-                railHasFocus = it.hasFocus
-                onBarFocusChanged?.invoke(it.hasFocus)
-            }
-            .focusGroup()
-            .padding(horizontal = if (railHasFocus) 14.dp else 10.dp, vertical = 24.dp),
-        horizontalAlignment = if (railHasFocus) Alignment.Start else Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(10.dp)
+            .padding(vertical = AppSpacing.safeTop, horizontal = 8.dp),
+        verticalArrangement = Arrangement.Center
     ) {
-        Row(
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(bottom = 22.dp),
-            horizontalArrangement = Arrangement.Center,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text("O", style = AppType.brand, color = Accent)
-            if (railHasFocus) {
-                Spacer(Modifier.width(8.dp))
-                Text("Omni TV", style = AppType.brand, color = TextPrimary, maxLines = 1)
-            }
-        }
-
-        tabs.forEach { tab ->
-            val selected = tab.route == currentRoute
-            SidebarItem(
-                tab = tab,
-                selected = selected,
-                expanded = railHasFocus,
-                modifier = if (selected && activeTabFocus != null) {
-                    Modifier.focusRequester(activeTabFocus)
-                } else Modifier,
-                onFocus = { },
-                onActivate = {
-                    if (selected) {
-                        if (onEnterContent != null) onEnterContent()
-                        else focusManager.moveFocus(FocusDirection.Right)
-                    } else onSelect(tab)
+                .clip(AppRadius.lg)
+                .background(GlassDark)
+                .border(1.dp, GlassBorder, AppRadius.lg)
+                .onFocusChanged {
+                    railHasFocus = it.hasFocus
+                    onBarFocusChanged?.invoke(it.hasFocus)
                 }
-            )
-        }
+                .focusGroup()
+                .padding(horizontal = if (railHasFocus) 14.dp else 10.dp, vertical = 24.dp),
+            horizontalAlignment = if (railHasFocus) Alignment.Start else Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = 22.dp),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text("O", style = AppType.brand, color = Accent)
+                if (railHasFocus) {
+                    Spacer(Modifier.width(8.dp))
+                    Text("Omni TV", style = AppType.brand, color = TextPrimary, maxLines = 1)
+                }
+            }
 
-        Spacer(Modifier.weight(1f))
-        if (railHasFocus) {
-            trailing()
-        } else {
+            tabs.forEach { tab ->
+                val selected = tab.route == currentRoute
+                SidebarItem(
+                    tab = tab,
+                    selected = selected,
+                    expanded = railHasFocus,
+                    modifier = if (selected && activeTabFocus != null) {
+                        Modifier.focusRequester(activeTabFocus)
+                    } else Modifier,
+                    onActivate = {
+                        if (selected) {
+                            if (onEnterContent != null) onEnterContent()
+                            else focusManager.moveFocus(FocusDirection.Right)
+                        } else onSelect(tab)
+                    }
+                )
+            }
+
+            Spacer(Modifier.height(14.dp))
             // El perfil permanece accesible en el extremo inferior de la barra.
             trailing()
         }
@@ -225,7 +236,6 @@ private fun SidebarItem(
     selected: Boolean,
     expanded: Boolean,
     modifier: Modifier = Modifier,
-    onFocus: () -> Unit,
     onActivate: () -> Unit
 ) {
     var focused by remember { mutableStateOf(false) }
@@ -255,10 +265,7 @@ private fun SidebarItem(
             .clip(AppRadius.md)
             .background(fill)
             .then(if (focused) Modifier.border(AppStroke.focus, Background, AppRadius.md) else Modifier)
-            .onFocusChanged {
-                focused = it.isFocused
-                if (it.isFocused) onFocus()
-            }
+            .onFocusChanged { focused = it.isFocused }
             .clickable(interactionSource = interactionSource, indication = null, onClick = onActivate)
             .padding(horizontal = if (expanded) 14.dp else 0.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -287,7 +294,6 @@ fun TvScaffold(
     currentRoute: String?,
     onTabSelected: (TabItem) -> Unit,
     showTopBar: Boolean = true,
-    onPreviewTab: ((TabItem) -> Unit)? = null,
     trailing: @Composable () -> Unit = {},
     content: @Composable () -> Unit
 ) {
@@ -330,12 +336,19 @@ fun TvScaffold(
         LocalTabContentFocus provides tabContentFocus,
         LocalSuppressContentAutoFocus provides suppressAutoContentFocus
     ) {
-        Row(
+        Box(
             Modifier
                 .fillMaxSize()
                 .background(Background)
                 .dpadRepeatThrottle()
         ) {
+            // El contenido ocupa SIEMPRE el ancho completo. La barra lateral
+            // flota encima: si empujara el contenido, expandirse de 76 a 224 dp
+            // al enfocar recompondría las rejillas mientras el usuario navega
+            // (el póster de Películas pasaba de 142 a 112 dp, −21 %).
+            Box(Modifier.fillMaxSize()) {
+                content()
+            }
             if (showTopBar) {
                 TopTabBar(
                     tabs = tabs,
@@ -345,7 +358,6 @@ fun TvScaffold(
                         onTabSelected(tab)
                         enterTick++
                     },
-                    onPreviewSelect = null,
                     onEnterContent = {
                         enterContentRequested = true
                         enterTick++
@@ -355,11 +367,9 @@ fun TvScaffold(
                         if (!focused) enterContentRequested = false
                     },
                     activeTabFocus = activeTabFocus,
-                    trailing = trailing
+                    trailing = trailing,
+                    modifier = Modifier.align(Alignment.CenterStart).zIndex(2f)
                 )
-            }
-            Box(Modifier.weight(1f).fillMaxHeight()) {
-                content()
             }
         }
     }
@@ -377,7 +387,13 @@ fun PillButton(
     danger: Boolean = false,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
-    onFocus: (() -> Unit)? = null
+    onFocus: (() -> Unit)? = null,
+    /**
+     * Estado deshabilitado de la matriz oficial de foco de Android TV
+     * (default/focused/pressed × enabled/disabled). Antes no existía: una acción
+     * inactiva no tenía forma visual de comunicarlo.
+     */
+    enabled: Boolean = true
 ) {
     var focused by remember { mutableStateOf(false) }
     val interactionSource = remember { MutableInteractionSource() }
@@ -392,6 +408,7 @@ fun PillButton(
     )
 
     val background = when {
+        !enabled -> GlassFill.copy(alpha = 0.10f)
         danger && focused -> Danger
         danger -> Danger.copy(alpha = 0.22f)
         primary && focused -> Color.White
@@ -400,6 +417,7 @@ fun PillButton(
         else -> GlassFill
     }
     val contentColor = when {
+        !enabled -> TextTertiary               // inactivo: sin promesa de pulsación
         danger && !focused -> LiveAccentText // 5,1:1 sobre el relleno translúcido (AA)
         danger -> OnLight                    // enfocado: oscuro sobre Danger (≈5,6:1, simétrico al primario)
         primary -> OnLight
@@ -409,14 +427,14 @@ fun PillButton(
 
     Row(
         modifier = modifier
-            .zIndex(if (focused) 1f else 0f)
+            .zIndex(if (focused && enabled) 1f else 0f)
             .height(60.dp)
-            .graphicsLayer { scaleX = scale; scaleY = scale }
-            .shadow(if (focused && primary) 14.dp else 0.dp, AppRadius.pill, clip = false)
+            .graphicsLayer { scaleX = if (enabled) scale else 1f; scaleY = if (enabled) scale else 1f }
+            .shadow(if (focused && primary && enabled) 14.dp else 0.dp, AppRadius.pill, clip = false)
             .clip(AppRadius.pill)
             .background(background)
             .then(
-                if (focused) Modifier.border(AppStroke.focus, ringColor, AppRadius.pill) else Modifier
+                if (focused && enabled) Modifier.border(AppStroke.focus, ringColor, AppRadius.pill) else Modifier
             )
             .onFocusChanged {
                 focused = it.isFocused
@@ -425,6 +443,7 @@ fun PillButton(
             .clickable(
                 interactionSource = interactionSource,
                 indication = null,
+                enabled = enabled,
                 onClick = onClick
             )
             .padding(horizontal = 30.dp),
@@ -857,11 +876,11 @@ fun SectionRow(
             row.title,
             style = AppType.sectionTitle,
             color = TextPrimary,
-            modifier = Modifier.padding(start = AppSpacing.screenMargin, bottom = 4.dp)
+            modifier = Modifier.padding(start = AppSpacing.screenMargin + AppSpacing.navRail, bottom = 4.dp)
         )
-        ProvideHorizontalTvBringIntoView {
+        ProvideHorizontalTvBringIntoView(leadingPadding = AppSpacing.screenMargin + AppSpacing.navRail) {
             LazyRow(
-                contentPadding = PaddingValues(horizontal = AppSpacing.screenMargin, vertical = 14.dp),
+                contentPadding = PaddingValues(start = AppSpacing.screenMargin + AppSpacing.navRail, end = AppSpacing.screenMargin, vertical = 14.dp),
                 horizontalArrangement = Arrangement.spacedBy(20.dp),
                 modifier = Modifier
                     .fillMaxWidth()
@@ -911,7 +930,7 @@ fun Top10SectionRow(
     var focusedRankIndex by remember { mutableIntStateOf(-1) }
     Column(modifier.fillMaxWidth().bringIntoViewIfChildrenAreFocused()) {
         Row(
-            modifier = Modifier.padding(start = AppSpacing.screenMargin, bottom = 4.dp),
+            modifier = Modifier.padding(start = AppSpacing.screenMargin + AppSpacing.navRail, bottom = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
@@ -924,7 +943,7 @@ fun Top10SectionRow(
         }
         ProvideHorizontalTvBringIntoView {
             LazyRow(
-                contentPadding = PaddingValues(horizontal = AppSpacing.screenMargin, vertical = 14.dp),
+                contentPadding = PaddingValues(start = AppSpacing.screenMargin + AppSpacing.navRail, end = AppSpacing.screenMargin, vertical = 14.dp),
                 horizontalArrangement = Arrangement.spacedBy(22.dp),
                 modifier = Modifier
                     .fillMaxWidth()
@@ -1180,7 +1199,24 @@ fun HeroBanner(
 /* -------------------------------------------------------------------------- */
 
 @Composable
-fun TvToggle(checked: Boolean, onCheckedChange: (Boolean) -> Unit, modifier: Modifier = Modifier) {
+fun TvToggle(
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+    modifier: Modifier = Modifier,
+    /**
+     * ¿El interruptor es su propia parada de foco?
+     *
+     * `false` para el caso «fila + interruptor» de Ajustes: la fila entera es el
+     * objetivo del mando ([SettingRow] con `onClick`) y el interruptor es solo
+     * el indicador de su valor. Con dos paradas de foco en la misma fila, el
+     * anillo blanco del interruptor y el de la fila se encienden por separado y
+     * el usuario no sabe cuál de los dos está a punto de activar.
+     *
+     * Se deja `true` por defecto para el caso en que la fila **no** sea
+     * pulsable (edición de perfiles), donde el interruptor es la única parada.
+     */
+    focusable: Boolean = true
+) {
     var focused by remember { mutableStateOf(false) }
     val interactionSource = remember { MutableInteractionSource() }
     val pressed by interactionSource.collectIsPressedAsState()
@@ -1206,9 +1242,11 @@ fun TvToggle(checked: Boolean, onCheckedChange: (Boolean) -> Unit, modifier: Mod
                 else Modifier
             )
             .onFocusChanged { focused = it.isFocused }
+            .focusProperties { canFocus = focusable }
             .clickable(
                 interactionSource = interactionSource,
-                indication = null
+                indication = null,
+                enabled = focusable
             ) { onCheckedChange(!checked) }
     ) {
         Box(
@@ -1363,6 +1401,93 @@ fun LoadingSpinner(modifier: Modifier = Modifier, size: Dp = 48.dp) {
             useCenter = false,
             style = Stroke(width = 5.dp.toPx(), cap = StrokeCap.Round)
         )
+    }
+}
+
+/* -------------------------------------------------------------------------- */
+/*  Esqueleto de carga (skeleton)                                             */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Bloque rectangular con brillo deslizante. Es la pieza con la que se construye
+ * un esqueleto con la **forma** del contenido que va a llegar.
+ *
+ * Por qué no un spinner centrado: 17 pantallas usaban `LoadingSpinner` como
+ * estado principal. Un esqueleto conserva la geometría de la rejilla, evita el
+ * salto de layout al llegar los datos y hace la espera perceptualmente más
+ * corta. Es lo que hacen las apps de TV de referencia (StreamVault, Netflix,
+ * Disney+) y lo que recomienda la guía de 10 pies.
+ *
+ * El brillo se desactiva con movimiento reducido (`appTween` ya resuelve la
+ * escala de animación del sistema): en ese caso queda un bloque estático.
+ */
+@Composable
+fun SkeletonBlock(
+    modifier: Modifier = Modifier,
+    radius: Dp = AppRadius.sm,
+    baseColor: Color = SurfaceElevated
+) {
+    val reducedMotion = rememberReducedMotion()
+    val shimmer = rememberInfiniteTransition(label = "skeleton")
+    val shift by shimmer.animateFloat(
+        initialValue = -1f,
+        targetValue = 2f,
+        animationSpec = infiniteRepeatable(tween(1400, easing = LinearEasing), RepeatMode.Restart),
+        label = "skeletonShift"
+    )
+    val brush = if (reducedMotion) {
+        SolidColor(baseColor)
+    } else {
+        Brush.linearGradient(
+            colors = listOf(baseColor, baseColor.copy(alpha = 0.45f), baseColor),
+            start = Offset(shift * 400f, 0f),
+            end = Offset(shift * 400f + 320f, 320f)
+        )
+    }
+    Box(modifier.clip(radius).background(brush))
+}
+
+/**
+ * Esqueleto de una rejilla de pósters: misma proporción (2:3) y mismo
+ * espaciado que [PosterCard], para que al llegar los datos no salte nada.
+ */
+@Composable
+fun PosterGridSkeleton(
+    columns: Int = 5,
+    rows: Int = 2,
+    modifier: Modifier = Modifier
+) {
+    Column(
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(28.dp)
+    ) {
+        repeat(rows) { row ->
+            Row(horizontalArrangement = Arrangement.spacedBy(20.dp)) {
+                repeat(columns) { column ->
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        // La clave estable evita que el brillo se reinicie en cada recomposición.
+                        SkeletonBlock(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .aspectRatio(0.67f)
+                                .semantics { contentDescription = "Cargando contenido" },
+                            radius = AppRadius.md
+                        )
+                        SkeletonBlock(
+                            modifier = Modifier.fillMaxWidth(0.7f).height(14.dp),
+                            radius = AppRadius.xs
+                        )
+                        SkeletonBlock(
+                            modifier = Modifier.fillMaxWidth(0.45f).height(12.dp),
+                            radius = AppRadius.xs
+                        )
+                    }
+                }
+            }
+        }
     }
 }
 

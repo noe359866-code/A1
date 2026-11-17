@@ -12,11 +12,25 @@ import org.json.JSONObject
  *
  * Contrato: GET /health y POST /resolve con el título completo y sus ids.
  * El servicio debe buscar/cargar/enlazar con sus extensiones y devolver URLs
- * HTTP directas. No se envían claves de API del televisor al puente.
+ * HTTP directas. Del televisor solo viaja el token del puente
+ * (`CLOUDSTREAM_BRIDGE` en Ajustes → APIs), y únicamente hacia su mismo host:
+ * las claves de API del usuario nunca se reenvían.
  */
 object CloudstreamBridge {
+
+    /**
+     * Nombre de la clave opcional del puente en Ajustes → APIs. El puente exige
+     * token cuando escucha fuera de loopback (ver tools/cloudstream-bridge).
+     */
+    const val TOKEN_KEY = "CLOUDSTREAM_BRIDGE"
+
     val status = mutableStateOf("Puente Cloudstream no configurado")
     val extensions = mutableStateOf<List<String>>(emptyList())
+
+    /** El token viaja como Bearer; AddonHttp no lo reenvía a otro host. */
+    private fun authHeaders(): Map<String, String> =
+        SettingsStore.apiKeys[TOKEN_KEY]?.takeIf { it.isNotBlank() }
+            ?.let { mapOf("Authorization" to "Bearer $it") } ?: emptyMap()
 
     fun normalize(url: String): String? {
         val value = url.trim().trimEnd('/')
@@ -33,7 +47,9 @@ object CloudstreamBridge {
             return (if (base.isBlank()) "Puente Cloudstream no configurado" else "URL del puente no permitida")
                 .also { status.value = it }
         }
-        val json = withContext(Dispatchers.IO) { AddonHttp.getJson("$normalized/health") as? JSONObject }
+        val json = withContext(Dispatchers.IO) {
+            AddonHttp.getJson("$normalized/health", authHeaders()) as? JSONObject
+        }
         return when {
             json == null -> {
                 extensions.value = emptyList()
@@ -67,7 +83,9 @@ object CloudstreamBridge {
         }
         val body = request(video)
         val json = withTimeoutOrNull(25_000L) {
-            withContext(Dispatchers.IO) { AddonHttp.postJson("$base/resolve", body) }
+            withContext(Dispatchers.IO) {
+                AddonHttp.postJson("$base/resolve", body, headers = authHeaders())
+            }
         }
         if (json == null) {
             status.value = "Cloudstream no respondió a tiempo"

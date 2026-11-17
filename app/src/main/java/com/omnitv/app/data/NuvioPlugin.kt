@@ -210,6 +210,17 @@ object NuvioScraperResolver {
     val lastStatus = mutableStateOf("")
     private val limiter = Semaphore(4)
 
+    /**
+     * Nombre de la clave opcional del puente en Ajustes → APIs. El puente exige
+     * token cuando escucha fuera de loopback (ver tools/nuvio-bridge).
+     */
+    const val TOKEN_KEY = "NUVIO_BRIDGE"
+
+    /** El token viaja como Bearer; AddonHttp no lo reenvía a otro host. */
+    private fun authHeaders(): Map<String, String> =
+        SettingsStore.apiKeys[TOKEN_KEY]?.takeIf { it.isNotBlank() }
+            ?.let { mapOf("Authorization" to "Bearer $it") } ?: emptyMap()
+
     // Caché acotada (inspirada en SkyStream, lib/features/skip y nuvio_result_cache):
     // volver a un episodio ya resuelto no vuelve a lanzar todos los scrapers.
     // La clave incluye la revisión de ajustes, así que cambiar repos, puente o
@@ -260,7 +271,11 @@ object NuvioScraperResolver {
                         withTimeoutOrNull(8_000L) {
                             val body = NuvioBridgeRequest.body(repo, scraper, type, videoId, video)
                             val json = withContext(Dispatchers.IO) {
-                                AddonHttp.postJson("$base/scrape/${StremioUrl.encodeSegment(scraper.id)}", body)
+                                AddonHttp.postJson(
+                                    "$base/scrape/${StremioUrl.encodeSegment(scraper.id)}",
+                                    body,
+                                    headers = authHeaders()
+                                )
                             }
                             StreamResponse.parse(json, scraper.name).map {
                                 it.copy(label = "${scraper.name} · ${it.label}".take(100))
@@ -283,7 +298,9 @@ object NuvioScraperResolver {
         val base = SettingsStore.nuvioBridge.trim().trimEnd('/')
         if (base.isEmpty()) return "Puente JS no configurado"
         if (!NetPolicy.isAllowed(base)) return "URL del puente no permitida"
-        val json = withContext(Dispatchers.IO) { AddonHttp.getJson("$base/health") as? JSONObject }
+        val json = withContext(Dispatchers.IO) {
+            AddonHttp.getJson("$base/health", authHeaders()) as? JSONObject
+        }
         return if (json != null && json.optBoolean("ok", false)) {
             val count = json.optInt("scrapers", -1)
             if (count >= 0) "Puente conectado · $count scraper(s) · ejecución JS externa"

@@ -146,8 +146,8 @@ fun PlataformasScreen(
             .fillMaxSize()
             .background(Background)
     ) {
-        Column(Modifier.padding(horizontal = AppSpacing.screenMargin)) {
-            Spacer(Modifier.height(12.dp))
+        Column(Modifier.padding(start = AppSpacing.screenMargin + AppSpacing.navRail, end = AppSpacing.screenMargin)) {
+            Spacer(Modifier.height(AppSpacing.safeTop))
             Text("Plataformas", style = AppType.screenTitle, color = TextPrimary)
             Spacer(Modifier.height(6.dp))
             Text(
@@ -192,7 +192,7 @@ fun PlataformasScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .focusGroup(),
-            contentPadding = PaddingValues(start = AppSpacing.screenMargin, end = AppSpacing.screenMargin, top = 12.dp, bottom = 56.dp),
+            contentPadding = PaddingValues(start = AppSpacing.screenMargin + AppSpacing.navRail, end = AppSpacing.screenMargin, top = 12.dp, bottom = 56.dp),
             horizontalArrangement = Arrangement.spacedBy(20.dp),
             verticalArrangement = Arrangement.spacedBy(24.dp)
         ) {
@@ -510,7 +510,7 @@ fun PlatformCatalogScreen(
                     modifier = Modifier
                         .fillMaxSize()
                         .focusGroup(),
-                    contentPadding = PaddingValues(start = AppSpacing.screenMargin, end = AppSpacing.screenMargin, top = 14.dp, bottom = 56.dp),
+                    contentPadding = PaddingValues(start = AppSpacing.screenMargin + AppSpacing.navRail, end = AppSpacing.screenMargin, top = 14.dp, bottom = 56.dp),
                     horizontalArrangement = Arrangement.spacedBy(20.dp),
                     verticalArrangement = Arrangement.spacedBy(28.dp)
                 ) {

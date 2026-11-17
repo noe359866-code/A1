@@ -133,8 +133,8 @@ fun AnimeScreen(onOpenDetail: (Video) -> Unit) {
         contentPadding = PaddingValues(bottom = 56.dp)
     ) {
         item(key = "anime-header") {
-            Column(Modifier.fillMaxWidth().padding(horizontal = AppSpacing.screenMargin)) {
-                Spacer(Modifier.height(12.dp))
+            Column(Modifier.fillMaxWidth().padding(start = AppSpacing.screenMargin + AppSpacing.navRail, end = AppSpacing.screenMargin)) {
+                Spacer(Modifier.height(AppSpacing.safeTop))
                 Text("Anime", style = AppType.screenTitle, color = TextPrimary)
                 Spacer(Modifier.height(6.dp))
                 Text(
@@ -266,7 +266,7 @@ fun AnimeScreen(onOpenDetail: (Video) -> Unit) {
                     "Todos los títulos",
                     style = AppType.sectionTitle,
                     color = TextPrimary,
-                    modifier = Modifier.padding(horizontal = AppSpacing.screenMargin)
+                    modifier = Modifier.padding(start = AppSpacing.screenMargin + AppSpacing.navRail, end = AppSpacing.screenMargin)
                 )
             }
             items(catalog.chunked(5), key = { "grid:" + it.first().id }) { chunk ->
@@ -300,7 +300,7 @@ fun AnimeScreen(onOpenDetail: (Video) -> Unit) {
             }
             if (!AnimeCatalog.loading.value && AnimeCatalog.canLoadMore.value) {
                 item(key = "anime-load-more-footer") {
-                    Box(Modifier.padding(horizontal = AppSpacing.screenMargin, vertical = 8.dp)) {
+                    Box(Modifier.padding(start = AppSpacing.screenMargin + AppSpacing.navRail, end = AppSpacing.screenMargin, vertical = 8.dp)) {
                         PillButton(
                             text = if (AnimeCatalog.loadingMore.value) "Cargando…" else "Cargar más anime",
                             primary = false,
@@ -333,13 +333,13 @@ private fun AnimeRow(
             row.title,
             style = AppType.sectionTitle,
             color = TextPrimary,
-            modifier = Modifier.padding(horizontal = AppSpacing.screenMargin)
+            modifier = Modifier.padding(start = AppSpacing.screenMargin + AppSpacing.navRail, end = AppSpacing.screenMargin)
         )
         Spacer(Modifier.height(4.dp))
         ProvideHorizontalTvBringIntoView {
             LazyRow(
                 horizontalArrangement = Arrangement.spacedBy(20.dp),
-                contentPadding = PaddingValues(horizontal = AppSpacing.screenMargin, vertical = 14.dp),
+                contentPadding = PaddingValues(start = AppSpacing.screenMargin + AppSpacing.navRail, end = AppSpacing.screenMargin, vertical = 14.dp),
                 modifier = Modifier
                     .fillMaxWidth()
                     .focusGroup()

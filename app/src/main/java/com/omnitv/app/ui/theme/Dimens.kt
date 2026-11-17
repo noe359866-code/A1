@@ -30,33 +30,78 @@ object AppRadius {
  */
 object AppSpacing {
     val screenMargin = 48.dp
+
+    /**
+     * Margen vertical de overscan: **27 dp**.
+     *
+     * La guía de layouts de Android TV pide 48 dp a los lados y 27 dp arriba y
+     * abajo (5 % de un canvas de 960×540 dp). El lateral ya estaba resuelto con
+     * [screenMargin]; el vertical se aplicaba con literales de 10–12 dp en cada
+     * pantalla, por debajo del área segura: con overscan real un título puede
+     * recortarse (falla el criterio TV-OV de Google Play).
+     */
+    val safeTop = 27.dp
+
+    /** Igual que [safeTop], para el borde inferior. */
+    val safeBottom = 27.dp
+
+    /**
+     * Ancho que la barra lateral flotante ocupa del borde izquierdo en su
+     * estado compacto: 8 dp de separación + 76 dp de barra.
+     *
+     * La barra **flota** sobre el contenido (no lo empuja) para que expandirse
+     * al enfocar no recomponga las rejillas. El contenido reserva este hueco
+     * con `startPadding`; cuando la barra crece, se superpone al contenido en
+     * lugar de desplazarlo.
+     */
+    val navRail = 84.dp
 }
 
 /**
- * Escala de foco por jerarquía para TV (10 pies). Un token por nivel; los
- * valores son los que la app ya usaba en producción, ahora con nombre.
+ * Escala de foco para TV (10 pies).
+ *
+ * La guía del sistema de foco de Android TV define **tres** factores:
+ * `1.025`, `1.05` y `1.1`. Antes había siete (1.02, 1.05, 1.06, 1.07, 1.08,
+ * 1.10 y 1.12); los intermedios existían para granularidad fina, pero el ojo no
+ * distingue 1.06 de 1.07 a tres metros: eran reglas que recordar sin diferencia
+ * perceptual. Ahora se consolidan en tres niveles y **los nombres anteriores se
+ * conservan como alias** para no tocar las llamadas existentes.
+ *
+ * Regla de asignación:
+ *  - [subtle] (1.025) — filas densas que no pueden crecer sin solaparse.
+ *  - [base]   (1.05)  — la mayoría de controles: chips, píldoras, pestañas, tarjetas.
+ *  - [large]  (1.10)  — elementos grandes donde el foco debe verse de lejos.
  */
 object FocusScale {
-    /** Controles pequeños: chips, píldoras, categorías de Ajustes. */
-    const val chip = 1.05f
+    /** Nivel 1 — filas densas (episodio en detalle). */
+    const val subtle = 1.025f
 
-    /** Pestañas y filas secundarias (Continuar viendo, tiles de plataforma). */
-    const val tab = 1.06f
+    /** Nivel 2 — controles pequeños y medianos (chips, píldoras, teclas). */
+    const val base = 1.05f
 
-    /** Pósters y tarjetas (el tamaño más común). */
-    const val card = 1.07f
+    /** Nivel 3 — controles grandes (botones circulares, tiles de perfil). */
+    const val large = 1.10f
 
-    /** Controles medios (1,08): teclas del teclado, logo chips, «+», píldoras del reproductor. */
-    const val key = 1.08f
+    /** Filas densas (alias de [subtle]). */
+    const val row = subtle
 
-    /** Controles grandes (botones circulares, tiles de gestión). */
-    const val control = 1.10f
+    /** Chips, píldoras y categorías de Ajustes (alias de [base]). */
+    const val chip = base
 
-    /** Tiles de perfil y toggle (los elementos más grandes del mando). */
-    const val hero = 1.12f
+    /** Pestañas de la barra lateral y filas secundarias (alias de [base]). */
+    const val tab = base
 
-    /** Filas densas (episodio en detalle). */
-    const val row = 1.02f
+    /** Pósters y tarjetas (alias de [base]). */
+    const val card = base
+
+    /** Teclas del teclado, logo chips, «+» y píldoras del reproductor (alias de [base]). */
+    const val key = base
+
+    /** Botones circulares y tiles de gestión (alias de [large]). */
+    const val control = large
+
+    /** Tiles de perfil y toggle, los elementos más grandes del mando (alias de [large]). */
+    const val hero = large
 
     /** Contracción al pulsar (con OK/Enter) el control enfocado. */
     const val pressFactor = 0.94f

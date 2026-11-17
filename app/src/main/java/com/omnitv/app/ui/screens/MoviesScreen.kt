@@ -42,7 +42,7 @@ import com.omnitv.app.data.RemoteCatalog
 import com.omnitv.app.data.SettingsStore
 import com.omnitv.app.data.Video
 import com.omnitv.app.data.VideoType
-import com.omnitv.app.ui.components.LoadingSpinner
+import com.omnitv.app.ui.components.PosterGridSkeleton
 import com.omnitv.app.ui.components.LocalActiveTabFocus
 import com.omnitv.app.ui.components.LocalSuppressContentAutoFocus
 import com.omnitv.app.ui.components.LocalTabContentFocus
@@ -152,7 +152,7 @@ fun MoviesScreen(onOpenDetail: (Video) -> Unit) {
             .background(Background)
     ) {
         Column(Modifier.padding(horizontal = AppSpacing.screenMargin)) {
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(AppSpacing.safeTop))
             Text("Películas", style = AppType.screenTitle, color = TextPrimary)
             Spacer(Modifier.height(4.dp))
             Text(
@@ -229,9 +229,16 @@ fun MoviesScreen(onOpenDetail: (Video) -> Unit) {
             Box(Modifier.fillMaxSize().padding(horizontal = AppSpacing.screenMargin), contentAlignment = Alignment.Center) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     if (RemoteCatalog.loading.value && catalog.isEmpty()) {
-                        LoadingSpinner()
-                        Spacer(Modifier.height(14.dp))
-                        Text("Cargando catálogo…", style = AppType.sectionTitle, color = TextPrimary)
+                        // Esqueleto con la forma de la rejilla: la pantalla no
+                        // salta cuando llegan los datos.
+                        PosterGridSkeleton(
+                            columns = 5,
+                            rows = 2,
+                            modifier = Modifier.padding(
+                                start = AppSpacing.navRail,
+                                top = AppSpacing.safeTop
+                            )
+                        )
                     } else {
                         Text(
                             if (kidsOnly) "No hay títulos con clasificación infantil"
@@ -258,7 +265,7 @@ fun MoviesScreen(onOpenDetail: (Video) -> Unit) {
                 modifier = Modifier
                     .fillMaxSize()
                     .focusGroup(),
-                contentPadding = PaddingValues(start = AppSpacing.screenMargin, end = AppSpacing.screenMargin, top = 12.dp, bottom = 56.dp),
+                contentPadding = PaddingValues(start = AppSpacing.screenMargin + AppSpacing.navRail, end = AppSpacing.screenMargin, top = 12.dp, bottom = 56.dp),
                 horizontalArrangement = Arrangement.spacedBy(20.dp),
                 verticalArrangement = Arrangement.spacedBy(28.dp)
             ) {

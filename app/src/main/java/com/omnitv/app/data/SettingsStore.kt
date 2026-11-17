@@ -553,6 +553,55 @@ object SettingsStore {
         revision++
     }
 
+    /**
+     * Restaura las **preferencias de reproducción y de red** a sus valores de
+     * fábrica. No toca identidad ni credenciales: perfiles, PIN parental,
+     * addons, plugins, claves de API, tokens de Trakt y el código de
+     * emparejamiento se conservan a propósito. Una acción que borrase eso no
+     * sería «restablecer ajustes», sería desvincular el televisor.
+     *
+     * Devuelve cuántas preferencias cambiaron de valor, para poder decir en la
+     * interfaz «se cambiaron N ajustes» en vez de un vago «hecho».
+     */
+    fun resetPreferences(): Int {
+        val p = prefs ?: return 0
+        val editor = p.edit()
+        var changed = 0
+
+        fun flip(condition: Boolean, write: SharedPreferences.Editor.() -> Unit, publish: () -> Unit) {
+            if (!condition) return
+            editor.write()
+            publish()
+            changed++
+        }
+
+        flip(autoplay) { putBoolean("autoplay", false) } { autoplay = false }
+        flip(autoNext) { putBoolean("autoNext", false) } { autoNext = false }
+        flip(mutedStart) { putBoolean("mutedStart", false) } { mutedStart = false }
+        flip(subtitlesDefault) { putBoolean("subtitlesDefault", false) } { subtitlesDefault = false }
+        flip(playbackSpeed != 1f) { putFloat("playbackSpeed", 1f) } { playbackSpeed = 1f }
+        flip(preferredQuality != "Auto") { putString("preferredQuality", "Auto") } { preferredQuality = "Auto" }
+        flip(!skipSegmentsEnabled) { putBoolean("skipSegmentsEnabled", true) } { skipSegmentsEnabled = true }
+        flip(autoSkipKinds.isNotEmpty()) {
+            putString("autoSkipKinds", "[]")
+        } { autoSkipKinds = emptySet() }
+        val allSources = SKIP_SOURCE_NAMES.toSet()
+        flip(skipSources != allSources) {
+            putString("skipSources", org.json.JSONArray(SKIP_SOURCE_NAMES).toString())
+            putBoolean("skipSourcesAniskipAdded", true)
+        } { skipSources = allSources }
+        flip(disabledNuvioScrapers.isNotEmpty()) {
+            putString("disabledNuvioScrapers", "[]")
+        } { disabledNuvioScrapers = emptySet() }
+
+        editor.apply()
+        if (changed > 0) {
+            SkipSegmentService.clearCache()
+            revision++
+        }
+        return changed
+    }
+
     /** Etiqueta legible de una velocidad (1,25×). */
     fun speedLabel(speed: Float = playbackSpeed): String =
         String.format(java.util.Locale.US, "%.2f", speed).replace('.', ',').trimEnd('0').trimEnd(',') + "×"

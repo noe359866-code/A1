@@ -87,7 +87,7 @@ fun OnlyOnSection(
     Column(Modifier.fillMaxWidth().bringIntoViewIfChildrenAreFocused()) {
         // Título dinámico
         Row(
-            Modifier.padding(horizontal = AppSpacing.screenMargin),
+            Modifier.padding(start = AppSpacing.screenMargin + AppSpacing.navRail, end = AppSpacing.screenMargin),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Text("Solo en ", style = AppType.sectionTitle, color = TextPrimary)
@@ -104,7 +104,7 @@ fun OnlyOnSection(
         ProvideHorizontalTvBringIntoView {
             LazyRow(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
-                contentPadding = PaddingValues(horizontal = AppSpacing.screenMargin, vertical = 10.dp),
+                contentPadding = PaddingValues(start = AppSpacing.screenMargin + AppSpacing.navRail, end = AppSpacing.screenMargin, vertical = 10.dp),
                 modifier = Modifier
                     .fillMaxWidth()
                     .focusGroup()
@@ -127,7 +127,7 @@ fun OnlyOnSection(
 
         if (loading) {
             Row(
-                modifier = Modifier.padding(horizontal = AppSpacing.screenMargin, vertical = 18.dp),
+                modifier = Modifier.padding(start = AppSpacing.screenMargin + AppSpacing.navRail, end = AppSpacing.screenMargin, vertical = 18.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(14.dp)
             ) {
@@ -142,7 +142,7 @@ fun OnlyOnSection(
             ProvideHorizontalTvBringIntoView {
                 LazyRow(
                     horizontalArrangement = Arrangement.spacedBy(20.dp),
-                    contentPadding = PaddingValues(horizontal = AppSpacing.screenMargin, vertical = 14.dp),
+                    contentPadding = PaddingValues(start = AppSpacing.screenMargin + AppSpacing.navRail, end = AppSpacing.screenMargin, vertical = 14.dp),
                     modifier = Modifier
                         .fillMaxWidth()
                         .focusGroup()
