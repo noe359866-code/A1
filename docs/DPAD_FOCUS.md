@@ -144,3 +144,26 @@ Corrección (en `DetailScreen.kt`):
   recorten a esa altura.
 - **Foco con el buscador abierto.** `searchOpen` entra en `anyModalOpen`, así que el
   mecanismo de `restoreAfterModal` no compite con la vuelta de foco propia del panel.
+
+## Estado tras la revisión del reproductor (2026-11-17)
+
+- **La barra de píldoras ya no desplaza.** Quedan 4 fijas (Mi lista, Audio,
+  Subtítulos, Ajustes) más «Reanudar» cuando el título venía a medias: **781 dp en el
+  peor caso sobre 832 disponibles**. Servidor y calidad se movieron a la cabecera como
+  texto —el servidor solo ya ocupaba hasta 180 dp— y aspecto, velocidad, temporizador e
+  info viven en el menú «Ajustes», que se abre con **un nivel de anidamiento**: Atrás
+  vuelve al menú padre (`parentMenu`), no cierra todo.
+- **`Row` en lugar de `LazyRow`** para las píldoras: sin desplazamiento, el recorrido de
+  foco es predecible de izquierda a derecha y ningún control «aparece» al llegar al
+  borde. Se conserva `focusRestorer` para devolver el foco a la última píldora usada.
+- **`SeekBar` de 48 dp.** Era el único control del reproductor por debajo del mínimo de
+  mando (36 dp) y el más usado. El dibujo no cambia, solo el área que recibe el foco.
+- **OK sobre la barra de progreso pausa/reanuda** (comportamiento de YouTube y Netflix
+  TV; aquí la barra es la superficie principal de transporte). La guía de Playback
+  recomienda *no* gestionar OK dentro de la barra, pero esa recomendación asume que la
+  barra no es el control principal. Se documenta la decisión y se mantiene `↔` para
+  recorrerla y `↑`/`↓` para entrar y salir.
+- **Panel de «A continuación» a la izquierda, menú a la derecha.** Compartían fila y
+  posición vertical: abrir un menú durante la cuenta atrás los solapaba. Ahora abrir un
+  menú cierra el panel, y uno va a cada lado.
+- **Aviso flotante a 96 dp** (antes 28): caía sobre el título de la cabecera.

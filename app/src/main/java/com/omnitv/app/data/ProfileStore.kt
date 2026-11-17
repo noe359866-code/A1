@@ -90,6 +90,21 @@ object ProfileStore {
         update(current.copy(progress = progress))
     }
 
+    /**
+     * Olvida el progreso de **un solo título** del perfil actual.
+     *
+     * Lo usa «Empezar de cero» del reproductor: `setProgress` no sirve porque
+     * con una fracción < 2 % también borra, pero deja el valor calculado de la
+     * posición actual y el reproductor seguiría reanudando hasta el siguiente
+     * guardado. Aquí se elimina la entrada y ya no hay nada que reanudar.
+     */
+    fun forgetProgress(videoId: String) {
+        val current = currentProfile ?: return
+        if (videoId !in current.progress) return
+        val progress = current.progress.toMutableMap().apply { remove(videoId) }
+        update(current.copy(progress = progress))
+    }
+
     /** Borra todo el progreso de reproducción ("Continuar viendo") de un perfil. */
     fun clearProgress(profileId: String) {
         val target = profiles.firstOrNull { it.id == profileId } ?: return

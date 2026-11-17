@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
@@ -24,7 +23,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -119,7 +118,7 @@ import kotlin.math.abs
  * salida) conserva `pos` real; Trakt decide "visto" con ≥80 %. */
 private const val SCROBBLE_START_MIN_MS = 10_000L
 
-private enum class MenuKind { NONE, SERVER, QUALITY, AUDIO, SUBTITLES, ASPECT, SPEED, SLEEP }
+private enum class MenuKind { NONE, SERVER, QUALITY, AUDIO, SUBTITLES, ASPECT, SPEED, SLEEP, SETTINGS }
 
 // Media3 UI está fijado a 1.4.1; asumimos explícitamente su API marcada.
 @OptIn(UnstableApi::class)
@@ -238,6 +237,9 @@ private fun PlayerScreenContent(video: Video, onBack: () -> Unit, onPlayNext: (V
     val bridgeAttempted = remember(video.id) { mutableSetOf<String>() }
     val scope = rememberCoroutineScope()
     var menu by remember { mutableStateOf(MenuKind.NONE) }
+    // Menú del que se abrió el actual (Ajustes → Velocidad/Aspecto/Temporizador),
+    // para que Atrás vuelva un nivel y no cierre todo de golpe.
+    var parentMenu by remember { mutableStateOf(MenuKind.NONE) }
     var lastOpenedMenu by remember { mutableStateOf(MenuKind.NONE) }
     var previousMenu by remember { mutableStateOf(MenuKind.NONE) }
     var previousHasError by remember { mutableStateOf<String?>(null) }
@@ -273,13 +275,9 @@ private fun PlayerScreenContent(video: Video, onBack: () -> Unit, onPlayNext: (V
     val skipFocus = remember { FocusRequester() }
     val seekBarFocus = remember { FocusRequester() }
 
-    val serverPillFocus = remember { FocusRequester() }
-    val qualityPillFocus = remember { FocusRequester() }
     val audioPillFocus = remember { FocusRequester() }
     val subtitlesPillFocus = remember { FocusRequester() }
-    val aspectPillFocus = remember { FocusRequester() }
-    val speedPillFocus = remember { FocusRequester() }
-    val sleepPillFocus = remember { FocusRequester() }
+    val settingsPillFocus = remember { FocusRequester() }
 
     val rootConfirmGuard = remember { ConfirmKeyUpGuard(initialSuppressUntilDown = false) }
 
@@ -686,14 +684,22 @@ private fun PlayerScreenContent(video: Video, onBack: () -> Unit, onPlayNext: (V
         lastOpenedMenu = menu
     }
 
+    // El panel de «A continuación» y el menú se dibujaban en la misma fila del
+    // Column (mismo padding vertical): abrir un menú durante la cuenta atrás los
+    // solapaba. Ahora el menú manda.
+    LaunchedEffect(menu) {
+        if (menu != MenuKind.NONE) showNextPanel = null
+    }
+
     fun pillRequesterFor(kind: MenuKind): FocusRequester? = when (kind) {
-        MenuKind.SERVER -> serverPillFocus
-        MenuKind.QUALITY -> qualityPillFocus
+        // Servidor, calidad, aspecto, velocidad y temporizador se abren desde
+        // «Ajustes»: el foco vuelve siempre a esa píldora.
+        MenuKind.SERVER, MenuKind.QUALITY -> settingsPillFocus
         MenuKind.AUDIO -> audioPillFocus
         MenuKind.SUBTITLES -> subtitlesPillFocus
-        MenuKind.ASPECT -> aspectPillFocus
-        MenuKind.SPEED -> speedPillFocus
-        MenuKind.SLEEP -> sleepPillFocus
+        // Aspecto, velocidad y temporizador viven ya dentro de «Ajustes»: el foco
+        // vuelve a esa píldora, que es la que los abrió.
+        MenuKind.ASPECT, MenuKind.SPEED, MenuKind.SLEEP, MenuKind.SETTINGS -> settingsPillFocus
         MenuKind.NONE -> null
     }
 
@@ -730,6 +736,11 @@ private fun PlayerScreenContent(video: Video, onBack: () -> Unit, onPlayNext: (V
     fun handleBackAction() {
         when {
             showNextPanel != null -> showNextPanel = null
+            // Submenú abierto: Atrás vuelve a «Ajustes», no cierra todo.
+            menu != MenuKind.NONE && parentMenu != MenuKind.NONE -> {
+                menu = parentMenu
+                parentMenu = MenuKind.NONE
+            }
             menu != MenuKind.NONE -> menu = MenuKind.NONE
             showInfo -> showInfo = false
             controlsVisible -> controlsVisible = false
@@ -852,6 +863,97 @@ private fun PlayerScreenContent(video: Video, onBack: () -> Unit, onPlayNext: (V
             sleepDeadline = if (minutes == 0) null else android.os.SystemClock.elapsedRealtime() + minutes * 60_000L
             menu = MenuKind.NONE
             toast = if (minutes == 0) "Temporizador desactivado" else "Temporizador: $minutes min"
+        }
+    }
+
+    /**
+     * Menú «Ajustes de reproducción»: agrupa aspecto, velocidad y temporizador,
+     * que sueltos eran tres de las ocho píldoras (la barra no cabía: 936 dp en
+     * 832). El valor actual va en la propia etiqueta («Velocidad · 1,25×»): la
+     * regla «el valor se ve sin entrar» de las guías de ajustes, sin añadir un
+     * segundo texto a una fila que ya tiene el ancho justo.
+     *
+     * «Empezar de cero» vive aquí porque solo tiene sentido cuando hay progreso
+     * guardado, y borra ese progreso: sin borrarlo, el próximo arranque volvería
+     * a reanudar y el gesto no serviría de nada.
+     */
+    val settingsOptions = buildList {
+        add(
+            PlayerOption(
+                label = "Servidor · ${sources[serverIndex].label}",
+                selected = false,
+                iconRes = R.drawable.ic_server
+            ) {
+                parentMenu = MenuKind.SETTINGS
+                menu = MenuKind.SERVER
+            }
+        )
+        add(
+            PlayerOption(
+                label = "Calidad · $qualityLabel",
+                selected = false,
+                iconRes = R.drawable.ic_quality
+            ) {
+                parentMenu = MenuKind.SETTINGS
+                menu = MenuKind.QUALITY
+            }
+        )
+        add(
+            PlayerOption(
+                label = "Relación de aspecto · ${aspectMode.label}",
+                selected = false,
+                iconRes = R.drawable.ic_aspect
+            ) {
+                parentMenu = MenuKind.SETTINGS
+                menu = MenuKind.ASPECT
+            }
+        )
+        add(
+            PlayerOption(
+                label = "Velocidad · ${SettingsStore.speedLabel(speed)}",
+                selected = false,
+                iconRes = R.drawable.ic_speed
+            ) {
+                parentMenu = MenuKind.SETTINGS
+                menu = MenuKind.SPEED
+            }
+        )
+        add(
+            PlayerOption(
+                label = "Temporizador · ${if (sleepDeadline != null) sleepLabel else "Desactivado"}",
+                selected = false,
+                iconRes = R.drawable.ic_timer
+            ) {
+                parentMenu = MenuKind.SETTINGS
+                menu = MenuKind.SLEEP
+            }
+        )
+        add(
+            PlayerOption(
+                label = "Información del título",
+                selected = false,
+                iconRes = R.drawable.ic_info
+            ) {
+                menu = MenuKind.NONE
+                controlsVisible = true
+                showInfo = true
+            }
+        )
+        if (positionMs > 30_000L) {
+            add(
+                PlayerOption(
+                    label = "Empezar de cero",
+                    selected = false,
+                    iconRes = R.drawable.ic_rewind
+                ) {
+                    ProfileStore.forgetProgress(video.id)
+                    player.seekTo(0)
+                    positionMs = 0L
+                    resumeApplied = true
+                    menu = MenuKind.NONE
+                    toast = "Empezando de cero · progreso borrado"
+                }
+            )
         }
     }
 
@@ -1066,7 +1168,9 @@ private fun PlayerScreenContent(video: Video, onBack: () -> Unit, onPlayNext: (V
             exit = fadeOut(),
             modifier = Modifier
                 .align(Alignment.TopCenter)
-                .padding(top = 28.dp)
+                // 96 dp y no 28: caía justo debajo del título de la cabecera
+                // (24 de relleno + 27 sp de texto) y se leía encima.
+                .padding(top = 96.dp)
         ) {
             InfoChip(text = toast ?: "")
         }
@@ -1205,6 +1309,29 @@ private fun PlayerScreenContent(video: Video, onBack: () -> Unit, onPlayNext: (V
                         )
                     }
                     Spacer(Modifier.width(24.dp))
+                    /*
+                     * Servidor y calidad suben aquí como texto, no como píldoras.
+                     *
+                     * Razón medida: con las dos píldoras nuevas (Mi lista y
+                     * Reanudar) más las cinco fijas la barra sumaba 977–1022 dp
+                     * en 832 disponibles, y el servidor solo ya ocupa hasta
+                     * 180 dp porque su etiqueta es un nombre de addon.
+                     *
+                     * Servidor y calidad describen *qué* se está reproduciendo y
+                     * casi nunca se cambian a mitad: cuando se cambian, es porque
+                     * algo va mal (y para eso está el panel de error y la píldora
+                     * de error). Se quedan visibles en la cabecera y se cambian
+                     * desde «Ajustes» si hace falta.
+                     */
+                    Text(
+                        "${sources[serverIndex].label} · $qualityLabel",
+                        style = AppType.metadata,
+                        color = Color.White.copy(alpha = 0.72f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.widthIn(max = 300.dp)
+                    )
+                    Spacer(Modifier.width(20.dp))
                     Text(clock, style = AppType.body, color = Color.White)
                 }
 
@@ -1264,7 +1391,10 @@ private fun PlayerScreenContent(video: Video, onBack: () -> Unit, onPlayNext: (V
                         Modifier
                             .fillMaxWidth()
                             .padding(horizontal = AppSpacing.screenMargin, vertical = 8.dp),
-                        horizontalArrangement = Arrangement.End
+                        // A la izquierda: el menú de opciones ocupa la derecha y
+                        // ambos comparten fila, así que uno de los dos tenía que
+                        // moverse. Así tampoco tapan el centro del fotograma.
+                        horizontalArrangement = Arrangement.Start
                     ) {
                         GlassPanel(Modifier.width(540.dp)) {
                             Column(Modifier.padding(20.dp)) {
@@ -1341,6 +1471,7 @@ private fun PlayerScreenContent(video: Video, onBack: () -> Unit, onPlayNext: (V
                             MenuKind.ASPECT -> OptionMenu("Relación de aspecto", aspectOptions)
                             MenuKind.SPEED -> OptionMenu("Velocidad", speedOptions)
                             MenuKind.SLEEP -> OptionMenu("Temporizador", sleepOptions)
+                            MenuKind.SETTINGS -> OptionMenu("Ajustes de reproducción", settingsOptions)
                             MenuKind.NONE -> {}
                         }
                     }
@@ -1407,10 +1538,13 @@ private fun PlayerScreenContent(video: Video, onBack: () -> Unit, onPlayNext: (V
                             onClick = { if (player.playWhenReady) player.pause() else player.play() },
                             modifier = Modifier.focusRequester(playFocus)
                         )
+                        // Par asimétrico −10 s / +30 s: volver poco para repetir
+                        // una frase y avanzar más para cruzar un corte. Con ±10 s
+                        // simétrico no había forma de cruzar nada sin insistir.
                         TransportButton(
                             iconRes = R.drawable.ic_forward,
-                            contentDescription = "Avanzar 10 segundos",
-                            onClick = { seekBy(10_000L, showPreview = false) }
+                            contentDescription = "Avanzar 30 segundos",
+                            onClick = { seekBy(30_000L, showPreview = false) }
                         )
                         if (nextVideo != null) {
                             TransportButton(
@@ -1421,35 +1555,59 @@ private fun PlayerScreenContent(video: Video, onBack: () -> Unit, onPlayNext: (V
                         }
                     }
                     Spacer(Modifier.height(8.dp))
-                    LazyRow(
+                    /*
+                     * `Row` y no `LazyRow`: quedan 4–5 píldoras (781 dp en el
+                     * peor caso, con «Reanudar 1:02:03») y caben en los 832 dp
+                     * disponibles, así que ya no hace falta desplazar ni
+                     * arrastrar el foco. Un `Row` da un recorrido de foco
+                     * predecible de izquierda a derecha, sin elementos que
+                     * «aparezcan» al llegar al borde. `focusRestorer` sigue ahí
+                     * para devolver el foco a la última píldora usada.
+                     */
+                    Row(
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(64.dp)
                             .focusGroup()
                             .focusRestorer(),
-                        contentPadding = PaddingValues(horizontal = 8.dp),
                         horizontalArrangement = Arrangement.spacedBy(10.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        item {
+                        // Reanudar: solo si el título venía a medias. Dice el
+                        // minuto exacto y salta a 10 s antes, que es el «recap»
+                        // que se quiere al volver días después. Antes se reanudaba
+                        // en silencio y el usuario no sabía por qué empezaba a mitad.
+                        val resumeFraction = ProfileStore.currentProfile?.progress?.get(video.id)
+                        if (resumeFraction != null && resumeFraction > 0.02f && resumeFraction < 0.94f &&
+                            positionMs > 0 && resumeApplied
+                        ) {
+                            run {
+                                val resumeMs = (durationMs * resumeFraction).toLong()
+                                ControlPill(
+                                    iconRes = R.drawable.ic_rewind,
+                                    label = "Reanudar ${formatTime(resumeMs)}",
+                                    onClick = {
+                                        val target = (resumeMs - 10_000L).coerceAtLeast(0L)
+                                        player.seekTo(target)
+                                        positionMs = target
+                                        toast = "Reanudado en ${formatTime(target)}"
+                                    }
+                                )
+                            }
+                        }
+                        run {
+                            val inList = ProfileStore.currentProfile?.myList?.contains(video.id) == true
                             ControlPill(
-                                iconRes = R.drawable.ic_server,
-                                label = sources[serverIndex].label,
-                                active = menu == MenuKind.SERVER,
-                                modifier = Modifier.focusRequester(serverPillFocus),
-                                onClick = { showInfo = false; menu = if (menu == MenuKind.SERVER) MenuKind.NONE else MenuKind.SERVER }
+                                iconRes = R.drawable.ic_list_add,
+                                label = if (inList) "En Mi lista" else "Mi lista",
+                                active = inList,
+                                onClick = {
+                                    ProfileStore.toggleMyList(video.id)
+                                    toast = if (inList) "Quitado de Mi lista" else "Añadido a Mi lista"
+                                }
                             )
                         }
-                        item {
-                            ControlPill(
-                                iconRes = R.drawable.ic_quality,
-                                label = qualityLabel,
-                                active = menu == MenuKind.QUALITY,
-                                modifier = Modifier.focusRequester(qualityPillFocus),
-                                onClick = { showInfo = false; menu = if (menu == MenuKind.QUALITY) MenuKind.NONE else MenuKind.QUALITY }
-                            )
-                        }
-                        item {
+                        run {
                             ControlPill(
                                 iconRes = R.drawable.ic_audio,
                                 label = "Audio",
@@ -1458,7 +1616,7 @@ private fun PlayerScreenContent(video: Video, onBack: () -> Unit, onPlayNext: (V
                                 onClick = { showInfo = false; menu = if (menu == MenuKind.AUDIO) MenuKind.NONE else MenuKind.AUDIO }
                             )
                         }
-                        item {
+                        run {
                             ControlPill(
                                 iconRes = R.drawable.ic_subtitles,
                                 label = "Subtítulos",
@@ -1467,47 +1625,35 @@ private fun PlayerScreenContent(video: Video, onBack: () -> Unit, onPlayNext: (V
                                 onClick = { showInfo = false; menu = if (menu == MenuKind.SUBTITLES) MenuKind.NONE else MenuKind.SUBTITLES }
                             )
                         }
-                        item {
+                        run {
+                            // Aspecto, velocidad y temporizador se agrupan aquí:
+                            // sueltos eran tres de las ocho píldoras y la barra no
+                            // cabía (936 dp en 832). La etiqueta muestra el estado
+                            // que importa de un vistazo: la cuenta atrás si corre.
                             ControlPill(
-                                iconRes = R.drawable.ic_aspect,
-                                label = aspectMode.label,
-                                active = menu == MenuKind.ASPECT,
-                                modifier = Modifier.focusRequester(aspectPillFocus),
-                                onClick = { showInfo = false; menu = if (menu == MenuKind.ASPECT) MenuKind.NONE else MenuKind.ASPECT }
-                            )
-                        }
-                        item {
-                            ControlPill(
-                                iconRes = R.drawable.ic_quality,
-                                label = SettingsStore.speedLabel(speed),
-                                active = menu == MenuKind.SPEED,
-                                modifier = Modifier.focusRequester(speedPillFocus),
-                                onClick = { showInfo = false; menu = if (menu == MenuKind.SPEED) MenuKind.NONE else MenuKind.SPEED }
-                            )
-                        }
-                        item {
-                            ControlPill(
-                                iconRes = R.drawable.ic_server,
-                                label = sleepLabel,
-                                active = sleepDeadline != null || menu == MenuKind.SLEEP,
-                                modifier = Modifier.focusRequester(sleepPillFocus),
-                                onClick = { showInfo = false; menu = if (menu == MenuKind.SLEEP) MenuKind.NONE else MenuKind.SLEEP }
-                            )
-                        }
-                        item {
-                            ControlPill(
-                                iconRes = R.drawable.ic_info,
-                                label = "Info",
-                                active = showInfo,
-                                onClick = { menu = MenuKind.NONE; showInfo = !showInfo }
+                                iconRes = R.drawable.ic_settings,
+                                label = if (sleepDeadline != null) sleepLabel else "Ajustes",
+                                active = menu == MenuKind.SETTINGS ||
+                                    menu == MenuKind.ASPECT || menu == MenuKind.SPEED || menu == MenuKind.SLEEP ||
+                                    sleepDeadline != null,
+                                modifier = Modifier.focusRequester(settingsPillFocus),
+                                onClick = {
+                                    showInfo = false
+                                    menu = if (menu == MenuKind.SETTINGS || menu == MenuKind.ASPECT ||
+                                        menu == MenuKind.SPEED || menu == MenuKind.SLEEP
+                                    ) MenuKind.NONE else MenuKind.SETTINGS
+                                }
                             )
                         }
                         val introEstimateMs = skipTimeline.introEstimateMs
                         if (visibleSkip == null && introEstimateMs != null && positionMs < 360_000L) {
-                            item {
+                            run {
                                 val estSec = (introEstimateMs / 1000L).coerceAtLeast(5L)
                                 ControlPill(
-                                    iconRes = R.drawable.ic_skip_next,
+                                    // `ic_forward` y no `ic_skip_next`: ya hay tres
+                                    // controles de salto con ese glifo y este no salta,
+                                    // avanza una estimación.
+                                    iconRes = R.drawable.ic_forward,
                                     label = "Intro ~$estSec s",
                                     onClick = {
                                         val total = player.duration.takeIf { it > 0 } ?: durationMs

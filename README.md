@@ -58,7 +58,7 @@ Omni TV es una aplicación **exclusiva para Android TV / Google TV** con estánd
 | 4 | **Plataformas** | 17 proveedores (Netflix, Disney+, HBO...) + 24 estudios (Marvel, Pixar, Ghibli...) con catálogos reales |
 | 5 | **Buscar** | Campo + chips de género + teclado D-pad + resultados combinados local/remoto/anime |
 | 6 | **Detalle** | Fondo con backdrop + velos, match %, metadatos completos, episodios, reparto, Más como esto |
-| 7 | **Reproductor** | Media3 con todos los controles tvOS: EPG, servidores, calidad, audio, subtítulos, aspecto, velocidad, timer |
+| 7 | **Reproductor** | Media3: barra de progreso enfocable de 48 dp, transporte −10s/+30s, audio, subtítulos, Mi lista, reanudar, menú Ajustes (servidor, calidad, aspecto, velocidad, temporizador, empezar de cero) |
 | 8 | **Ajustes** | Dos paneles con **buscador** (tecla azul del mando): Perfil, Control parental, Vinculación (QR + sesión), Reproducción, Calidad, Saltos de intro, Red (DoH), Sistema (mantenimiento y restablecer preferencias) |
 
 ---
@@ -68,7 +68,7 @@ Omni TV es una aplicación **exclusiva para Android TV / Google TV** con estánd
 | Tecla | Navegación | Reproductor |
 |-------|-----------|-------------|
 | **Centro** | Abrir / Escribir tecla | Mostrar controles |
-| **◀ ▶** | Moverse en fila | ±10s (controles ocultos) / navegar |
+| **◀ ▶** | Moverse en fila | ±10s (controles ocultos, crece al mantener) / navegar |
 | **▲ ▼** | Cambiar de fila | Mostrar controles / menús |
 | **Atrás** | Volver / Cerrar teclado | Cerrar menú → ocultar → salir |
 
@@ -86,7 +86,8 @@ Basado en Media3 ExoPlayer con investigación de Xuper TV:
 - **Buscador de ajustes:** 25 ajustes indexados con sinónimos y sin tildes; se abre con la tecla azul del mando o desde el panel izquierdo y lleva a la categoría del ajuste ([detalle](docs/REVISION_AJUSTES.md))
 - **Compatibilidad multimedia:** diagnóstico de códecs en Ajustes y puente FFmpeg externo opcional (remux HLS / audio AAC), sin FFmpeg dentro del APK ([detalle](docs/FFMPEG_BRIDGE.md))
 - **Aspecto:** Ajustar / Llenar / Zoom / 16:9 / 4:3 / 21:9
-- **Transporte:** ⏪10s / 10s⏩, barra con buffer, D-pad directo
+- **Transporte:** ⏪10s / 30s⏩ (asimétrico: volver poco, avanzar más), barra con buffer y marcas de tramos, D-pad directo
+- **Mi lista y reanudar:** añadir el título sin salir del reproductor y volver al punto guardado con «Reanudar 12:41» o empezar de cero borrando ese progreso ([detalle](docs/REVISION_REPRODUCTOR.md))
 - **Autoplay / Auto-next:** Cuenta atrás 10s con miniatura, botón Siguiente
 - **Extras:** velocidad (0.75×–2×), temporizador de pausa (15/30/60m), calidad preferida
 

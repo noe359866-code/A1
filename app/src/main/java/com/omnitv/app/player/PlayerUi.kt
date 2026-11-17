@@ -194,6 +194,15 @@ fun TransportButton(
 data class PlayerOption(
     val label: String,
     val selected: Boolean,
+    /**
+     * Icono opcional de la fila.
+     *
+     * La guía de Android TV pide omitir iconos en listas homogéneas (todas las
+     * calidades, todos los idiomas) y usarlos cuando distinguen funciones. El
+     * único menú que los usa es «Ajustes de reproducción», donde cada fila es
+     * una cosa distinta: dos submenús, el temporizador y una acción destructiva.
+     */
+    val iconRes: Int? = null,
     val onSelect: () -> Unit
 )
 
@@ -272,6 +281,15 @@ private fun OptionRow(option: PlayerOption, modifier: Modifier = Modifier) {
                 )
         )
         Spacer(Modifier.width(12.dp))
+        if (option.iconRes != null) {
+            Image(
+                painter = painterResource(option.iconRes),
+                contentDescription = null,
+                modifier = Modifier.size(18.dp),
+                colorFilter = ColorFilter.tint(if (focused) OnLight else ControlWhite.copy(alpha = 0.85f))
+            )
+            Spacer(Modifier.width(10.dp))
+        }
         Text(
             option.label,
             style = AppType.controlLabel,

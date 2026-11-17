@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  «Añadir a Mi lista»: marca de verificación dentro de un contorno de lista.
+
+  El reproductor no tenía forma de añadir el título a la lista sin salir a la
+  ficha, así que la píldora nueva necesita un glifo propio; `ic_check` se usa
+  para «confirmado» y aquí sería ambiguo.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:pathData="M3.4,4.6 h11 a1.4,1.4 0 0 1 1.4,1.4 v3.2 M3.4,4.6 v14.8 a1.4,1.4 0 0 0 1.4,1.4 h5.4"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="1.8"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000" />
+    <path
+        android:pathData="M7.6,9.4 h6.4 M7.6,13.2 h4"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="1.8"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000" />
+    <path
+        android:pathData="M14.4,17.4 L17,20 L21.6,14"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="2.0"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000" />
+</vector>

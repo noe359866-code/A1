@@ -1316,7 +1316,11 @@ fun SeekBar(
 
     BoxWithConstraints(
         modifier
-            .height(36.dp)
+            // 48 dp: el mínimo de objetivo de mando de la guía de TV. Antes eran
+            // 36 dp y era el único control del reproductor por debajo del mínimo,
+            // justo el que más se usa. El dibujo no cambia: solo el área que
+            // captura el foco.
+            .height(48.dp)
             .then(interactiveModifier),
         contentAlignment = Alignment.CenterStart
     ) {

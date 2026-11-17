@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Temporizador / cuenta atrás.
+
+  Existe porque el control de temporizador usaba `ic_server` (pilas de
+  servidor), el mismo glifo que «Servidor»: dos funciones sin relación con el
+  mismo icono obligan a leer la etiqueta.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:pathData="M12,5.2 a8,8 0 1,0 0,16 a8,8 0 1,0 0,-16 z"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="1.9"
+        android:fillColor="#00000000" />
+    <path
+        android:pathData="M12,9.4 v3.4 l2.4,1.6"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="1.9"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000" />
+    <path
+        android:pathData="M9.4,2.6 h5.2"
+        android:strokeColor="#FFFFFFFF"
+        android:strokeWidth="1.9"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000" />
+</vector>
