@@ -5,8 +5,6 @@ import android.content.SharedPreferences
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import org.json.JSONArray
-import org.json.JSONObject
 import java.util.UUID
 
 /**
@@ -38,19 +36,20 @@ object ProfileStore {
         prefs = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         val json = prefs!!.getString(KEY_PROFILES, null)
         if (json != null) {
-            runCatching { profiles = parse(json) }
-                .onFailure { profiles = defaultProfiles() }
+            profiles = ProfileCodec.decode(json).ifEmpty { defaultProfiles() }
         }
         currentProfileId = prefs!!.getString(KEY_CURRENT, null)
             ?.takeIf { id -> profiles.any { it.id == id } }
     }
 
     fun select(id: String) {
+        if (profiles.none { it.id == id }) return
         currentProfileId = id
         prefs?.edit()?.putString(KEY_CURRENT, id)?.apply()
     }
 
     fun add(name: String, avatarIndex: Int, isKids: Boolean, autoPlayNext: Boolean = true) {
+        if (profiles.size >= ProfileCodec.MAX_PROFILES) return
         profiles = profiles + Profile(
             id = UUID.randomUUID().toString(),
             name = name.ifBlank { "Perfil" },
@@ -81,11 +80,13 @@ object ProfileStore {
      */
     fun setProgress(videoId: String, fraction: Float) {
         val current = currentProfile ?: return
+        if (videoId.isBlank() || !fraction.isFinite()) return
+        val safeFraction = fraction.coerceIn(0f, 1f)
         val progress = current.progress.toMutableMap()
-        if (fraction >= 0.95f || fraction < 0.02f) {
+        if (safeFraction >= 0.95f || safeFraction < 0.02f) {
             progress.remove(videoId)
         } else {
-            progress[videoId] = fraction
+            progress[videoId] = safeFraction
         }
         update(current.copy(progress = progress))
     }
@@ -122,53 +123,7 @@ object ProfileStore {
             .apply()
     }
 
-    private fun serialize(profiles: List<Profile>): String {
-        val array = JSONArray()
-        profiles.forEach { profile ->
-            val progress = JSONObject()
-            profile.progress.forEach { (id, value) -> progress.put(id, value.toDouble()) }
-            array.put(
-                JSONObject()
-                    .put("id", profile.id)
-                    .put("name", profile.name)
-                    .put("avatarIndex", profile.avatarIndex)
-                    .put("isKids", profile.isKids)
-                    .put("autoPlayNext", profile.autoPlayNext)
-                    .put("progress", progress)
-                    .put("myList", JSONArray(profile.myList.toList()))
-            )
-        }
-        return array.toString()
-    }
-
-    private fun parse(json: String): List<Profile> {
-        val array = JSONArray(json)
-        return buildList {
-            for (i in 0 until array.length()) {
-                val obj = array.getJSONObject(i)
-                val progressObj = obj.optJSONObject("progress") ?: JSONObject()
-                val progress = mutableMapOf<String, Float>()
-                progressObj.keys().forEach { key ->
-                    progress[key] = progressObj.getDouble(key).toFloat()
-                }
-                val listArr = obj.optJSONArray("myList")
-                val myList = buildSet {
-                    if (listArr != null) for (j in 0 until listArr.length()) add(listArr.getString(j))
-                }
-                add(
-                    Profile(
-                        id = obj.getString("id"),
-                        name = obj.getString("name"),
-                        avatarIndex = obj.optInt("avatarIndex", 0),
-                        isKids = obj.optBoolean("isKids", false),
-                        autoPlayNext = obj.optBoolean("autoPlayNext", true),
-                        progress = progress,
-                        myList = myList
-                    )
-                )
-            }
-        }
-    }
+    private fun serialize(profiles: List<Profile>): String = ProfileCodec.encode(profiles)
 
     private fun defaultProfiles(): List<Profile> = listOf(
         Profile(id = "perfil-1", name = "Perfil 1", avatarIndex = 0)

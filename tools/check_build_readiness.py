@@ -234,6 +234,43 @@ if apk_workflow.exists():
     elif len(rolling) > 1:
         ok.append("apk.yml: la release «latest» se marca como Latest")
 
+# Las releases públicas nunca deben reemplazarse con una variante debug,
+# una ejecución manual desde una rama de trabajo o un APK firmado con debug.
+if apk_workflow.exists():
+    text = read(apk_workflow)
+    required_guards = (
+        ('GITHUB_EVENT_NAME:-}" = "push"', "evento push"),
+        ('$GITHUB_REF" = "refs/heads/main"', "rama main"),
+        ('$VARIANT" = "release"', "variante release"),
+        ('PUBLISH_DEV=false', "bloqueo de latest sin firma de producción"),
+        ('No se puede publicar una variante debug', "bloqueo de publicación debug"),
+    )
+    for token, label in required_guards:
+        if token not in text:
+            errors.append(f"apk.yml: falta protección de publicación ({label})")
+    if 'GITHUB_REF_TYPE:-}" = "branch"' in text:
+        errors.append("apk.yml: no debe publicar latest por el mero hecho de ejecutarse en una rama")
+    if 'versionName = "${{ github.event.inputs.version }}"' in text:
+        errors.append("apk.yml: no debe interpolar version directamente en un comando shell")
+    else:
+        ok.append("apk.yml: publicación restringida a push main y release firmada")
+
+release_workflow = ROOT / ".github/workflows/release.yml"
+if release_workflow.exists():
+    text = read(release_workflow)
+    if "No se publican releases firmadas con debug" not in text:
+        errors.append("release.yml: permite publicar una APK firmada con debug")
+    if '$GITHUB_REF" != "refs/heads/main"' not in text:
+        errors.append("release.yml: falta la protección de rama main para publicaciones manuales")
+    if "keytool -list" not in text:
+        errors.append("release.yml: no valida keystore y alias antes de compilar")
+    if 'TAG="${{ inputs.tag }}"' in text:
+        errors.append("release.yml: no debe interpolar el tag de usuario dentro del shell")
+    if 'GITHUB_REF_TYPE:-}" = "tag"' not in text:
+        errors.append("release.yml: debe distinguir un push de etiqueta de una ejecución manual")
+    else:
+        ok.append("release.yml: exige keystore de producción y etiqueta versionada")
+
 # Enlaces de descarga en la documentación: si alguien cambia el nombre del
 # archivo, los enlaces del README y de la guía quedarían roto.
 for doc in ("README.md", "docs/COMPILAR_APK.md"):

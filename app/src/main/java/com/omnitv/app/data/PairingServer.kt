@@ -7,6 +7,7 @@ import java.net.InetSocketAddress
 import java.net.NetworkInterface
 import java.net.ServerSocket
 import java.net.Socket
+import java.util.concurrent.Semaphore
 import kotlin.concurrent.thread
 
 /**
@@ -34,7 +35,10 @@ import kotlin.concurrent.thread
 object PairingServer {
 
     private const val PORT = 8080
+    private const val MAX_CONCURRENT_REQUESTS = 8
 
+    // Evita crear un hilo ilimitado por conexión desde cualquier equipo de la LAN.
+    private val requestSlots = Semaphore(MAX_CONCURRENT_REQUESTS)
     private var serverSocket: ServerSocket? = null
 
     /** El servidor está escuchando. */
@@ -74,11 +78,18 @@ object PairingServer {
             try {
                 while (!ss.isClosed) {
                     val socket = ss.accept()
+                    if (!requestSlots.tryAcquire()) {
+                        // El panel es un servicio local pequeño: rechaza exceso de
+                        // conexiones en vez de acumular sockets/hilos sin límite.
+                        runCatching { socket.close() }
+                        continue
+                    }
                     thread(name = "omni-tv-pairing-req", isDaemon = true) {
                         try {
                             runCatching { handle(socket) }
                         } finally {
                             runCatching { socket.close() }
+                            requestSlots.release()
                         }
                     }
                 }
@@ -228,6 +239,7 @@ internal fun panelResponseHeaders(response: PanelResponse, bodyBytes: Int): Stri
         append("X-Frame-Options: DENY\r\n")
         append("Cross-Origin-Resource-Policy: same-origin\r\n")
         append("Cross-Origin-Opener-Policy: same-origin\r\n")
+        append("Content-Security-Policy: default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'\r\n")
         response.extraHeaders.forEach { append(it).append("\r\n") }
         append("\r\n")
     }

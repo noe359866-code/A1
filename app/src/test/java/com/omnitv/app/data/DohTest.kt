@@ -155,6 +155,37 @@ class DohTest {
     }
 
     @Test
+    fun `el fallback DoH solo acepta direcciones unicast publicas`() {
+        fun public(ip: String) = Doh.isPublicUnicast(Doh.parseLiteral(ip)!!)
+        fun blocked(ip: String) = assertFalse("no debe reintentar contra $ip", public(ip))
+
+        assertTrue(public("8.8.8.8"))
+        assertTrue(public("2606:4700:4700::1111"))
+
+        listOf(
+            "0.0.0.0",
+            "10.0.0.1",
+            "100.64.0.1",
+            "127.0.0.1",
+            "169.254.1.1",
+            "172.16.0.1",
+            "192.0.2.10",
+            "192.168.1.1",
+            "198.18.0.1",
+            "198.51.100.7",
+            "203.0.113.8",
+            "224.0.0.1",
+            "255.255.255.255",
+            "::",
+            "::1",
+            "fc00::1",
+            "fe80::1",
+            "2001:db8::1",
+            "ff02::1"
+        ).forEach(::blocked)
+    }
+
+    @Test
     fun `el verificador del reintento comprueba el nombre original`() {
         // El verificador no acepta certificados sin comprobar: delega en el del sistema.
         val verifier = Doh.hostnameVerifier("addon.ejemplo")
